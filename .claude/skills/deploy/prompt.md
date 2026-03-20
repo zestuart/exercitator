@@ -20,8 +20,8 @@ Read CLAUDE.md's Deployment section for:
 - Deployment method (auto-deploy on push, CI/CD, manual)
 - Monitoring command (if configured)
 
-If the Deployment section says "Run /setup to configure", tell the user:
-> Deployment isn't configured yet. Run /setup first, or tell me your deployment
+If the Deployment section says "Run /init to configure", tell the user:
+> Deployment isn't configured yet. Run /init first, or tell me your deployment
 > target and method.
 
 ## Step 1 — Pre-flight: lint + type check + tests

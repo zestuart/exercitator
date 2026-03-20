@@ -6,24 +6,24 @@
 > artifacts: review them, update them, and trust them only when they reflect reality.
 
 <!-- ============================================================
-     SECTIONS MARKED [SETUP] ARE POPULATED BY /setup ON FIRST RUN.
-     RUN /setup BEFORE STARTING DEVELOPMENT.
+     SECTIONS MARKED [SETUP] ARE POPULATED BY /init ON FIRST RUN.
+     RUN /init BEFORE STARTING DEVELOPMENT.
      ============================================================ -->
 
 ## Project
 
-<!-- [SETUP] Project identity — filled by /setup interview -->
+<!-- [SETUP] Project identity — filled by /init interview -->
 
-**Name**: _not yet configured — run /setup_
+**Name**: _not yet configured — run /init_
 **Description**: _pending_
 **Domain**: _pending_
 **Repository**: _pending_
 
 ## Stack
 
-<!-- [SETUP] Technology stack — filled by /setup interview -->
+<!-- [SETUP] Technology stack — filled by /init interview -->
 
-_Run /setup to configure._
+_Run /init to configure._
 
 ## Philosophy
 
@@ -155,7 +155,7 @@ This file is append-only. Do not edit or remove past entries.
 ### Credential management
 
 All credentials live in `.env` at the project root. This file is:
-- Listed in `.gitignore` (verified by /setup)
+- Listed in `.gitignore` (verified by /init)
 - Never committed, logged, or echoed
 - The single source of truth for all API keys, tokens, and secrets
 
@@ -187,15 +187,15 @@ reads `GEMINI_API_KEY` from `.env` or environment.
      Examples: file uploads, authentication, external APIs, user input handling.
      The SAST scanner uses this section for focused analysis. -->
 
-_Run /setup to configure._
+_Run /init to configure._
 
 ## Testing
 
-<!-- [SETUP] Test configuration — filled by /setup interview.
-     /setup will detect your language/framework and suggest an appropriate test
+<!-- [SETUP] Test configuration — filled by /init interview.
+     /init will detect your language/framework and suggest an appropriate test
      structure: linter, type checker, unit tests, integration tests. -->
 
-_Run /setup to configure._
+_Run /init to configure._
 
 ### Test growth protocol
 
@@ -214,10 +214,10 @@ When a deployment or production issue occurs:
 
 ## Deployment
 
-<!-- [SETUP] Deployment configuration — filled by /setup interview.
-     /setup will ask about your deployment target and CI/CD setup. -->
+<!-- [SETUP] Deployment configuration — filled by /init interview.
+     /init will ask about your deployment target and CI/CD setup. -->
 
-_Run /setup to configure._
+_Run /init to configure._
 
 ### Pre-flight sequence (enforced by /deploy)
 
@@ -232,7 +232,7 @@ _Run /setup to configure._
 
 ## Conventions
 
-<!-- [SETUP] Project conventions — filled by /setup interview.
+<!-- [SETUP] Project conventions — filled by /init interview.
      Language style, formatting, naming conventions, etc. -->
 
 - ISO 8601 dates (YYYY-MM-DD), 24-hour time (HH:MM)
@@ -243,7 +243,7 @@ _Run /setup to configure._
 
 | Command   | Description |
 |-----------|-------------|
-| `/setup`  | First-run project interview — configures everything |
+| `/init`   | First-run project interview — configures everything |
 | `/test`   | Run the test suite (lint + type check + tests) |
 | `/deploy` | Pre-flight checks + SAST + commit + push + monitor |
 | `/sast`   | Full SAST scan of the entire codebase |
