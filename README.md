@@ -10,7 +10,7 @@ building their first project.
 ## What you get
 
 - **CLAUDE.md** — a living operating manual that Claude maintains as your project grows
-- **`/setup`** — an interview that configures your project on first run
+- **`/init`** — an interview that configures your project on first run
 - **`/test`** — language-agnostic test runner that grows with your code
 - **`/deploy`** — pre-flight checks, SAST security scan, and deployment
 - **`/sast`** — static application security testing via Gemini 2.5 Pro
@@ -31,7 +31,7 @@ building their first project.
 2. Open your project in Claude Code and run:
 
    ```
-   /setup
+   /init
    ```
 
    Claude will interview you about your project, configure the CLAUDE.md, set up

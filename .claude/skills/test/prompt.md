@@ -14,8 +14,8 @@ Read the Testing section of CLAUDE.md to find the configured commands for:
 - Type check (if applicable)
 - Unit/integration tests
 
-If the Testing section says "Run /setup to configure", tell the user:
-> Tests aren't configured yet. Run /setup to set up your test infrastructure,
+If the Testing section says "Run /init to configure", tell the user:
+> Tests aren't configured yet. Run /init to set up your test infrastructure,
 > or tell me what test commands to use.
 
 ## Step 1 — Lint

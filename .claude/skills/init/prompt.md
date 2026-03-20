@@ -3,7 +3,7 @@ description: "First-run project interview. Configures CLAUDE.md, .env, test stru
 user_invocable: true
 ---
 
-# /setup — Project Setup Interview
+# /init — Project Initialisation
 
 Interview the user to configure their project for AI-assisted development. This skill
 runs once (or again if the user wants to reconfigure). It populates all `[SETUP]`
@@ -12,7 +12,7 @@ sections in CLAUDE.md.
 ## Preamble
 
 Before starting, check whether CLAUDE.md has already been configured (the Project
-section will have real values instead of "run /setup"). If it has, ask the user:
+section will have real values instead of "run /init"). If it has, ask the user:
 "This project appears to be already configured. Would you like to reconfigure, or
 update a specific section?"
 
