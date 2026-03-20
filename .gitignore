@@ -1,0 +1,21 @@
+# Secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+*.tfvars
+terraform.tfstate
+terraform.tfstate.backup
+
+# SAST scanner cache (ephemeral)
+.sast-cache.json
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code local settings
+.claude/settings.local.json
