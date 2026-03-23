@@ -6,6 +6,7 @@
  *   - "streamable-http"  — HTTP with OAuth, for Tailscale funnel deployment
  */
 
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -32,27 +33,32 @@ if (!API_KEY) {
 	process.exit(1);
 }
 
+const intervalsClient = new IntervalsClient({ apiKey: API_KEY });
+
 // ---------------------------------------------------------------------------
-// MCP server
+// Server factory — each connection gets its own McpServer instance
 // ---------------------------------------------------------------------------
 
-const server = new McpServer({
-	name: "exercitator",
-	version: "0.1.0",
-});
+function createMcpServer(): McpServer {
+	const server = new McpServer({
+		name: "exercitator",
+		version: "0.1.0",
+	});
 
-const client = new IntervalsClient({ apiKey: API_KEY });
+	registerAthleteTools(server, intervalsClient);
+	registerActivityTools(server, intervalsClient);
+	registerWellnessTools(server, intervalsClient);
+	registerEventTools(server, intervalsClient);
 
-registerAthleteTools(server, client);
-registerActivityTools(server, client);
-registerWellnessTools(server, client);
-registerEventTools(server, client);
+	return server;
+}
 
 // ---------------------------------------------------------------------------
 // Transport: stdio
 // ---------------------------------------------------------------------------
 
 if (TRANSPORT === "stdio") {
+	const server = createMcpServer();
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 	console.error("Exercitator MCP server running on stdio");
@@ -64,9 +70,11 @@ if (TRANSPORT === "stdio") {
 
 if (TRANSPORT === "streamable-http") {
 	const useAuth = authEnabled();
-	const oauthHandler = useAuth
-		? createOAuthHandler(SERVER_URL.startsWith("http") ? SERVER_URL : `https://${SERVER_URL}`)
-		: null;
+	const serverUrl = SERVER_URL.startsWith("http") ? SERVER_URL : `https://${SERVER_URL}`;
+	const oauthHandler = useAuth ? createOAuthHandler(serverUrl) : null;
+
+	// Track active sessions: sessionId -> transport
+	const sessions = new Map<string, StreamableHTTPServerTransport>();
 
 	const httpServer = createServer(async (req, res) => {
 		const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -81,20 +89,47 @@ if (TRANSPORT === "streamable-http") {
 		// OAuth endpoints
 		if (oauthHandler?.(req, res, url)) return;
 
-		// MCP endpoint — require auth if enabled
+		// MCP endpoint
 		if (url.pathname === "/mcp") {
 			if (useAuth && !validateBearer(req)) {
-				const resourceUrl = SERVER_URL.startsWith("http") ? SERVER_URL : `https://${SERVER_URL}`;
 				res.writeHead(401, {
-					"WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${resourceUrl}/.well-known/oauth-protected-resource"`,
+					"WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${serverUrl}/.well-known/oauth-protected-resource"`,
 				});
 				res.end();
 				return;
 			}
 
-			const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-			await server.connect(transport);
-			await transport.handleRequest(req, res);
+			// Check for existing session
+			const sessionId = req.headers["mcp-session-id"] as string | undefined;
+			const existingTransport = sessionId ? sessions.get(sessionId) : undefined;
+			if (existingTransport) {
+				await existingTransport.handleRequest(req, res);
+				return;
+			}
+
+			// New session — create fresh server + transport
+			if (req.method === "POST") {
+				const transport = new StreamableHTTPServerTransport({
+					sessionIdGenerator: () => randomUUID(),
+					onsessioninitialized: (id) => {
+						sessions.set(id, transport);
+					},
+				});
+
+				transport.onclose = () => {
+					const id = transport.sessionId;
+					if (id) sessions.delete(id);
+				};
+
+				const server = createMcpServer();
+				await server.connect(transport);
+				await transport.handleRequest(req, res);
+				return;
+			}
+
+			// GET/DELETE without valid session
+			res.writeHead(400, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ error: "No valid session. Send an initialize request first." }));
 			return;
 		}
 
