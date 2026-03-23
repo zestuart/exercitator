@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
+- Claude Desktop connector: accept both `/oauth/*` and `/*` paths for OAuth endpoints
+- Claude Desktop connector: accept `/` as alias for `/mcp` (POST after OAuth)
+- OAuth redirect URI: added `https://claude.ai/api/mcp/auth_callback` to allowlist
+- PKCE S256: replaced `createHmac` (empty key) with `createHash("sha256")` — HMAC ≠ SHA-256
+- OAuth registration: return `token_endpoint_auth_method: "none"` for browser-based flow
+- `create_event`: append `T00:00:00` to date-only strings (intervals.icu requires datetime)
 
 ### Security
 - Fixed open redirect in OAuth authorisation flow — redirect_uri validated against localhost allowlist

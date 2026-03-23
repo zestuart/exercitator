@@ -39,14 +39,24 @@ src/
     activities.ts       — list_activities, get_activity, get_activity_streams, get_power_curve
     wellness.ts         — get_wellness, update_wellness
     events.ts           — list_events, create_event
+    suggest.ts          — suggest_workout (Daily Suggested Workout engine)
+  engine/
+    types.ts            — shared TypeScript interfaces
+    readiness.ts        — readiness score (0–100) from wellness + activity data
+    sport-selector.ts   — Run vs Swim selection from load deficit + monotony rules
+    workout-selector.ts — category selection (rest/recovery/base/tempo/intervals/long)
+    workout-builder.ts  — structured segment generation per sport × category
+    suggest.ts          — top-level orchestrator (fetches data, chains pipeline)
 ```
 
 ### Key patterns
 
 - **Per-session McpServer**: The MCP SDK allows only one transport per `McpServer`. In streamable-http mode, each session gets its own `McpServer` + `StreamableHTTPServerTransport` instance, tracked in a session map. Sessions are capped at 100 and pruned after 5 minutes idle.
 - **Dual transport**: `MCP_TRANSPORT=stdio` for local dev (`claude mcp add`), `MCP_TRANSPORT=streamable-http` for Docker/funnel production.
-- **OAuth middleware** (`src/auth.ts`): RFC-compliant (9728, 8414, 7591). PKCE S256 + client_credentials grants. Passphrase-gated authorisation. Self-validating HMAC-SHA256 tokens with version-based revocation. Per-IP rate limiting and lockout. Redirect URI validated against localhost allowlist. Request body capped at 64 KiB.
-- **Tool registration**: Each tool module exports a `register*Tools(server, client)` function. Tools use Zod schemas for input validation. Date parameters enforce `YYYY-MM-DD` regex.
+- **OAuth middleware** (`src/auth.ts`): RFC-compliant (9728, 8414, 7591). PKCE S256 (SHA-256 hash, not HMAC) + client_credentials grants. Passphrase-gated authorisation. Self-validating HMAC-SHA256 signed tokens with version-based revocation. Per-IP rate limiting and lockout. Redirect URIs validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, `http://localhost`, `http://127.0.0.1`). Request body capped at 64 KiB. Registration returns `token_endpoint_auth_method: "none"` for browser-based auth_code flow.
+- **Claude Desktop compatibility**: OAuth endpoints accept both `/oauth/*` and `/*` paths (e.g. `/authorize` and `/oauth/authorize`). The MCP handler accepts both `/` and `/mcp` — Claude Desktop POSTs to `/` after OAuth.
+- **Tool registration**: Each tool module exports a `register*Tools(server, client)` function. Tools use Zod schemas for input validation. Date parameters enforce `YYYY-MM-DD` regex. Date-only strings are appended with `T00:00:00` before forwarding to intervals.icu (which requires datetime format).
+- **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Readiness scoring → sport selection → workout category → structured segments. Testable in isolation with fixture data.
 - **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
 
 ## Philosophy
@@ -192,8 +202,10 @@ GEMINI_API_KEY=your-gemini-api-key-here          # Required for SAST scans
 INTERVALS_ICU_API_KEY=your-intervals-icu-api-key  # Required for intervals.icu access
 TAILSCALE_AUTH_KEY=your-tailscale-auth-key         # Required for Docker deployment
 MCP_OAUTH_CLIENT_ID=exercitator                   # OAuth client ID
-MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth signing secret
+MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth token signing secret
 MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
+MCP_TOKEN_VERSION=1                               # Increment to revoke all tokens
+QNAP_PASSWORD=<arca-ingens-password>              # SSH to Arca Ingens (dominus@192.168.4.180:2022)
 ```
 
 ### SAST scanning
@@ -216,7 +228,7 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **SQLite injection**: Any user-supplied parameters used in SQL queries must be parameterised.
 - **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
 - **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
-- **OAuth redirect URI**: Must be validated against localhost allowlist to prevent open redirect attacks.
+- **OAuth redirect URI**: Validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, localhost). Do not add arbitrary URIs.
 - **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.
 - **Request body size**: OAuth endpoints limit request bodies to 64 KiB.
 
@@ -249,10 +261,47 @@ When a deployment or production issue occurs:
 
 ## Deployment
 
-- **Target**: Arca Ingens (Docker Compose)
-- **Method**: `docker compose up -d` on the server
-- **Networking**: Tailscale funnel exposes the MCP server externally
+- **Target**: Arca Ingens (QNAP NAS) — `dominus@192.168.4.180:2022`
+- **Path on server**: `/share/Container/exercitator/`
+- **Method**: Tarball upload + `docker compose up -d --build` (no git on QNAP)
+- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`
 - **Branch**: `main` — deploy from main only
+- **Containers**: `exercitator-mcp` (Node.js app) + `tailscale-exercitator` (funnel sidecar)
+- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external — do not delete)
+
+### Deploy procedure
+
+```bash
+# 1. SSH password (special characters — use Python file-write, not shell expansion)
+python3 -c "
+with open('/Users/ze/Documents/claude/exercitator/.env') as f:
+    for line in f:
+        if line.startswith('QNAP_PASSWORD='):
+            open('/tmp/.qnap_pass','w').write(line.split('=',1)[1].strip())
+" && chmod 600 /tmp/.qnap_pass
+
+# 2. Tarball (exclude git, node_modules, .env, data)
+tar czf /tmp/exercitator.tar.gz --exclude='.git' --exclude='node_modules' \
+  --exclude='dist' --exclude='data' --exclude='.env' --exclude='phase2' \
+  --exclude='.claude/settings.local.json' .
+
+# 3. Upload and extract
+sshpass -f /tmp/.qnap_pass scp -P 2022 /tmp/exercitator.tar.gz \
+  dominus@192.168.4.180:/share/Container/exercitator/
+sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
+  'cd /share/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz'
+
+# 4. Rebuild MCP container only (Tailscale sidecar stays running)
+sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
+  'export PATH=/share/CE_CACHEDEV1_DATA/.qpkg/container-station/usr/bin/.libs:$PATH && \
+   cd /share/Container/exercitator && docker compose up -d --build exercitator'
+
+# 5. Verify
+curl -s https://exercitator.tail7ab379.ts.net/health
+
+# 6. Clean up
+rm -f /tmp/.qnap_pass /tmp/exercitator.tar.gz
+```
 
 ### Pre-flight sequence (enforced by /deploy)
 

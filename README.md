@@ -45,7 +45,23 @@ docker volume create exercitator-tailscale-state
 docker compose up -d --build
 ```
 
-Then add `https://exercitator.tail7ab379.ts.net` as a connector in Claude Desktop.
+Then add `https://exercitator.tail7ab379.ts.net` as a connector in Claude Desktop and enter the shared passphrase when prompted.
+
+### Deploying updates to Arca Ingens
+
+```bash
+# Tarball → upload → rebuild (no git on QNAP)
+tar czf /tmp/exercitator.tar.gz --exclude='.git' --exclude='node_modules' \
+  --exclude='dist' --exclude='data' --exclude='.env' .
+sshpass -f /tmp/.qnap_pass scp -P 2022 /tmp/exercitator.tar.gz \
+  dominus@192.168.4.180:/share/Container/exercitator/
+sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
+  'cd /share/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz && \
+   export PATH=/share/CE_CACHEDEV1_DATA/.qpkg/container-station/usr/bin/.libs:$PATH && \
+   docker compose up -d --build exercitator'
+```
+
+See CLAUDE.md for the full deploy procedure including SSH password handling.
 
 ## Authentication
 
@@ -53,11 +69,13 @@ In **stdio** mode (local dev), no authentication is required.
 
 In **streamable-http** mode (production), OAuth is enabled when `MCP_OAUTH_CLIENT_SECRET` and `MCP_OAUTH_AUTHORIZE_PASSPHRASE` are set. The middleware implements:
 
-- PKCE S256 + client_credentials grant types
+- PKCE S256 for browser-based flow (Claude Desktop, claude.ai connectors)
+- client_credentials grant for programmatic access (Claude Code)
 - Passphrase-gated authorisation (human-memorable, entered via browser)
 - Self-validating HMAC-SHA256 signed tokens (72-hour TTL)
 - Version-based token revocation (increment `MCP_TOKEN_VERSION`)
 - Per-IP rate limiting and lockout
+- Redirect URIs: `https://claude.ai/api/mcp/auth_callback`, `http://localhost`, `http://127.0.0.1`
 
 ## Environment variables
 
