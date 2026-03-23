@@ -27,15 +27,22 @@ const TOKEN_VERSION = Number.parseInt(process.env.MCP_TOKEN_VERSION ?? "1", 10);
 const TOKEN_TTL_SECS = 72 * 3600; // 72 hours
 
 // Redirect URIs that are permitted during the authorisation code flow.
-// localhost is always allowed for local development / Claude Code.
-const ALLOWED_REDIRECT_PREFIXES = ["http://localhost", "http://127.0.0.1"];
+// claude.ai callback is required for Claude Desktop / claude.ai connectors.
+// localhost is allowed for local development / Claude Code.
+const ALLOWED_REDIRECT_URIS = new Set([
+	"https://claude.ai/api/mcp/auth_callback",
+	"http://localhost",
+	"http://127.0.0.1",
+]);
 
 function isRedirectAllowed(uri: string): boolean {
+	// Exact match first (claude.ai callback)
+	if (ALLOWED_REDIRECT_URIS.has(uri)) return true;
+	// Prefix match for localhost with any port/path
 	try {
 		const parsed = new URL(uri);
-		return ALLOWED_REDIRECT_PREFIXES.some(
-			(prefix) => `${parsed.protocol}//${parsed.hostname}` === prefix,
-		);
+		const origin = `${parsed.protocol}//${parsed.hostname}`;
+		return origin === "http://localhost" || origin === "http://127.0.0.1";
 	} catch {
 		return false;
 	}
@@ -249,7 +256,7 @@ export function createOAuthHandler(serverUrl: string) {
 			json(res, 200, {
 				client_id: CLIENT_ID,
 				client_secret: CLIENT_SECRET,
-				redirect_uris: ALLOWED_REDIRECT_PREFIXES,
+				redirect_uris: [...ALLOWED_REDIRECT_URIS],
 				grant_types: ["authorization_code", "client_credentials", "refresh_token"],
 				response_types: ["code"],
 				token_endpoint_auth_method: "client_secret_post",
