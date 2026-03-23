@@ -13,7 +13,7 @@
  * No server-side token storage required.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ function verifyToken(token: string): Record<string, unknown> | null {
 // ---------------------------------------------------------------------------
 
 function sha256Base64Url(value: string): string {
-	return createHmac("sha256", Buffer.alloc(0)).update(value).digest("base64url");
+	return createHash("sha256").update(value).digest("base64url");
 }
 
 // ---------------------------------------------------------------------------
@@ -255,11 +255,11 @@ export function createOAuthHandler(serverUrl: string) {
 		if ((path === "/oauth/register" || path === "/register") && req.method === "POST") {
 			json(res, 200, {
 				client_id: CLIENT_ID,
-				client_secret: CLIENT_SECRET,
+				client_name: "Exercitator",
 				redirect_uris: [...ALLOWED_REDIRECT_URIS],
-				grant_types: ["authorization_code", "client_credentials", "refresh_token"],
+				grant_types: ["authorization_code", "refresh_token"],
 				response_types: ["code"],
-				token_endpoint_auth_method: "client_secret_post",
+				token_endpoint_auth_method: "none",
 			});
 			return true;
 		}
@@ -344,6 +344,7 @@ export function createOAuthHandler(serverUrl: string) {
 			readBody(req).then((body) => {
 				const form = new URLSearchParams(body);
 				const grantType = form.get("grant_type");
+				console.error(`token: grant_type=${grantType}`);
 
 				if (grantType === "client_credentials") {
 					if (form.get("client_secret") !== CLIENT_SECRET) {
@@ -367,6 +368,7 @@ export function createOAuthHandler(serverUrl: string) {
 					const code = form.get("code") ?? "";
 					const pending = pendingCodes.get(code);
 					if (!pending || Date.now() > pending.expiresAt) {
+						console.error(`token: invalid or expired code (found=${!!pending})`);
 						json(res, 400, { error: "invalid_grant" });
 						return;
 					}
@@ -374,12 +376,14 @@ export function createOAuthHandler(serverUrl: string) {
 
 					const verifier = form.get("code_verifier") ?? "";
 					if (pending.codeChallenge && sha256Base64Url(verifier) !== pending.codeChallenge) {
+						console.error("token: PKCE verification failed");
 						json(res, 400, {
 							error: "invalid_grant",
 							error_description: "PKCE verification failed",
 						});
 						return;
 					}
+					console.error("token: authorization_code exchange successful");
 
 					const accessToken = signToken({
 						sub: CLIENT_ID,

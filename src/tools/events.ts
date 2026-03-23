@@ -39,9 +39,11 @@ export function registerEventTools(server: McpServer, client: IntervalsClient): 
 			sportType: z.string().optional().describe('Sport type for workouts, e.g. "Ride", "Run"'),
 		},
 		async ({ category, startDate, name, description, sportType }) => {
+			// intervals.icu requires a datetime, not just a date
+			const startDateTime = startDate.length === 10 ? `${startDate}T00:00:00` : startDate;
 			const body: Record<string, unknown> = {
 				category,
-				start_date_local: startDate,
+				start_date_local: startDateTime,
 				name,
 			};
 			if (description) body.description = description;
