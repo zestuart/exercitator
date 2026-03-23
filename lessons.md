@@ -30,3 +30,10 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Root cause**: intervals.icu expects a datetime string (`2026-03-24T00:00:00`), not a date-only string (`2026-03-24`).
 **Fix**: Append `T00:00:00` to date-only strings in the `create_event` handler before forwarding to the API.
 **Prevention**: When interfacing with external APIs, verify the exact format they expect — don't assume ISO 8601 date-only is sufficient even when the parameter is called "date".
+
+## 2026-03-23 — Stale connector state after container rebuild
+
+**What happened**: After deploying a fix and rebuilding the container, Claude Desktop reported every tool returning generic errors — despite the server being healthy and responding to curl.
+**Root cause**: Container rebuild invalidated all existing MCP sessions. Claude Desktop cached the previous auth/session state and kept reusing it rather than re-authenticating.
+**Fix**: Remove the connector in Claude Desktop Settings → Connectors, then re-add it.
+**Prevention**: After any container rebuild that changes the server process, warn users to remove and re-add the connector. This is a Claude Desktop limitation — stale auth state is not automatically cleared on server restart.
