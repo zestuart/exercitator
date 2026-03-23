@@ -26,6 +26,21 @@ const PASSPHRASE = process.env.MCP_OAUTH_AUTHORIZE_PASSPHRASE ?? "";
 const TOKEN_VERSION = Number.parseInt(process.env.MCP_TOKEN_VERSION ?? "1", 10);
 const TOKEN_TTL_SECS = 72 * 3600; // 72 hours
 
+// Redirect URIs that are permitted during the authorisation code flow.
+// localhost is always allowed for local development / Claude Code.
+const ALLOWED_REDIRECT_PREFIXES = ["http://localhost", "http://127.0.0.1"];
+
+function isRedirectAllowed(uri: string): boolean {
+	try {
+		const parsed = new URL(uri);
+		return ALLOWED_REDIRECT_PREFIXES.some(
+			(prefix) => `${parsed.protocol}//${parsed.hostname}` === prefix,
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function authEnabled(): boolean {
 	return CLIENT_SECRET !== "" && PASSPHRASE !== "";
 }
@@ -78,8 +93,7 @@ const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
 
-let failedAttempts = 0;
-let lockoutUntil = 0;
+const lockoutBuckets = new Map<string, { count: number; lockoutUntil: number }>();
 const MAX_FAILURES = 5;
 const LOCKOUT_MS = 15 * 60_000;
 
@@ -94,16 +108,23 @@ function isRateLimited(ip: string): boolean {
 	return bucket.count > RATE_LIMIT;
 }
 
-function isLockedOut(): boolean {
-	return Date.now() < lockoutUntil;
+function isLockedOut(ip: string): boolean {
+	const bucket = lockoutBuckets.get(ip);
+	return bucket ? Date.now() < bucket.lockoutUntil : false;
 }
 
-function recordFailure(): void {
-	failedAttempts++;
-	if (failedAttempts >= MAX_FAILURES) {
-		lockoutUntil = Date.now() + LOCKOUT_MS;
-		failedAttempts = 0;
+function recordFailure(ip: string): void {
+	const bucket = lockoutBuckets.get(ip) ?? { count: 0, lockoutUntil: 0 };
+	bucket.count++;
+	if (bucket.count >= MAX_FAILURES) {
+		bucket.lockoutUntil = Date.now() + LOCKOUT_MS;
+		bucket.count = 0;
 	}
+	lockoutBuckets.set(ip, bucket);
+}
+
+function clearFailures(ip: string): void {
+	lockoutBuckets.delete(ip);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +165,19 @@ function html(res: ServerResponse, status: number, body: string): void {
 	res.end(body);
 }
 
+const MAX_BODY_SIZE = 64 * 1024; // 64 KiB
+
 async function readBody(req: IncomingMessage): Promise<string> {
 	const chunks: Buffer[] = [];
+	let size = 0;
 	for await (const chunk of req) {
-		chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+		const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+		size += buffer.length;
+		if (size > MAX_BODY_SIZE) {
+			req.socket.destroy();
+			throw new Error("Request body too large");
+		}
+		chunks.push(buffer);
 	}
 	return Buffer.concat(chunks).toString("utf-8");
 }
@@ -218,7 +248,7 @@ export function createOAuthHandler(serverUrl: string) {
 			json(res, 200, {
 				client_id: CLIENT_ID,
 				client_secret: CLIENT_SECRET,
-				redirect_uris: ["http://localhost"],
+				redirect_uris: ALLOWED_REDIRECT_PREFIXES,
 				grant_types: ["authorization_code", "client_credentials", "refresh_token"],
 				response_types: ["code"],
 				token_endpoint_auth_method: "client_secret_post",
@@ -240,7 +270,7 @@ export function createOAuthHandler(serverUrl: string) {
 			}
 
 			if (req.method === "POST") {
-				if (isLockedOut()) {
+				if (isLockedOut(ip)) {
 					html(
 						res,
 						403,
@@ -254,16 +284,24 @@ export function createOAuthHandler(serverUrl: string) {
 					const entered = form.get("passphrase") ?? "";
 
 					if (entered !== PASSPHRASE) {
-						recordFailure();
+						recordFailure(ip);
 						html(res, 403, authoriseFormHtml(url.searchParams, "Incorrect passphrase."));
 						return;
 					}
 
-					failedAttempts = 0;
+					clearFailures(ip);
 					pruneExpiredCodes();
 
-					const code = randomBytes(32).toString("hex");
 					const redirectUri = url.searchParams.get("redirect_uri") ?? "";
+					if (!isRedirectAllowed(redirectUri)) {
+						json(res, 400, {
+							error: "invalid_request",
+							error_description: "Invalid redirect_uri",
+						});
+						return;
+					}
+
+					const code = randomBytes(32).toString("hex");
 					const codeChallenge = url.searchParams.get("code_challenge") ?? "";
 					const state = url.searchParams.get("state") ?? "";
 

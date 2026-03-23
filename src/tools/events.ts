@@ -7,8 +7,14 @@ export function registerEventTools(server: McpServer, client: IntervalsClient): 
 		"list_events",
 		"List calendar events (planned workouts, notes, races) for a date range",
 		{
-			oldest: z.string().describe("Start date (YYYY-MM-DD)"),
-			newest: z.string().describe("End date (YYYY-MM-DD)"),
+			oldest: z
+				.string()
+				.regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD")
+				.describe("Start date (YYYY-MM-DD)"),
+			newest: z
+				.string()
+				.regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD")
+				.describe("End date (YYYY-MM-DD)"),
 		},
 		async ({ oldest, newest }) => {
 			const events = await client.get(`/athlete/${client.athleteId}/events`, {
@@ -24,7 +30,10 @@ export function registerEventTools(server: McpServer, client: IntervalsClient): 
 		"Create a calendar event (planned workout, note, or race)",
 		{
 			category: z.enum(["WORKOUT", "NOTE", "RACE", "REST_DAY"]).describe("Event category"),
-			startDate: z.string().describe("Event date (YYYY-MM-DD)"),
+			startDate: z
+				.string()
+				.regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD")
+				.describe("Event date (YYYY-MM-DD)"),
 			name: z.string().describe("Event name/title"),
 			description: z.string().optional().describe("Event description or workout details"),
 			sportType: z.string().optional().describe('Sport type for workouts, e.g. "Ride", "Run"'),

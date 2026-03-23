@@ -73,8 +73,27 @@ if (TRANSPORT === "streamable-http") {
 	const serverUrl = SERVER_URL.startsWith("http") ? SERVER_URL : `https://${SERVER_URL}`;
 	const oauthHandler = useAuth ? createOAuthHandler(serverUrl) : null;
 
-	// Track active sessions: sessionId -> transport
-	const sessions = new Map<string, StreamableHTTPServerTransport>();
+	// Track active sessions: sessionId -> { transport, lastActivity }
+	const MAX_SESSIONS = 100;
+	const SESSION_IDLE_MS = 5 * 60_000; // 5 minutes
+
+	interface Session {
+		transport: StreamableHTTPServerTransport;
+		lastActivity: number;
+	}
+
+	const sessions = new Map<string, Session>();
+
+	// Prune idle sessions every 60 seconds
+	setInterval(() => {
+		const now = Date.now();
+		for (const [id, session] of sessions) {
+			if (now - session.lastActivity > SESSION_IDLE_MS) {
+				session.transport.close?.();
+				sessions.delete(id);
+			}
+		}
+	}, 60_000).unref();
 
 	const httpServer = createServer(async (req, res) => {
 		const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
@@ -101,18 +120,25 @@ if (TRANSPORT === "streamable-http") {
 
 			// Check for existing session
 			const sessionId = req.headers["mcp-session-id"] as string | undefined;
-			const existingTransport = sessionId ? sessions.get(sessionId) : undefined;
-			if (existingTransport) {
-				await existingTransport.handleRequest(req, res);
+			const existing = sessionId ? sessions.get(sessionId) : undefined;
+			if (existing) {
+				existing.lastActivity = Date.now();
+				await existing.transport.handleRequest(req, res);
 				return;
 			}
 
 			// New session — create fresh server + transport
 			if (req.method === "POST") {
+				if (sessions.size >= MAX_SESSIONS) {
+					res.writeHead(503, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Too many active sessions. Try again later." }));
+					return;
+				}
+
 				const transport = new StreamableHTTPServerTransport({
 					sessionIdGenerator: () => randomUUID(),
 					onsessioninitialized: (id) => {
-						sessions.set(id, transport);
+						sessions.set(id, { transport, lastActivity: Date.now() });
 					},
 				});
 
