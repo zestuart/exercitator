@@ -46,6 +46,34 @@ docker compose up -d --build
 
 Then add `https://exercitator.tail7ab379.ts.net` as a connector in Claude Desktop.
 
+## Authentication
+
+In **stdio** mode (local dev), no authentication is required.
+
+In **streamable-http** mode (production), OAuth is enabled when `MCP_OAUTH_CLIENT_SECRET` and `MCP_OAUTH_AUTHORIZE_PASSPHRASE` are set. The middleware implements:
+
+- PKCE S256 + client_credentials grant types
+- Passphrase-gated authorisation (human-memorable, entered via browser)
+- Self-validating HMAC-SHA256 signed tokens (72-hour TTL)
+- Version-based token revocation (increment `MCP_TOKEN_VERSION`)
+- Per-IP rate limiting and lockout
+
+## Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `INTERVALS_ICU_API_KEY` | Yes | intervals.icu API key (Settings > Developer Settings) |
+| `MCP_TRANSPORT` | No | `stdio` (default) or `streamable-http` |
+| `MCP_HOST` | No | Bind address (default `127.0.0.1`) |
+| `MCP_PORT` | No | Listen port (default `8642`) |
+| `MCP_SERVER_URL` | No | Public URL for OAuth metadata (default `http://localhost:8642`) |
+| `MCP_OAUTH_CLIENT_ID` | No | OAuth client ID (default `exercitator`) |
+| `MCP_OAUTH_CLIENT_SECRET` | Prod | OAuth signing secret — `openssl rand -hex 32` |
+| `MCP_OAUTH_AUTHORIZE_PASSPHRASE` | Prod | Human-memorable passphrase for auth gate |
+| `MCP_TOKEN_VERSION` | No | Increment to revoke all tokens (default `1`) |
+| `TAILSCALE_AUTH_KEY` | Prod | Tailscale auth key for funnel sidecar |
+| `GEMINI_API_KEY` | Deploy | Gemini API key for SAST scanner |
+
 ## Requirements
 
 - Node.js 20+

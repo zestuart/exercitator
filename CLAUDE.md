@@ -26,6 +26,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Networking**: Tailscale funnel on Arca Ingens
 - **External API**: [intervals.icu](https://intervals.icu) REST API
 
+## Architecture
+
+```
+src/
+  index.ts              — entry point, transport selection, session management
+  intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
+  auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
+  db.ts                 — SQLite cache layer (better-sqlite3, WAL mode)
+  tools/
+    athlete.ts          — get_athlete_profile, get_sport_settings
+    activities.ts       — list_activities, get_activity, get_activity_streams, get_power_curve
+    wellness.ts         — get_wellness, update_wellness
+    events.ts           — list_events, create_event
+```
+
+### Key patterns
+
+- **Per-session McpServer**: The MCP SDK allows only one transport per `McpServer`. In streamable-http mode, each session gets its own `McpServer` + `StreamableHTTPServerTransport` instance, tracked in a session map. Sessions are capped at 100 and pruned after 5 minutes idle.
+- **Dual transport**: `MCP_TRANSPORT=stdio` for local dev (`claude mcp add`), `MCP_TRANSPORT=streamable-http` for Docker/funnel production.
+- **OAuth middleware** (`src/auth.ts`): RFC-compliant (9728, 8414, 7591). PKCE S256 + client_credentials grants. Passphrase-gated authorisation. Self-validating HMAC-SHA256 tokens with version-based revocation. Per-IP rate limiting and lockout. Redirect URI validated against localhost allowlist. Request body capped at 64 KiB.
+- **Tool registration**: Each tool module exports a `register*Tools(server, client)` function. Tools use Zod schemas for input validation. Date parameters enforce `YYYY-MM-DD` regex.
+- **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
+
 ## Philosophy
 
 These principles govern all development work in this project. They are not
@@ -165,8 +188,12 @@ IS committed and kept in sync with `.env`.
 
 ```bash
 # .env.example — commit this, not .env
-GEMINI_API_KEY=your-gemini-api-key-here    # Required for SAST scans
-# Add project-specific keys below
+GEMINI_API_KEY=your-gemini-api-key-here          # Required for SAST scans
+INTERVALS_ICU_API_KEY=your-intervals-icu-api-key  # Required for intervals.icu access
+TAILSCALE_AUTH_KEY=your-tailscale-auth-key         # Required for Docker deployment
+MCP_OAUTH_CLIENT_ID=exercitator                   # OAuth client ID
+MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth signing secret
+MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
 ```
 
 ### SAST scanning
@@ -189,6 +216,9 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **SQLite injection**: Any user-supplied parameters used in SQL queries must be parameterised.
 - **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
 - **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
+- **OAuth redirect URI**: Must be validated against localhost allowlist to prevent open redirect attacks.
+- **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.
+- **Request body size**: OAuth endpoints limit request bodies to 64 KiB.
 
 ## Testing
 
