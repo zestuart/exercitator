@@ -1,0 +1,19 @@
+{
+	"TCP": {
+		"443": {
+			"HTTPS": true
+		}
+	},
+	"Web": {
+		"exercitator.tail7ab379.ts.net:443": {
+			"Handlers": {
+				"/": {
+					"Proxy": "http://exercitator-mcp:8642"
+				}
+			}
+		}
+	},
+	"AllowFunnel": {
+		"exercitator.tail7ab379.ts.net:443": true
+	}
+}

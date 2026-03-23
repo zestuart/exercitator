@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+.env
+.env.*
+!.env.example
+.git
+*.md
+tests
+scripts
+tailscale-config
+.claude

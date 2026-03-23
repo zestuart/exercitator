@@ -1,65 +1,63 @@
-# Armature
+# Exercitator
 
-A framework for AI-assisted software development with Claude Code.
+MCP bridge for Claude to access the [intervals.icu](https://intervals.icu) API.
 
-Armature provides structure for projects where Claude is the primary developer:
-automated testing, security scanning, deployment workflows, and self-maintaining
-documentation. It is designed for both experienced engineers and citizen developers
-building their first project.
+Exercitator exposes intervals.icu data — activities, wellness, calendar events,
+athlete profile — as MCP tools that Claude can call directly. Deployed on Arca
+Ingens via Docker Compose with a Tailscale funnel for public HTTPS access.
 
-## What you get
+## MCP tools
 
-- **CLAUDE.md** — a living operating manual that Claude maintains as your project grows
-- **`/init`** — an interview that configures your project on first run
-- **`/test`** — language-agnostic test runner that grows with your code
-- **`/deploy`** — pre-flight checks, SAST security scan, and deployment
-- **`/sast`** — static application security testing via Gemini 2.5 Pro
-- **`sast_scan.py`** — zero-dependency security scanner (Python stdlib only)
+| Tool | Description |
+|------|-------------|
+| `get_athlete_profile` | Athlete profile, sport settings, training zones |
+| `get_sport_settings` | Per-sport zones, FTP, LTHR, threshold pace |
+| `list_activities` | Recent activities with date range and sport filter |
+| `get_activity` | Full details of a specific activity |
+| `get_activity_streams` | Raw data streams (power, HR, cadence, etc.) |
+| `get_power_curve` | Power duration curve for an activity |
+| `get_wellness` | Wellness data (weight, resting HR, HRV, sleep, mood) |
+| `update_wellness` | Update wellness data for a date |
+| `list_events` | Calendar events (planned workouts, notes, races) |
+| `create_event` | Create a calendar event |
 
 ## Quick start
 
-1. Copy the contents of this repository into your project root:
+### Local development (stdio)
 
-   ```bash
-   cp CLAUDE.md /path/to/your/project/
-   cp CHANGELOG.md /path/to/your/project/
-   cp -r .claude /path/to/your/project/
-   cp -r scripts /path/to/your/project/
-   cp .env.example /path/to/your/project/
-   ```
+```bash
+cp .env.example .env    # fill in INTERVALS_ICU_API_KEY
+npm install
+npm run dev             # runs via tsx on stdio transport
+```
 
-2. Open your project in Claude Code and run:
+Add to Claude Code:
+```bash
+claude mcp add --transport stdio exercitator -- npm run dev
+```
 
-   ```
-   /init
-   ```
+### Production (Docker + Tailscale funnel)
 
-   Claude will interview you about your project, configure the CLAUDE.md, set up
-   your `.env`, suggest a test structure, and configure deployment.
+```bash
+cp .env.example .env    # fill in all credentials
+docker volume create exercitator-tailscale-state
+docker compose up -d --build
+```
 
-3. Start building. Use `/test` after changes and `/deploy` when ready.
+Then add `https://exercitator.tail7ab379.ts.net` as a connector in Claude Desktop.
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/claude-code) CLI
+- Node.js 20+
 - Python 3.8+ (for the SAST scanner)
 - A Gemini API key (free at https://aistudio.google.com/apikey)
-- Git
+- An intervals.icu API key (Settings > Developer Settings)
+- Docker + Docker Compose (for production deployment)
 
 ## The name
 
-In sculpture, the armature is the internal skeleton built before the clay goes on —
-the hidden structure that makes the work possible. In a motor, it's the core that
-makes the machine turn. Armature is the framework that gives AI-assisted development
-its shape.
-
-## Philosophy
-
-- **Security is non-negotiable** — no deploy without a clean SAST scan
-- **Tests grow with the project** — every bug becomes a test
-- **Documentation is code** — Claude maintains it, not as a chore, but as self-care
-- **Lessons are permanent** — every failure prevents a future one
-- **Never commit secrets** — `.env` is canonical, always
+Latin: *exercitator* — a trainer, one who exercises. From *exercitare*, to train
+vigorously. The bridge that lets Claude become your training data analyst.
 
 ## Licence
 

@@ -17,5 +17,12 @@ terraform.tfstate.backup
 *.swo
 *~
 
+# Node
+node_modules/
+dist/
+
+# SQLite data
+data/
+
 # Claude Code local settings
 .claude/settings.local.json

@@ -1,0 +1,33 @@
+{
+	"name": "exercitator",
+	"version": "0.1.0",
+	"description": "MCP bridge for Claude to access the intervals.icu API",
+	"type": "module",
+	"main": "dist/index.js",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsx src/index.ts",
+		"start": "node dist/index.js",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"license": "MIT",
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.12.0",
+		"better-sqlite3": "^11.7.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"@types/better-sqlite3": "^7.6.12",
+		"@types/node": "^22.10.0",
+		"tsx": "^4.19.0",
+		"typescript": "^5.7.0",
+		"vitest": "^3.0.0"
+	}
+}
