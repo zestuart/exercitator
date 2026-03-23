@@ -243,8 +243,9 @@ export function createOAuthHandler(serverUrl: string) {
 		}
 
 		// ---- Dynamic registration ----
+		// Claude Desktop may hit /register or /oauth/register
 
-		if (path === "/oauth/register" && req.method === "POST") {
+		if ((path === "/oauth/register" || path === "/register") && req.method === "POST") {
 			json(res, 200, {
 				client_id: CLIENT_ID,
 				client_secret: CLIENT_SECRET,
@@ -257,8 +258,9 @@ export function createOAuthHandler(serverUrl: string) {
 		}
 
 		// ---- Authorisation endpoint ----
+		// Claude Desktop may hit /authorize or /oauth/authorize
 
-		if (path === "/oauth/authorize") {
+		if (path === "/oauth/authorize" || path === "/authorize") {
 			if (isRateLimited(ip)) {
 				json(res, 429, { error: "rate_limited" });
 				return true;
@@ -324,8 +326,9 @@ export function createOAuthHandler(serverUrl: string) {
 		}
 
 		// ---- Token endpoint ----
+		// Claude Desktop may hit /token or /oauth/token
 
-		if (path === "/oauth/token" && req.method === "POST") {
+		if ((path === "/oauth/token" || path === "/token") && req.method === "POST") {
 			if (isRateLimited(ip)) {
 				json(res, 429, { error: "rate_limited" });
 				return true;

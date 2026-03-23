@@ -110,8 +110,8 @@ if (TRANSPORT === "streamable-http") {
 		// OAuth endpoints
 		if (oauthHandler?.(req, res, url)) return;
 
-		// MCP endpoint
-		if (url.pathname === "/mcp") {
+		// MCP endpoint — Claude Desktop POSTs to "/" after OAuth, so rewrite to "/mcp"
+		if (url.pathname === "/mcp" || url.pathname === "/") {
 			if (useAuth && !validateBearer(req)) {
 				res.writeHead(401, {
 					"WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${serverUrl}/.well-known/oauth-protected-resource"`,
