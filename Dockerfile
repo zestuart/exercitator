@@ -1,5 +1,7 @@
 FROM node:20-slim AS builder
 
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package.json ./
@@ -12,14 +14,16 @@ RUN npx tsc
 # ---- Production image ----
 FROM node:20-slim
 
-RUN useradd -r -m -d /home/mcpuser -s /bin/false mcpuser \
+RUN apt-get update && apt-get install -y python3 make g++ \
+    && useradd -r -m -d /home/mcpuser -s /bin/false mcpuser \
     && mkdir -p /app/data \
     && chown -R mcpuser:mcpuser /app
 
 WORKDIR /app
 
 COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force \
+    && apt-get purge -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/dist/ dist/
 
