@@ -1,29 +1,30 @@
-# Armature — AI-Assisted Development Framework
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > This file is Claude's operating manual. Keeping it accurate is not busywork — it is
 > self-care. An outdated CLAUDE.md leads to wrong assumptions, missed context, and
 > compounding errors. Treat this document and its subsidiaries as first-class code
 > artifacts: review them, update them, and trust them only when they reflect reality.
 
-<!-- ============================================================
-     SECTIONS MARKED [SETUP] ARE POPULATED BY /init ON FIRST RUN.
-     RUN /init BEFORE STARTING DEVELOPMENT.
-     ============================================================ -->
-
 ## Project
 
-<!-- [SETUP] Project identity — filled by /init interview -->
-
-**Name**: _not yet configured — run /init_
-**Description**: _pending_
-**Domain**: _pending_
-**Repository**: _pending_
+**Name**: Exercitator
+**Description**: MCP bridge for Claude to access the intervals.icu API, hosted on Arca Ingens via Docker and Tailscale funnel
+**Domain**: exercitator.tail*.ts.net (Tailscale funnel)
+**Repository**: https://github.com/zestuart/exercitator
 
 ## Stack
 
-<!-- [SETUP] Technology stack — filled by /init interview -->
-
-_Run /init to configure._
+- **Runtime**: Node.js + TypeScript
+- **MCP SDK**: `@modelcontextprotocol/sdk`
+- **Database**: SQLite (via `better-sqlite3`) — local caching/state
+- **Linter/Formatter**: Biome
+- **Type checking**: `tsc --noEmit`
+- **Test runner**: Vitest
+- **Containerisation**: Docker + Docker Compose
+- **Networking**: Tailscale funnel on Arca Ingens
+- **External API**: [intervals.icu](https://intervals.icu) REST API
 
 ## Philosophy
 
@@ -183,19 +184,23 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 
 ### Security surfaces
 
-<!-- [SETUP] Document project-specific attack surfaces here.
-     Examples: file uploads, authentication, external APIs, user input handling.
-     The SAST scanner uses this section for focused analysis. -->
-
-_Run /init to configure._
+- **intervals.icu API key**: Stored in `.env`, used server-side only. Leaking it grants read/write access to the user's training data.
+- **Tailscale funnel exposure**: The MCP server is publicly reachable via the funnel. All endpoints must validate requests — no open proxy behaviour.
+- **SQLite injection**: Any user-supplied parameters used in SQL queries must be parameterised.
+- **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
+- **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
 
 ## Testing
 
-<!-- [SETUP] Test configuration — filled by /init interview.
-     /init will detect your language/framework and suggest an appropriate test
-     structure: linter, type checker, unit tests, integration tests. -->
+```bash
+npx biome check .              # Lint + format check
+npx tsc --noEmit               # Type check
+npx vitest run                 # All tests
+npx vitest run src/tools       # Tests in a specific directory
+npx vitest run -t "tool name"  # Single test by name
+```
 
-_Run /init to configure._
+The `/test` skill runs all three in sequence.
 
 ### Test growth protocol
 
@@ -214,10 +219,10 @@ When a deployment or production issue occurs:
 
 ## Deployment
 
-<!-- [SETUP] Deployment configuration — filled by /init interview.
-     /init will ask about your deployment target and CI/CD setup. -->
-
-_Run /init to configure._
+- **Target**: Arca Ingens (Docker Compose)
+- **Method**: `docker compose up -d` on the server
+- **Networking**: Tailscale funnel exposes the MCP server externally
+- **Branch**: `main` — deploy from main only
 
 ### Pre-flight sequence (enforced by /deploy)
 
@@ -232,12 +237,11 @@ _Run /init to configure._
 
 ## Conventions
 
-<!-- [SETUP] Project conventions — filled by /init interview.
-     Language style, formatting, naming conventions, etc. -->
-
 - ISO 8601 dates (YYYY-MM-DD), 24-hour time (HH:MM)
 - Commit messages: imperative mood, concise summary, optional body
 - Co-author attribution on AI-assisted commits
+- Biome handles formatting and linting — no separate Prettier/ESLint config
+- British English in documentation and user-facing strings
 
 ## Skills
 
