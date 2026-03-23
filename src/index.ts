@@ -16,6 +16,7 @@ import { IntervalsClient } from "./intervals.js";
 import { registerActivityTools } from "./tools/activities.js";
 import { registerAthleteTools } from "./tools/athlete.js";
 import { registerEventTools } from "./tools/events.js";
+import { registerSuggestTools } from "./tools/suggest.js";
 import { registerWellnessTools } from "./tools/wellness.js";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ function createMcpServer(): McpServer {
 	registerActivityTools(server, intervalsClient);
 	registerWellnessTools(server, intervalsClient);
 	registerEventTools(server, intervalsClient);
+	registerSuggestTools(server, intervalsClient);
 
 	return server;
 }

@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Docker + Docker Compose with Tailscale funnel sidecar
 - Biome linting/formatting, TypeScript strict mode, Vitest test suite
 - Per-session McpServer instantiation for streamable-http (max 100, 5-min idle timeout)
+- `suggest_workout` MCP tool — Daily Suggested Workout engine modelled on Garmin/Firstbeat DSW
+  - Readiness scoring (0–100) from TSB, sleep, HRV, recency, subjective wellness
+  - Sport selection (Run vs Swim) based on load deficit and monotony prevention
+  - Workout category selection (rest/recovery/base/tempo/intervals/long) from readiness + training context
+  - Structured workout builder with warm-up, main set, and cool-down for both running and swimming
+  - Duration scaling by CTL, HR zone distribution rebalancing, long session triggers
+- 33 unit and integration tests covering the full engine pipeline
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
