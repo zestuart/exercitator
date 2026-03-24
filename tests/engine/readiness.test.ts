@@ -88,6 +88,12 @@ describe("computeReadiness", () => {
 		const result = computeReadiness(wellness, activities, NOW);
 		expect(result.score).toBeGreaterThanOrEqual(10);
 		expect(result.score).toBeLessThanOrEqual(30);
+
+		// Should emit component-level warnings for HRV, sleep, TSB, and subjective
+		expect(result.warnings.some((w) => w.includes("HRV below"))).toBe(true);
+		expect(result.warnings.some((w) => w.includes("Sleep below"))).toBe(true);
+		expect(result.warnings.some((w) => w.includes("stress balance"))).toBe(true);
+		expect(result.warnings.some((w) => w.includes("fatigue or soreness"))).toBe(true);
 	});
 
 	it("handles missing data gracefully with warning", () => {

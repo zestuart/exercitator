@@ -67,7 +67,7 @@ export interface PowerContext {
 export type WorkoutCategory = "rest" | "recovery" | "base" | "tempo" | "intervals" | "long";
 
 /** Terrain guidance */
-export type TerrainPreference = "flat" | "rolling" | "hilly" | "trail" | "any";
+export type TerrainPreference = "flat" | "rolling" | "hilly" | "trail" | "pool" | "any";
 
 /** A single segment of a structured workout */
 export interface WorkoutSegment {

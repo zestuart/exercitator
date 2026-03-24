@@ -75,6 +75,19 @@ describe("selectSport", () => {
 		expect(result.reason).toContain("monotony");
 	});
 
+	it("does not trigger monotony override when non-sport activity breaks streak", () => {
+		// TrailRun, WeightTraining, Run, Swim — WeightTraining breaks the run streak
+		const activities = [
+			makeActivity("TrailRun", 1),
+			makeActivity("WeightTraining", 2),
+			makeActivity("Run", 3),
+			makeActivity("Swim", 7),
+		];
+
+		const result = selectSport(activities, 60, NOW);
+		expect(result.reason).not.toContain("monotony");
+	});
+
 	it("cross-trains when readiness is low", () => {
 		const activities = [makeActivity("Run", 1), makeActivity("Run", 2), makeActivity("Swim", 7)];
 

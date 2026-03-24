@@ -54,18 +54,26 @@ export function selectSport(
 	const runActivities = activities.filter((a) => isRun(a.type));
 	const swimActivities = activities.filter((a) => isSwim(a.type));
 
-	// Override: if last 3 consecutive activities are the same sport, suggest the other
-	const recentSports = activities
-		.filter((a) => isRun(a.type) || isSwim(a.type))
+	// Override: if last 3 consecutive activities are the same sport, suggest the other.
+	// Non-sport activities (weights, yoga, etc.) break the streak — only check the 3
+	// most recent activities overall, not just sport-filtered ones.
+	const recent3 = [...activities]
 		.sort((a, b) => b.start_date_local.localeCompare(a.start_date_local))
-		.slice(0, 3)
+		.slice(0, 3);
+	const recent3Sports = recent3
+		.filter((a) => isRun(a.type) || isSwim(a.type))
 		.map((a) => (isRun(a.type) ? "Run" : "Swim"));
 
-	if (recentSports.length === 3 && recentSports.every((s) => s === recentSports[0])) {
-		const other = recentSports[0] === "Run" ? "Swim" : "Run";
+	if (
+		recent3Sports.length === 3 &&
+		recent3.length === 3 &&
+		recent3.every((a) => isRun(a.type) || isSwim(a.type)) &&
+		recent3Sports.every((s) => s === recent3Sports[0])
+	) {
+		const other = recent3Sports[0] === "Run" ? "Swim" : "Run";
 		return {
 			sport: other as "Run" | "Swim",
-			reason: `Last 3 sessions were all ${recentSports[0]} — switching to ${other} to prevent monotony`,
+			reason: `Last 3 sessions were all ${recent3Sports[0]} — switching to ${other} to prevent monotony`,
 		};
 	}
 

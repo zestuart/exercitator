@@ -98,4 +98,12 @@ describe("selectTerrain", () => {
 		const result = selectTerrain("rest", [], NOW);
 		expect(result.terrain).toBe("any");
 	});
+
+	it("returns pool for swim workouts regardless of category", () => {
+		for (const cat of ["recovery", "base", "tempo", "intervals", "long"] as const) {
+			const result = selectTerrain(cat, [], NOW, "Swim");
+			expect(result.terrain).toBe("pool");
+			expect(result.rationale).toContain("Pool");
+		}
+	});
 });

@@ -23,7 +23,13 @@ export function selectTerrain(
 	category: WorkoutCategory,
 	activities: ActivitySummary[],
 	now: Date = new Date(),
+	sport: "Run" | "Swim" = "Run",
 ): TerrainSelection {
+	// Swim workouts are pool-based — terrain guidance is not applicable
+	if (sport === "Swim") {
+		return { terrain: "pool", rationale: "Pool session — terrain guidance not applicable" };
+	}
+
 	// Rest produces no terrain guidance
 	if (category === "rest") {
 		return { terrain: "any", rationale: "Rest day — no terrain guidance needed" };

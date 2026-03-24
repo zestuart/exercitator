@@ -26,7 +26,7 @@ const swimSettings: SportSettings = {
 	type: "Swim",
 	ftp: null,
 	lthr: 163,
-	threshold_pace: 97, // 1:37/100m
+	threshold_pace: 0.97, // 0.97 secs/m = 97 secs/100m = 1:37/100m (intervals.icu format)
 	hr_zones: [137, 145, 155, 163, 172],
 	pace_zones: null,
 	power_zones: null,
@@ -115,6 +115,19 @@ describe("buildWorkout", () => {
 		expect(mainSet?.target_description).toContain("200m");
 	});
 
+	it("renders swim pace targets as valid mm:ss/100m strings", () => {
+		const result = buildWorkout("tempo", "Swim", swimSettings, 65, 50);
+		const threshold = result.segments.find((s) => s.name === "Threshold set");
+		expect(threshold).toBeDefined();
+		// CSS = 0.97 s/m = 97 s/100m. Z3 offset = 0 → 97s = 1:37/100m
+		expect(threshold?.target_description).toContain("1:37/100m");
+
+		const speed = result.segments.find((s) => s.name === "Speed set");
+		expect(speed).toBeDefined();
+		// Z4 offset = -6 → 91s = 1:31/100m
+		expect(speed?.target_description).toContain("1:31/100m");
+	});
+
 	it("scales duration by CTL", () => {
 		const lowCtl = buildWorkout("base", "Run", runSettings, 50, 25, strydCtx);
 		const highCtl = buildWorkout("base", "Run", runSettings, 50, 75, strydCtx);
@@ -137,6 +150,12 @@ describe("buildWorkout", () => {
 		expect(result.segments).toHaveLength(0);
 		expect(result.total_duration_secs).toBe(0);
 		expect(result.category).toBe("rest");
+	});
+
+	it("enforces minimum session duration for low CTL", () => {
+		// CTL 10 → scale 0.2, clamped to 0.6. Tempo swim minimum is 30 min (1800s)
+		const result = buildWorkout("tempo", "Swim", swimSettings, 65, 10);
+		expect(result.total_duration_secs).toBeGreaterThanOrEqual(1800);
 	});
 
 	it("includes dual targets on every running segment with power source", () => {

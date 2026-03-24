@@ -72,7 +72,7 @@ export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSu
 	);
 
 	// Step 5: Select terrain
-	const terrainSelection = selectTerrain(category, activities, now);
+	const terrainSelection = selectTerrain(category, activities, now, sportSelection.sport);
 
 	// Step 6: Build workout
 	const settings = sportSelection.sport === "Run" ? runSettings : swimSettings;

@@ -32,6 +32,16 @@ const INTENSITY_FACTOR: Record<WorkoutCategory, number> = {
 	long: 0.8,
 };
 
+/** Minimum total session duration in seconds per category × sport. */
+const MIN_DURATION: Record<WorkoutCategory, { Run: number; Swim: number }> = {
+	rest: { Run: 0, Swim: 0 },
+	recovery: { Run: 1200, Swim: 1200 }, // 20 min
+	base: { Run: 1500, Swim: 1500 }, // 25 min
+	tempo: { Run: 1800, Swim: 1800 }, // 30 min
+	intervals: { Run: 1800, Swim: 1800 }, // 30 min
+	long: { Run: 2700, Swim: 2100 }, // 45 min run, 35 min swim
+};
+
 /** Derive power zone boundaries from FTP as percentages. */
 function powerZone(ftp: number, lowPct: number, highPct: number): { low: number; high: number } {
 	return {
@@ -302,9 +312,14 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 // Swimming workouts (unchanged — no power source applicable)
 // ---------------------------------------------------------------------------
 
-function swimPaceDesc(settings: SportSettings, zoneOffset: number, label: string): string {
+/**
+ * Build swim pace description. intervals.icu stores threshold_pace in secs/metre.
+ * Convert to secs/100m, apply zone offset, format as mm:ss/100m.
+ */
+function swimPaceDesc(settings: SportSettings, zoneOffsetSecs: number, label: string): string {
 	if (settings.threshold_pace) {
-		const pace = settings.threshold_pace + zoneOffset;
+		const cssPer100m = settings.threshold_pace * 100;
+		const pace = cssPer100m + zoneOffsetSecs;
 		return `${label} ${formatPace(pace, "100m")}`;
 	}
 	return label;
@@ -543,6 +558,16 @@ export function buildWorkout(
 	const ctx: BuildContext = { settings, scale, power };
 	const builder = BUILDERS[sport][category];
 	const segments = builder(ctx);
+
+	// Enforce minimum session duration — scale all segments up proportionally
+	const rawTotal = segments.reduce((s, seg) => s + seg.duration_secs, 0);
+	const minDuration = MIN_DURATION[category][sport];
+	if (rawTotal > 0 && rawTotal < minDuration) {
+		const uplift = minDuration / rawTotal;
+		for (const seg of segments) {
+			seg.duration_secs = Math.round(seg.duration_secs * uplift);
+		}
+	}
 
 	const totalDuration = segments.reduce((s, seg) => s + seg.duration_secs, 0);
 	const estimatedLoad = Math.round((totalDuration / 60) * INTENSITY_FACTOR[category]);

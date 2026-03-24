@@ -85,7 +85,7 @@ describe("suggestWorkout integration", () => {
 		const client = createMockClient();
 		const result = await suggestWorkout(client);
 
-		expect(result.terrain).toMatch(/^(flat|rolling|hilly|trail|any)$/);
+		expect(result.terrain).toMatch(/^(flat|rolling|hilly|trail|pool|any)$/);
 		expect(result.terrain_rationale).toBeTruthy();
 	});
 
