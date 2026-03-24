@@ -129,6 +129,13 @@ if (TRANSPORT === "streamable-http") {
 				return;
 			}
 
+			// Stale session ID — return 404 to signal client to re-initialise
+			if (sessionId) {
+				res.writeHead(404, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "Session not found. Please re-initialise." }));
+				return;
+			}
+
 			// New session — create fresh server + transport
 			if (req.method === "POST") {
 				if (sessions.size >= MAX_SESSIONS) {
