@@ -140,37 +140,6 @@ export function computeReadiness(
 		warnings.push("Limited wellness data — suggestion may be less accurate");
 	}
 
-	// Component-level advisory warnings
-	if (hrv != null && components.hrv < 50) {
-		const hrvValues = wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
-		const mean = hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length;
-		const today = hrvValues[hrvValues.length - 1];
-		warnings.push(
-			`HRV below 7-day baseline (${today}ms vs ${Math.round(mean)}ms mean) — recovery may be incomplete`,
-		);
-	}
-	if (sleep != null && components.sleep < 60) {
-		const latest = [...wellness].reverse().find((w) => w.sleepSecs != null || w.sleepScore != null);
-		if (latest?.sleepSecs != null) {
-			const hours = latest.sleepSecs / 3600;
-			const h = Math.floor(hours);
-			const m = Math.round((hours - h) * 60);
-			warnings.push(
-				`Sleep below 7 hours (${h}h${m.toString().padStart(2, "0")}m) — consider lighter intensity`,
-			);
-		} else if (latest?.sleepScore != null) {
-			warnings.push(`Sleep score low (${latest.sleepScore}) — consider lighter intensity`);
-		}
-	}
-	if (tsb != null && components.tsb < 30) {
-		warnings.push(
-			"Training stress balance is negative — accumulated fatigue may impair performance",
-		);
-	}
-	if (subjective != null && components.subjective < 40) {
-		warnings.push("Self-reported fatigue or soreness is elevated — consider reducing intensity");
-	}
-
 	const score = clamp(
 		Math.round(
 			components.tsb * 0.3 +
@@ -182,6 +151,46 @@ export function computeReadiness(
 		0,
 		100,
 	);
+
+	// ── Advisory warnings for individual components ──────────────────
+	// These do not change the score or workout selection — they are
+	// informational only, surfaced to the athlete via the suggestion.
+
+	if (hrv != null && hrv < 50) {
+		const hrvValues = wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
+		const mean = hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length;
+		const today = hrvValues[hrvValues.length - 1];
+		warnings.push(
+			`HRV below 7-day baseline (${today}ms vs ${Math.round(mean)}ms mean) — recovery may be incomplete`,
+		);
+	}
+
+	if (sleep != null && sleep < 60) {
+		for (let i = wellness.length - 1; i >= 0; i--) {
+			const w = wellness[i];
+			if (w.sleepSecs != null && w.sleepSecs < 25200) {
+				const hours = w.sleepSecs / 3600;
+				const h = Math.floor(hours);
+				const m = Math.round((hours % 1) * 60)
+					.toString()
+					.padStart(2, "0");
+				warnings.push(`Sleep below 7 hours (${h}h${m}m) — consider lighter intensity`);
+				break;
+			}
+			if (w.sleepScore != null && w.sleepScore < 60) {
+				warnings.push(`Sleep score low (${w.sleepScore}) — consider lighter intensity`);
+				break;
+			}
+		}
+	}
+
+	if (tsb != null && tsb < 30) {
+		warnings.push("Training stress balance is negative — fatigue exceeds fitness");
+	}
+
+	if (subjective != null && subjective < 40) {
+		warnings.push("Self-reported fatigue or soreness is elevated");
+	}
 
 	return { score, warnings, components };
 }
