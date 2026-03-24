@@ -129,10 +129,16 @@ if (TRANSPORT === "streamable-http") {
 				return;
 			}
 
-			// Stale session ID — return 404 to signal client to re-initialise
+			// Stale session ID after container restart — return 404 per MCP spec
 			if (sessionId) {
 				res.writeHead(404, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ error: "Session not found. Please re-initialise." }));
+				res.end(
+					JSON.stringify({
+						jsonrpc: "2.0",
+						error: { code: -32000, message: "Session expired" },
+						id: null,
+					}),
+				);
 				return;
 			}
 
