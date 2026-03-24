@@ -24,6 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Structured workout builder with warm-up, main set, and cool-down for both running and swimming
   - Duration scaling by CTL, HR zone distribution rebalancing, long session triggers
 - 33 unit and integration tests covering the full engine pipeline
+- DSW engine v2: power source detection (Stryd vs Garmin native vs HR-only)
+  - `src/engine/power-source.ts` — detects active power ecosystem from recent activity streams
+  - Garmin→Stryd correction factor (0.87) applied when Stryd is connected but Garmin power is active
+  - `getActivityLoad()` selects appropriate load metric (power_load vs hr_load) per activity
+- DSW engine v2: terrain guidance as first-class field
+  - `src/engine/terrain-selector.ts` — recommends flat/rolling/trail based on workout category and recent terrain
+  - Recovery, base, and intervals always prescribe flat terrain to prevent power spikes
+- DSW engine v2: dual-target prescription for running workouts
+  - Power targets derived from FTP zones (primary execution target)
+  - HR safety cap on every running segment (reduce power if HR exceeds cap)
+  - Power zone derivation: Z1 <55%, Z2 55–75%, Z3 76–90%, Z4 91–105% of FTP
+- DSW engine v2: power-aware load computation throughout pipeline
+  - Sport selector uses `PowerContext` for load deficit calculations
+  - Workout selector uses `PowerContext` for hard session detection
+- Extended `ActivitySummary` type with power fields (`power_load`, `hr_load`, `power_field`, `stream_types`, `icu_rolling_ftp`, `total_elevation_gain`)
+- Extended `WorkoutSuggestion` with `terrain`, `terrain_rationale`, `power_context` fields
+- Extended `WorkoutSegment` with `target_power_low`, `target_power_high` fields
+- 58+ unit and integration tests covering the full engine pipeline including power source detection and terrain selection
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request

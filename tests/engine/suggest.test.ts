@@ -69,4 +69,32 @@ describe("suggestWorkout integration", () => {
 
 		expect(client.get).toHaveBeenCalledTimes(4);
 	});
+
+	it("includes power_context in the result", async () => {
+		const client = createMockClient();
+		const result = await suggestWorkout(client);
+
+		expect(result.power_context).toBeDefined();
+		expect(result.power_context.source).toMatch(/^(stryd|garmin|none)$/);
+		expect(typeof result.power_context.ftp).toBe("number");
+		expect(typeof result.power_context.correction_factor).toBe("number");
+		expect(result.power_context.confidence).toMatch(/^(high|low)$/);
+	});
+
+	it("includes terrain in the result", async () => {
+		const client = createMockClient();
+		const result = await suggestWorkout(client);
+
+		expect(result.terrain).toMatch(/^(flat|rolling|hilly|trail|any)$/);
+		expect(result.terrain_rationale).toBeTruthy();
+	});
+
+	it("detects Stryd power source from fixture activities", async () => {
+		const client = createMockClient();
+		const result = await suggestWorkout(client);
+
+		// The fixture data includes runs with Stryd streams (Power, StrydLSS, etc.)
+		expect(result.power_context.source).toBe("stryd");
+		expect(result.power_context.ftp).toBeGreaterThan(0);
+	});
 });

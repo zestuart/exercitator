@@ -2,7 +2,8 @@
  * Determines whether today's workout should be Run or Swim.
  */
 
-import type { ActivitySummary } from "./types.js";
+import { getActivityLoad } from "./power-source.js";
+import type { ActivitySummary, PowerContext } from "./types.js";
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 const SWIM_TYPES = ["Swim", "OpenWaterSwim", "VirtualSwim"];
@@ -25,11 +26,30 @@ function isSwim(type: string): boolean {
 	return SWIM_TYPES.includes(type);
 }
 
+function sportLoad(activity: ActivitySummary, powerContext: PowerContext): number {
+	if (isRun(activity.type)) {
+		return getActivityLoad(activity, powerContext);
+	}
+	// Swim activities always use hr_load (no power source)
+	return activity.hr_load ?? activity.icu_training_load;
+}
+
 export function selectSport(
 	activities: ActivitySummary[],
 	readinessScore: number,
 	now: Date = new Date(),
+	powerContext?: PowerContext,
 ): SportSelection {
+	// Default power context if not provided (backward compatibility)
+	const ctx: PowerContext = powerContext ?? {
+		source: "none",
+		ftp: 0,
+		rolling_ftp: null,
+		correction_factor: 1.0,
+		confidence: "low",
+		warnings: [],
+	};
+
 	// Filter to run and swim activities only
 	const runActivities = activities.filter((a) => isRun(a.type));
 	const swimActivities = activities.filter((a) => isSwim(a.type));
@@ -65,21 +85,21 @@ export function selectSport(
 		}
 	}
 
-	// Compute per-sport load deficit
+	// Compute per-sport load deficit using power-aware load
 	const last7Days = activities.filter((a) => daysAgo(a.start_date_local, now) <= 7);
 	const last14Days = activities.filter((a) => daysAgo(a.start_date_local, now) <= 14);
 
 	const runAcute = last7Days
 		.filter((a) => isRun(a.type))
-		.reduce((s, a) => s + a.icu_training_load, 0);
+		.reduce((s, a) => s + sportLoad(a, ctx), 0);
 	const swimAcute = last7Days
 		.filter((a) => isSwim(a.type))
-		.reduce((s, a) => s + a.icu_training_load, 0);
+		.reduce((s, a) => s + sportLoad(a, ctx), 0);
 
 	const runChronic =
-		last14Days.filter((a) => isRun(a.type)).reduce((s, a) => s + a.icu_training_load, 0) / 2;
+		last14Days.filter((a) => isRun(a.type)).reduce((s, a) => s + sportLoad(a, ctx), 0) / 2;
 	const swimChronic =
-		last14Days.filter((a) => isSwim(a.type)).reduce((s, a) => s + a.icu_training_load, 0) / 2;
+		last14Days.filter((a) => isSwim(a.type)).reduce((s, a) => s + sportLoad(a, ctx), 0) / 2;
 
 	const runDeficit = runChronic - runAcute;
 	const swimDeficit = swimChronic - swimAcute;

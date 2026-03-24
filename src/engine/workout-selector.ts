@@ -2,7 +2,8 @@
  * Maps readiness score + training context to a WorkoutCategory.
  */
 
-import type { ActivitySummary, WorkoutCategory } from "./types.js";
+import { getActivityLoad } from "./power-source.js";
+import type { ActivitySummary, PowerContext, WorkoutCategory } from "./types.js";
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 const SWIM_TYPES = ["Swim", "OpenWaterSwim", "VirtualSwim"];
@@ -16,9 +17,10 @@ function daysAgo(dateStr: string, now: Date): number {
 }
 
 /** A "hard session" is one with load > 0.7 * sport CTL or RPE >= 7. */
-function isHardSession(a: ActivitySummary, sportCtl: number): boolean {
+function isHardSession(a: ActivitySummary, sportCtl: number, powerContext: PowerContext): boolean {
 	if (a.perceived_exertion != null && a.perceived_exertion >= 7) return true;
-	return a.icu_training_load > 0.7 * sportCtl;
+	const load = getActivityLoad(a, powerContext);
+	return load > 0.7 * sportCtl;
 }
 
 /** Count days since the last hard session for this sport. */
@@ -27,13 +29,14 @@ function daysSinceHardSession(
 	sport: "Run" | "Swim",
 	sportCtl: number,
 	now: Date,
+	powerContext: PowerContext,
 ): number {
 	const sportActivities = activities
 		.filter((a) => isSportActivity(a, sport))
 		.sort((a, b) => b.start_date_local.localeCompare(a.start_date_local));
 
 	for (const a of sportActivities) {
-		if (isHardSession(a, sportCtl)) {
+		if (isHardSession(a, sportCtl, powerContext)) {
 			return daysAgo(a.start_date_local, now);
 		}
 	}
@@ -74,12 +77,15 @@ function hasLongSession(activities: ActivitySummary[], thresholdSecs: number, no
 }
 
 /** Estimate sport-specific CTL from 14-day activity window. */
-function estimateSportCtl(activities: ActivitySummary[], sport: "Run" | "Swim"): number {
+function estimateSportCtl(
+	activities: ActivitySummary[],
+	sport: "Run" | "Swim",
+	powerContext: PowerContext,
+): number {
 	const sportActivities = activities.filter((a) => isSportActivity(a, sport));
 	if (sportActivities.length === 0) return 0;
 
-	// Use the most recent activity's icu_ctl as a proxy, or average load / 2
-	const totalLoad = sportActivities.reduce((s, a) => s + a.icu_training_load, 0);
+	const totalLoad = sportActivities.reduce((s, a) => s + getActivityLoad(a, powerContext), 0);
 	return totalLoad / 2; // 14-day load / 2 as a rough chronic proxy
 }
 
@@ -88,11 +94,22 @@ export function selectWorkoutCategory(
 	activities: ActivitySummary[],
 	sport: "Run" | "Swim",
 	now: Date = new Date(),
+	powerContext?: PowerContext,
 ): WorkoutCategory {
+	// Default power context if not provided (backward compatibility)
+	const ctx: PowerContext = powerContext ?? {
+		source: "none",
+		ftp: 0,
+		rolling_ftp: null,
+		correction_factor: 1.0,
+		confidence: "low",
+		warnings: [],
+	};
+
 	// Base category from readiness
 	let category: WorkoutCategory;
-	const sportCtl = estimateSportCtl(activities, sport);
-	const daysSinceHard = daysSinceHardSession(activities, sport, sportCtl, now);
+	const sportCtl = estimateSportCtl(activities, sport, ctx);
+	const daysSinceHard = daysSinceHardSession(activities, sport, sportCtl, now, ctx);
 
 	if (readinessScore <= 20) {
 		return "rest";

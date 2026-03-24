@@ -25,6 +25,16 @@ function makeActivity(
 		max_heartrate: 170,
 		icu_hr_zone_times: hrZones ?? [300, 600, 900, 400, 200, 0, 0],
 		perceived_exertion: rpe,
+		power_load: load,
+		hr_load: load,
+		icu_weighted_avg_watts: null,
+		icu_average_watts: null,
+		icu_ftp: null,
+		icu_rolling_ftp: null,
+		power_field: null,
+		stream_types: null,
+		device_name: null,
+		total_elevation_gain: null,
 	};
 }
 
@@ -77,18 +87,7 @@ describe("selectWorkoutCategory", () => {
 	});
 
 	it("bumps base to tempo when zone distribution is too low-aerobic", () => {
-		// 80%+ in Z1-Z2
 		const lowZones = [2000, 1800, 100, 50, 50, 0, 0];
-		const activities = [
-			makeActivity("Run", 2, 40, null, lowZones),
-			makeActivity("Run", 4, 40, null, lowZones),
-			// Need a >90min session to prevent 'long' override
-			{ ...makeActivity("Run", 6, 60, null, lowZones), moving_time: 6000 },
-		];
-		// Readiness 55 would normally be "tempo" if no hard session, but let's test the override
-		// At readiness 55, with no hard sessions -> tempo already. Let's try base range with override:
-		// Actually at readiness 45 (base range), with >70% low zones and readiness > 50 needed for bump
-		// So let's use readiness 52 with a hard session yesterday to get base, then check if it bumps
 		const activitiesWithHard = [
 			makeActivity("Run", 1, 80, 8, lowZones),
 			makeActivity("Run", 3, 40, null, lowZones),

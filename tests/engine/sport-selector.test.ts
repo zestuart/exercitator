@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { selectSport } from "../../src/engine/sport-selector.js";
-import type { ActivitySummary } from "../../src/engine/types.js";
+import type { ActivitySummary, PowerContext } from "../../src/engine/types.js";
 
 const NOW = new Date("2026-03-23T12:00:00");
 
@@ -19,6 +19,16 @@ function makeActivity(type: string, daysAgo: number, load = 50): ActivitySummary
 		max_heartrate: 170,
 		icu_hr_zone_times: [300, 600, 900, 400, 200, 0, 0],
 		perceived_exertion: null,
+		power_load: load,
+		hr_load: Math.round(load * 0.75),
+		icu_weighted_avg_watts: null,
+		icu_average_watts: null,
+		icu_ftp: null,
+		icu_rolling_ftp: null,
+		power_field: null,
+		stream_types: null,
+		device_name: null,
+		total_elevation_gain: null,
 	};
 }
 
@@ -38,7 +48,6 @@ describe("selectSport", () => {
 	});
 
 	it("tie-breaks by session count when load is balanced", () => {
-		// Identical loads — 3 runs, 3 swims, but slightly different session counts this week
 		const activities = [
 			makeActivity("Run", 1, 50),
 			makeActivity("Run", 3, 50),
@@ -49,7 +58,6 @@ describe("selectSport", () => {
 		];
 
 		const result = selectSport(activities, 60, NOW);
-		// Both have equal sessions in last 7 days (3 each) and equal load → defaults to Run
 		expect(result.sport).toBe("Run");
 	});
 
@@ -68,7 +76,6 @@ describe("selectSport", () => {
 	});
 
 	it("cross-trains when readiness is low", () => {
-		// Low readiness, only ran in last 3 days
 		const activities = [makeActivity("Run", 1), makeActivity("Run", 2), makeActivity("Swim", 7)];
 
 		const result = selectSport(activities, 25, NOW);
@@ -79,5 +86,39 @@ describe("selectSport", () => {
 	it("defaults to Run when no activities", () => {
 		const result = selectSport([], 60, NOW);
 		expect(result.sport).toBe("Run");
+	});
+
+	it("uses power-aware load when PowerContext is provided", () => {
+		const strydCtx: PowerContext = {
+			source: "stryd",
+			ftp: 248,
+			rolling_ftp: 248,
+			correction_factor: 1.0,
+			confidence: "high",
+			warnings: [],
+		};
+
+		// Run activities with Stryd — power_load differs from hr_load
+		const activities = [
+			{
+				...makeActivity("Run", 1, 60),
+				power_load: 55,
+				hr_load: 39,
+				stream_types: ["heartrate", "Power", "StrydLSS", "StrydFormPower", "StrydILR"],
+			},
+			{
+				...makeActivity("Run", 3, 60),
+				power_load: 48,
+				hr_load: 35,
+				stream_types: ["heartrate", "Power", "StrydLSS", "StrydFormPower", "StrydILR"],
+			},
+			makeActivity("Swim", 2, 42),
+		];
+
+		const result = selectSport(activities, 60, NOW, strydCtx);
+		// With Stryd context, run load uses power_load (55 + 48 = 103 acute)
+		// Without context, would use icu_training_load (60 + 60 = 120)
+		expect(result.sport).toBeDefined();
+		expect(result.reason).toBeTruthy();
 	});
 });

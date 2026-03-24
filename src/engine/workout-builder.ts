@@ -1,8 +1,16 @@
 /**
  * Generates structured WorkoutSegment[] for each category × sport combination.
+ * Running workouts include dual-target prescription: power (primary) + HR (safety cap).
  */
 
-import type { SportSettings, WorkoutCategory, WorkoutSegment, WorkoutSuggestion } from "./types.js";
+import type {
+	PowerContext,
+	SportSettings,
+	TerrainPreference,
+	WorkoutCategory,
+	WorkoutSegment,
+	WorkoutSuggestion,
+} from "./types.js";
 
 /** Duration scale factor: CTL/50, clamped [0.6, 1.5]. */
 function durationScale(ctl: number): number {
@@ -24,6 +32,14 @@ const INTENSITY_FACTOR: Record<WorkoutCategory, number> = {
 	long: 0.8,
 };
 
+/** Derive power zone boundaries from FTP as percentages. */
+function powerZone(ftp: number, lowPct: number, highPct: number): { low: number; high: number } {
+	return {
+		low: Math.round(ftp * lowPct),
+		high: Math.round(ftp * highPct),
+	};
+}
+
 /** Format pace as mm:ss/km or mm:ss/100m. */
 function formatPace(secsPer: number, unit: string): string {
 	const mins = Math.floor(secsPer / 60);
@@ -36,11 +52,54 @@ function hrZoneDesc(zone: number): string {
 	return `Z${zone} heart rate`;
 }
 
+/** Build a dual-target description: power primary + HR safety cap. */
+function dualTargetDesc(powerDesc: string, hrCap: string, paceDesc: string | null): string {
+	const parts = [powerDesc];
+	if (paceDesc) parts.push(paceDesc);
+	parts.push(`HR cap: ${hrCap}`);
+	return parts.join(" | ");
+}
+
+/** Get HR zone boundary from settings. */
+function hrZoneBoundary(settings: SportSettings, zoneIndex: number): number | null {
+	if (!settings.hr_zones || zoneIndex >= settings.hr_zones.length) return null;
+	return settings.hr_zones[zoneIndex];
+}
+
+/** Format HR cap description from settings. */
+function hrCapDesc(settings: SportSettings, zoneIndex: number): string {
+	const boundary = hrZoneBoundary(settings, zoneIndex);
+	if (boundary) return `<${boundary}bpm`;
+	return hrZoneDesc(zoneIndex + 1);
+}
+
+interface BuildContext {
+	settings: SportSettings;
+	scale: number;
+	power: PowerContext;
+}
+
 // ---------------------------------------------------------------------------
-// Running workouts
+// Running workouts with dual-target prescription
 // ---------------------------------------------------------------------------
 
-function buildRunRecovery(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power } = ctx;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Z1 recovery: < 55% FTP
+	const z1 = hasPower ? powerZone(power.ftp, 0, 0.55) : null;
+
+	const mainDesc = hasPower
+		? dualTargetDesc(
+				`Z1 power <${z1?.high}W`,
+				hrCapDesc(settings, 1), // bottom of Z2
+				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.3, "km") : null,
+			)
+		: settings.threshold_pace
+			? `Very easy jog, ${formatPace(settings.threshold_pace * 1.3, "km")} | ${hrZoneDesc(1)}`
+			: hrZoneDesc(1);
+
 	return [
 		{
 			name: "Warm-up",
@@ -51,10 +110,9 @@ function buildRunRecovery(settings: SportSettings, scale: number): WorkoutSegmen
 		{
 			name: "Main set",
 			duration_secs: scaled(1350, scale),
-			target_description: settings.threshold_pace
-				? `Very easy jog, ${formatPace(settings.threshold_pace * 1.3, "km")}`
-				: hrZoneDesc(1),
+			target_description: mainDesc,
 			target_hr_zone: 1,
+			...(z1 && { target_power_low: 0, target_power_high: z1.high }),
 		},
 		{
 			name: "Cool-down",
@@ -65,7 +123,23 @@ function buildRunRecovery(settings: SportSettings, scale: number): WorkoutSegmen
 	];
 }
 
-function buildRunBase(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power } = ctx;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Z2 endurance: 55–75% FTP
+	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
+
+	const mainDesc = hasPower
+		? dualTargetDesc(
+				`Z2 power ${z2?.low}–${z2?.high}W`,
+				hrCapDesc(settings, 0), // top of Z1
+				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.15, "km") : null,
+			)
+		: settings.threshold_pace
+			? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")} | ${hrZoneDesc(2)}`
+			: `Steady ${hrZoneDesc(2)}`;
+
 	return [
 		{
 			name: "Warm-up",
@@ -76,10 +150,9 @@ function buildRunBase(settings: SportSettings, scale: number): WorkoutSegment[] 
 		{
 			name: "Main set",
 			duration_secs: scaled(2100, scale),
-			target_description: settings.threshold_pace
-				? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")}`
-				: `Steady ${hrZoneDesc(2)}`,
+			target_description: mainDesc,
 			target_hr_zone: 2,
+			...(z2 && { target_power_low: z2.low, target_power_high: z2.high }),
 		},
 		{
 			name: "Cool-down",
@@ -90,10 +163,27 @@ function buildRunBase(settings: SportSettings, scale: number): WorkoutSegment[] 
 	];
 }
 
-function buildRunTempo(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power } = ctx;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Z3 tempo: 76–90% FTP
+	const z3 = hasPower ? powerZone(power.ftp, 0.76, 0.9) : null;
+
 	const reps = 2;
 	const workSecs = scaled(600, scale);
 	const restSecs = 180;
+
+	const workDesc = hasPower
+		? dualTargetDesc(
+				`Z3 power ${z3?.low}–${z3?.high}W`,
+				hrCapDesc(settings, 2), // top of Z2/Z3
+				settings.threshold_pace ? formatPace(settings.threshold_pace, "km") : null,
+			)
+		: settings.threshold_pace
+			? `Threshold ${formatPace(settings.threshold_pace, "km")} | ${hrZoneDesc(3)}`
+			: hrZoneDesc(3);
+
 	return [
 		{
 			name: "Warm-up",
@@ -104,10 +194,9 @@ function buildRunTempo(settings: SportSettings, scale: number): WorkoutSegment[]
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: settings.threshold_pace
-				? `${reps}×${Math.round(workSecs / 60)}min at threshold ${formatPace(settings.threshold_pace, "km")} / 3min Z1 recovery`
-				: `${reps}×${Math.round(workSecs / 60)}min ${hrZoneDesc(3)} / 3min Z1 recovery`,
+			target_description: `${reps}×${Math.round(workSecs / 60)}min ${workDesc} / 3min Z1 recovery`,
 			target_hr_zone: 3,
+			...(z3 && { target_power_low: z3.low, target_power_high: z3.high }),
 			repeats: reps,
 			work_duration_secs: workSecs,
 			rest_duration_secs: restSecs,
@@ -121,10 +210,27 @@ function buildRunTempo(settings: SportSettings, scale: number): WorkoutSegment[]
 	];
 }
 
-function buildRunIntervals(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power } = ctx;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Z4 VO2max: 91–105% FTP
+	const z4 = hasPower ? powerZone(power.ftp, 0.91, 1.05) : null;
+
 	const reps = Math.max(5, Math.round(7 * scale));
 	const workSecs = 150;
 	const restSecs = 120;
+
+	const workDesc = hasPower
+		? dualTargetDesc(
+				`Z4 power ${z4?.low}–${z4?.high}W`,
+				hrCapDesc(settings, 3), // top of Z3/Z4
+				settings.threshold_pace ? formatPace(settings.threshold_pace * 0.9, "km") : null,
+			)
+		: settings.threshold_pace
+			? `${formatPace(settings.threshold_pace * 0.9, "km")} | ${hrZoneDesc(4)}`
+			: hrZoneDesc(4);
+
 	return [
 		{
 			name: "Warm-up",
@@ -135,10 +241,9 @@ function buildRunIntervals(settings: SportSettings, scale: number): WorkoutSegme
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: settings.threshold_pace
-				? `${reps}×2.5min at ${formatPace(settings.threshold_pace * 0.9, "km")} / 2min Z1 jog`
-				: `${reps}×2.5min ${hrZoneDesc(4)} / 2min Z1 jog`,
+			target_description: `${reps}×2.5min ${workDesc} / 2min Z1 jog`,
 			target_hr_zone: 4,
+			...(z4 && { target_power_low: z4.low, target_power_high: z4.high }),
 			repeats: reps,
 			work_duration_secs: workSecs,
 			rest_duration_secs: restSecs,
@@ -152,8 +257,24 @@ function buildRunIntervals(settings: SportSettings, scale: number): WorkoutSegme
 	];
 }
 
-function buildRunLong(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power } = ctx;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Z2 endurance: 55–75% FTP, with optional Z3 pickup
+	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
+
 	const mainSecs = scaled(4200, scale);
+	const mainDesc = hasPower
+		? `${dualTargetDesc(
+				`Z2 power ${z2?.low}–${z2?.high}W`,
+				hrCapDesc(settings, 1),
+				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.15, "km") : null,
+			)} with optional 10min Z3 pickup`
+		: settings.threshold_pace
+			? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")} with optional 10min Z3 pickup`
+			: `Steady ${hrZoneDesc(2)} with optional 10min Z3 pickup`;
+
 	return [
 		{
 			name: "Warm-up",
@@ -164,10 +285,9 @@ function buildRunLong(settings: SportSettings, scale: number): WorkoutSegment[] 
 		{
 			name: "Main set",
 			duration_secs: mainSecs,
-			target_description: settings.threshold_pace
-				? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")} with optional 10min Z3 pickup`
-				: `Steady ${hrZoneDesc(2)} with optional 10min Z3 pickup`,
+			target_description: mainDesc,
 			target_hr_zone: 2,
+			...(z2 && { target_power_low: z2.low, target_power_high: z2.high }),
 		},
 		{
 			name: "Cool-down",
@@ -179,7 +299,7 @@ function buildRunLong(settings: SportSettings, scale: number): WorkoutSegment[] 
 }
 
 // ---------------------------------------------------------------------------
-// Swimming workouts
+// Swimming workouts (unchanged — no power source applicable)
 // ---------------------------------------------------------------------------
 
 function swimPaceDesc(settings: SportSettings, zoneOffset: number, label: string): string {
@@ -190,7 +310,8 @@ function swimPaceDesc(settings: SportSettings, zoneOffset: number, label: string
 	return label;
 }
 
-function buildSwimRecovery(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale } = ctx;
 	return [
 		{
 			name: "Warm-up",
@@ -222,7 +343,8 @@ function buildSwimRecovery(settings: SportSettings, scale: number): WorkoutSegme
 	];
 }
 
-function buildSwimBase(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale } = ctx;
 	const reps = Math.max(4, Math.round(6 * scale));
 	return [
 		{
@@ -249,7 +371,8 @@ function buildSwimBase(settings: SportSettings, scale: number): WorkoutSegment[]
 	];
 }
 
-function buildSwimTempo(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale } = ctx;
 	return [
 		{
 			name: "Warm-up",
@@ -284,7 +407,8 @@ function buildSwimTempo(settings: SportSettings, scale: number): WorkoutSegment[
 	];
 }
 
-function buildSwimIntervals(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale } = ctx;
 	return [
 		{
 			name: "Warm-up",
@@ -325,7 +449,8 @@ function buildSwimIntervals(settings: SportSettings, scale: number): WorkoutSegm
 	];
 }
 
-function buildSwimLong(settings: SportSettings, scale: number): WorkoutSegment[] {
+function buildSwimLong(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale } = ctx;
 	const mainMetres = Math.round(2500 * scale);
 	const segments400 = Math.ceil(mainMetres / 400);
 	return [
@@ -361,10 +486,7 @@ function buildSwimLong(settings: SportSettings, scale: number): WorkoutSegment[]
 // Builder dispatch
 // ---------------------------------------------------------------------------
 
-const BUILDERS: Record<
-	string,
-	Record<WorkoutCategory, (s: SportSettings, sc: number) => WorkoutSegment[]>
-> = {
+const BUILDERS: Record<string, Record<WorkoutCategory, (ctx: BuildContext) => WorkoutSegment[]>> = {
 	Run: {
 		rest: () => [],
 		recovery: buildRunRecovery,
@@ -398,10 +520,29 @@ export function buildWorkout(
 	settings: SportSettings,
 	readinessScore: number,
 	ctl: number,
-): Omit<WorkoutSuggestion, "sport_selection_reason" | "warnings" | "readiness_score"> {
+	powerContext?: PowerContext,
+): Omit<
+	WorkoutSuggestion,
+	| "sport_selection_reason"
+	| "warnings"
+	| "readiness_score"
+	| "terrain"
+	| "terrain_rationale"
+	| "power_context"
+> {
+	const power: PowerContext = powerContext ?? {
+		source: "none",
+		ftp: 0,
+		rolling_ftp: null,
+		correction_factor: 1.0,
+		confidence: "low",
+		warnings: [],
+	};
+
 	const scale = durationScale(ctl);
+	const ctx: BuildContext = { settings, scale, power };
 	const builder = BUILDERS[sport][category];
-	const segments = builder(settings, scale);
+	const segments = builder(ctx);
 
 	const totalDuration = segments.reduce((s, seg) => s + seg.duration_secs, 0);
 	const estimatedLoad = Math.round((totalDuration / 60) * INTENSITY_FACTOR[category]);

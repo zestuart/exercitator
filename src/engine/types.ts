@@ -12,6 +12,16 @@ export interface ActivitySummary {
 	max_heartrate: number | null;
 	icu_hr_zone_times: number[] | null;
 	perceived_exertion: number | null;
+	power_load: number | null;
+	hr_load: number | null;
+	icu_weighted_avg_watts: number | null;
+	icu_average_watts: number | null;
+	icu_ftp: number | null;
+	icu_rolling_ftp: number | null;
+	power_field: string | null;
+	stream_types: string[] | null;
+	device_name: string | null;
+	total_elevation_gain: number | null;
 }
 
 /** Wellness record for a single day */
@@ -38,10 +48,26 @@ export interface SportSettings {
 	threshold_pace: number | null;
 	hr_zones: number[] | null;
 	pace_zones: number[] | null;
+	power_zones: number[] | null;
+}
+
+/** Power source detection result */
+export type PowerSource = "stryd" | "garmin" | "none";
+
+export interface PowerContext {
+	source: PowerSource;
+	ftp: number;
+	rolling_ftp: number | null;
+	correction_factor: number;
+	confidence: "high" | "low";
+	warnings: string[];
 }
 
 /** The six workout categories the engine can recommend */
 export type WorkoutCategory = "rest" | "recovery" | "base" | "tempo" | "intervals" | "long";
+
+/** Terrain guidance */
+export type TerrainPreference = "flat" | "rolling" | "hilly" | "trail" | "any";
 
 /** A single segment of a structured workout */
 export interface WorkoutSegment {
@@ -49,7 +75,10 @@ export interface WorkoutSegment {
 	duration_secs: number;
 	target_description: string;
 	target_hr_zone?: number;
-	target_pace_secs?: number;
+	target_power_low?: number;
+	target_power_high?: number;
+	target_pace_secs_low?: number;
+	target_pace_secs_high?: number;
 	repeats?: number;
 	work_duration_secs?: number;
 	rest_duration_secs?: number;
@@ -66,5 +95,8 @@ export interface WorkoutSuggestion {
 	segments: WorkoutSegment[];
 	readiness_score: number;
 	sport_selection_reason: string;
+	terrain: TerrainPreference;
+	terrain_rationale: string;
+	power_context: PowerContext;
 	warnings: string[];
 }
