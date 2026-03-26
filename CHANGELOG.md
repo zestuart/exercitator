@@ -23,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Workout category selection (rest/recovery/base/tempo/intervals/long) from readiness + training context
   - Structured workout builder with warm-up, main set, and cool-down for both running and swimming
   - Duration scaling by CTL, HR zone distribution rebalancing, long session triggers
-- 33 unit and integration tests covering the full engine pipeline
 - DSW engine v2: power source detection (Stryd vs Garmin native vs HR-only)
   - `src/engine/power-source.ts` — detects active power ecosystem from recent activity streams
   - Garmin→Stryd correction factor (0.87) applied when Stryd is connected but Garmin power is active
@@ -41,7 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Extended `ActivitySummary` type with power fields (`power_load`, `hr_load`, `power_field`, `stream_types`, `icu_rolling_ftp`, `total_elevation_gain`)
 - Extended `WorkoutSuggestion` with `terrain`, `terrain_rationale`, `power_context` fields
 - Extended `WorkoutSegment` with `target_power_low`, `target_power_high` fields
-- 65 unit and integration tests covering the full engine pipeline including power source detection, terrain selection, and readiness warnings
+- Sport-specific staleness detection (`src/engine/staleness.ts`) — prevents stale thresholds from being prescribed after extended breaks (issue #7)
+  - Staleness tiers: normal (0–27d), moderate (28–60d), severe (>60d), no_history
+  - Moderate: downgrades category by one level, adds 10s pace buffer, emits warning
+  - Severe/no_history: caps category at base, adds 15s pace buffer, forces HR-only targets
+  - Symmetric handling for both Run and Swim — per-sport units (/100m for swim, /km for run)
+  - Integration point: after sport selection, staleness ceiling applied after readiness-based category selection
+- Readiness advisory warnings for individual components (HRV below baseline, sleep under 7h, negative TSB, elevated fatigue/soreness)
+- 76 unit and integration tests covering the full engine pipeline including power source detection, terrain selection, readiness warnings, and staleness checks
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
@@ -56,7 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Swim pace formatting: `threshold_pace` converted from secs/metre to secs/100m before rendering
 - Minimum session durations enforced (recovery 20min, base 25min, tempo/intervals 30min, long 45min run/35min swim)
 - Swim terrain: return `"pool"` instead of misleading `"flat"` for swim workouts
-- Readiness warnings: emit component-level advisories (HRV below baseline, sleep under 7h, negative TSB, elevated fatigue/soreness)
 
 ### Security
 - Fixed open redirect in OAuth authorisation flow — redirect_uri validated against localhost allowlist

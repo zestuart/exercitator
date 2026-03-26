@@ -45,6 +45,7 @@ src/
     readiness.ts        — readiness score (0–100) from wellness + activity data
     power-source.ts     — Stryd vs Garmin vs HR-only detection, load metric selection
     sport-selector.ts   — Run vs Swim selection from load deficit + monotony rules
+    staleness.ts        — sport-specific threshold staleness detection + category ceiling
     workout-selector.ts — category selection (rest/recovery/base/tempo/intervals/long)
     terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
     workout-builder.ts  — structured segment generation per sport × category
@@ -58,7 +59,7 @@ src/
 - **OAuth middleware** (`src/auth.ts`): RFC-compliant (9728, 8414, 7591). PKCE S256 (SHA-256 hash, not HMAC) + client_credentials grants. Passphrase-gated authorisation. Self-validating HMAC-SHA256 signed tokens with version-based revocation. Per-IP rate limiting and lockout. Redirect URIs validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, `http://localhost`, `http://127.0.0.1`). Request body capped at 64 KiB. Registration returns `token_endpoint_auth_method: "none"` for browser-based auth_code flow.
 - **Claude Desktop compatibility**: OAuth endpoints accept both `/oauth/*` and `/*` paths (e.g. `/authorize` and `/oauth/authorize`). The MCP handler accepts both `/` and `/mcp` — Claude Desktop POSTs to `/` after OAuth.
 - **Tool registration**: Each tool module exports a `register*Tools(server, client)` function. Tools use Zod schemas for input validation. Date parameters enforce `YYYY-MM-DD` regex. Date-only strings are appended with `T00:00:00` before forwarding to intervals.icu (which requires datetime format).
-- **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Pipeline: power source detection → readiness scoring → sport selection → workout category → terrain selection → structured segments with dual-target prescription (power + HR cap). Testable in isolation with fixture data.
+- **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Pipeline: power source detection → readiness scoring → sport selection → staleness check → workout category (with staleness ceiling) → terrain selection → structured segments with dual-target prescription (power + HR cap). Staleness tiers (normal/moderate/severe) apply pace buffers and can force HR-only targets for return-to-sport safety. Testable in isolation with fixture data.
 - **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
 - **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
 

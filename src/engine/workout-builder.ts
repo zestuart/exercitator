@@ -87,6 +87,10 @@ interface BuildContext {
 	settings: SportSettings;
 	scale: number;
 	power: PowerContext;
+	/** Extra seconds to add to pace targets (per 100m for swim, per km for run). */
+	paceBufferSecs: number;
+	/** When true, suppress pace/power targets and use HR zones only. */
+	hrOnly: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,20 +98,24 @@ interface BuildContext {
 // ---------------------------------------------------------------------------
 
 function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale, power } = ctx;
-	const hasPower = power.source !== "none" && power.ftp > 0;
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
 	// Z1 recovery: < 55% FTP
 	const z1 = hasPower ? powerZone(power.ftp, 0, 0.55) : null;
 
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace * 1.3 + paceBufferSecs / 1000
+		: null;
+
 	const mainDesc = hasPower
 		? dualTargetDesc(
 				`Z1 power <${z1?.high}W`,
-				hrCapDesc(settings, 1), // bottom of Z2
-				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.3, "km") : null,
+				hrCapDesc(settings, 1),
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
-		: settings.threshold_pace
-			? `Very easy jog, ${formatPace(settings.threshold_pace * 1.3, "km")} | ${hrZoneDesc(1)}`
+		: paceWithBuffer && !hrOnly
+			? `Very easy jog, ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(1)}`
 			: hrZoneDesc(1);
 
 	return [
@@ -134,20 +142,24 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale, power } = ctx;
-	const hasPower = power.source !== "none" && power.ftp > 0;
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
 	// Z2 endurance: 55–75% FTP
 	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
 
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000
+		: null;
+
 	const mainDesc = hasPower
 		? dualTargetDesc(
 				`Z2 power ${z2?.low}–${z2?.high}W`,
-				hrCapDesc(settings, 0), // top of Z1
-				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.15, "km") : null,
+				hrCapDesc(settings, 0),
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
-		: settings.threshold_pace
-			? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")} | ${hrZoneDesc(2)}`
+		: paceWithBuffer && !hrOnly
+			? `Steady Z2, ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(2)}`
 			: `Steady ${hrZoneDesc(2)}`;
 
 	return [
@@ -174,8 +186,8 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale, power } = ctx;
-	const hasPower = power.source !== "none" && power.ftp > 0;
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
 	// Z3 tempo: 76–90% FTP
 	const z3 = hasPower ? powerZone(power.ftp, 0.76, 0.9) : null;
@@ -184,14 +196,18 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 	const workSecs = scaled(600, scale);
 	const restSecs = 180;
 
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace + paceBufferSecs / 1000
+		: null;
+
 	const workDesc = hasPower
 		? dualTargetDesc(
 				`Z3 power ${z3?.low}–${z3?.high}W`,
-				hrCapDesc(settings, 2), // top of Z2/Z3
-				settings.threshold_pace ? formatPace(settings.threshold_pace, "km") : null,
+				hrCapDesc(settings, 2),
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
-		: settings.threshold_pace
-			? `Threshold ${formatPace(settings.threshold_pace, "km")} | ${hrZoneDesc(3)}`
+		: paceWithBuffer && !hrOnly
+			? `Threshold ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(3)}`
 			: hrZoneDesc(3);
 
 	return [
@@ -221,8 +237,8 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale, power } = ctx;
-	const hasPower = power.source !== "none" && power.ftp > 0;
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
 	// Z4 VO2max: 91–105% FTP
 	const z4 = hasPower ? powerZone(power.ftp, 0.91, 1.05) : null;
@@ -231,14 +247,18 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 	const workSecs = 150;
 	const restSecs = 120;
 
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace * 0.9 + paceBufferSecs / 1000
+		: null;
+
 	const workDesc = hasPower
 		? dualTargetDesc(
 				`Z4 power ${z4?.low}–${z4?.high}W`,
-				hrCapDesc(settings, 3), // top of Z3/Z4
-				settings.threshold_pace ? formatPace(settings.threshold_pace * 0.9, "km") : null,
+				hrCapDesc(settings, 3),
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
-		: settings.threshold_pace
-			? `${formatPace(settings.threshold_pace * 0.9, "km")} | ${hrZoneDesc(4)}`
+		: paceWithBuffer && !hrOnly
+			? `${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(4)}`
 			: hrZoneDesc(4);
 
 	return [
@@ -268,21 +288,25 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale, power } = ctx;
-	const hasPower = power.source !== "none" && power.ftp > 0;
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
 	// Z2 endurance: 55–75% FTP, with optional Z3 pickup
 	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
+
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000
+		: null;
 
 	const mainSecs = scaled(4200, scale);
 	const mainDesc = hasPower
 		? `${dualTargetDesc(
 				`Z2 power ${z2?.low}–${z2?.high}W`,
 				hrCapDesc(settings, 1),
-				settings.threshold_pace ? formatPace(settings.threshold_pace * 1.15, "km") : null,
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)} with optional 10min Z3 pickup`
-		: settings.threshold_pace
-			? `Steady Z2, ${formatPace(settings.threshold_pace * 1.15, "km")} with optional 10min Z3 pickup`
+		: paceWithBuffer && !hrOnly
+			? `Steady Z2, ${formatPace(paceWithBuffer, "km")} with optional 10min Z3 pickup`
 			: `Steady ${hrZoneDesc(2)} with optional 10min Z3 pickup`;
 
 	return [
@@ -314,24 +338,32 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 
 /**
  * Build swim pace description. intervals.icu stores threshold_pace in secs/metre.
- * Convert to secs/100m, apply zone offset, format as mm:ss/100m.
+ * Convert to secs/100m, apply zone offset + staleness buffer, format as mm:ss/100m.
+ * When hrOnly is true, pace targets are suppressed.
  */
-function swimPaceDesc(settings: SportSettings, zoneOffsetSecs: number, label: string): string {
+function swimPaceDesc(
+	settings: SportSettings,
+	zoneOffsetSecs: number,
+	label: string,
+	paceBufferSecs = 0,
+	hrOnly = false,
+): string {
+	if (hrOnly) return label;
 	if (settings.threshold_pace) {
 		const cssPer100m = settings.threshold_pace * 100;
-		const pace = cssPer100m + zoneOffsetSecs;
+		const pace = cssPer100m + zoneOffsetSecs + paceBufferSecs;
 		return `${label} ${formatPace(pace, "100m")}`;
 	}
 	return label;
 }
 
 function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale } = ctx;
+	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
 		{
 			name: "Warm-up",
 			duration_secs: scaled(240, scale),
-			target_description: swimPaceDesc(settings, 20, "200m easy free, Z1"),
+			target_description: swimPaceDesc(settings, 20, "200m easy free, Z1", paceBufferSecs, hrOnly),
 			target_hr_zone: 1,
 		},
 		{
@@ -346,7 +378,7 @@ function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: scaled(480, scale),
-			target_description: swimPaceDesc(settings, 18, "400m pull Z1"),
+			target_description: swimPaceDesc(settings, 18, "400m pull Z1", paceBufferSecs, hrOnly),
 			target_hr_zone: 1,
 		},
 		{
@@ -359,7 +391,7 @@ function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale } = ctx;
+	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	const reps = Math.max(4, Math.round(6 * scale));
 	return [
 		{
@@ -371,7 +403,13 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: scaled(reps * 270, scale),
-			target_description: swimPaceDesc(settings, 10, `${reps}×200m Z2 on :20 rest`),
+			target_description: swimPaceDesc(
+				settings,
+				10,
+				`${reps}×200m Z2 on :20 rest`,
+				paceBufferSecs,
+				hrOnly,
+			),
 			target_hr_zone: 2,
 			repeats: reps,
 			work_duration_secs: scaled(250, scale),
@@ -387,7 +425,7 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale } = ctx;
+	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
 		{
 			name: "Warm-up",
@@ -398,7 +436,13 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Threshold set",
 			duration_secs: scaled(4 * 270, scale),
-			target_description: swimPaceDesc(settings, 0, "4×200m Z3 descending on :30 rest"),
+			target_description: swimPaceDesc(
+				settings,
+				0,
+				"4×200m Z3 descending on :30 rest",
+				paceBufferSecs,
+				hrOnly,
+			),
 			target_hr_zone: 3,
 			repeats: 4,
 			work_duration_secs: scaled(240, scale),
@@ -407,7 +451,13 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Speed set",
 			duration_secs: scaled(4 * 70, scale),
-			target_description: swimPaceDesc(settings, -6, "4×50m Z4 on :20 rest"),
+			target_description: swimPaceDesc(
+				settings,
+				-6,
+				"4×50m Z4 on :20 rest",
+				paceBufferSecs,
+				hrOnly,
+			),
 			target_hr_zone: 4,
 			repeats: 4,
 			work_duration_secs: scaled(50, scale),
@@ -423,7 +473,7 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale } = ctx;
+	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
 		{
 			name: "Warm-up",
@@ -434,7 +484,13 @@ function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: scaled(8 * 105, scale),
-			target_description: swimPaceDesc(settings, -6, "8×100m Z4 on :15 rest"),
+			target_description: swimPaceDesc(
+				settings,
+				-6,
+				"8×100m Z4 on :15 rest",
+				paceBufferSecs,
+				hrOnly,
+			),
 			target_hr_zone: 4,
 			repeats: 8,
 			work_duration_secs: scaled(90, scale),
@@ -465,7 +521,7 @@ function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 }
 
 function buildSwimLong(ctx: BuildContext): WorkoutSegment[] {
-	const { settings, scale } = ctx;
+	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	const mainMetres = Math.round(2500 * scale);
 	const segments400 = Math.ceil(mainMetres / 400);
 	return [
@@ -482,6 +538,8 @@ function buildSwimLong(ctx: BuildContext): WorkoutSegment[] {
 				settings,
 				10,
 				`${segments400}×400m Z2 continuous with :10 rest between segments`,
+				paceBufferSecs,
+				hrOnly,
 			),
 			target_hr_zone: 2,
 			repeats: segments400,
@@ -536,6 +594,8 @@ export function buildWorkout(
 	readinessScore: number,
 	ctl: number,
 	powerContext?: PowerContext,
+	paceBufferSecs = 0,
+	hrOnly = false,
 ): Omit<
 	WorkoutSuggestion,
 	| "sport_selection_reason"
@@ -555,7 +615,7 @@ export function buildWorkout(
 	};
 
 	const scale = durationScale(ctl);
-	const ctx: BuildContext = { settings, scale, power };
+	const ctx: BuildContext = { settings, scale, power, paceBufferSecs, hrOnly };
 	const builder = BUILDERS[sport][category];
 	const segments = builder(ctx);
 

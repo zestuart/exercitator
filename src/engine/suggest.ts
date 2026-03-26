@@ -6,6 +6,7 @@ import type { IntervalsClient } from "../intervals.js";
 import { detectPowerSource } from "./power-source.js";
 import { computeReadiness } from "./readiness.js";
 import { selectSport } from "./sport-selector.js";
+import { applyStaleness, computeStaleness } from "./staleness.js";
 import { selectTerrain } from "./terrain-selector.js";
 import type {
 	ActivitySummary,
@@ -62,14 +63,20 @@ export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSu
 	// Step 3: Select sport
 	const sportSelection = selectSport(activities, readiness.score, now, powerContext);
 
-	// Step 4: Select workout category
-	const category = selectWorkoutCategory(
+	// Step 3b: Check sport-specific staleness
+	const staleness = computeStaleness(activities, sportSelection.sport, now);
+
+	// Step 4: Select workout category (readiness-based)
+	const readinessCategory = selectWorkoutCategory(
 		readiness.score,
 		activities,
 		sportSelection.sport,
 		now,
 		powerContext,
 	);
+
+	// Step 4b: Apply staleness ceiling (can only lower category, never raise)
+	const category = applyStaleness(readinessCategory, staleness.tier);
 
 	// Step 5: Select terrain
 	const terrainSelection = selectTerrain(category, activities, now, sportSelection.sport);
@@ -84,10 +91,12 @@ export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSu
 		readiness.score,
 		latestCtl,
 		powerContext,
+		staleness.paceBufferSecs,
+		staleness.hrOnly,
 	);
 
 	// Combine all warnings
-	const warnings = [...readiness.warnings, ...powerContext.warnings];
+	const warnings = [...readiness.warnings, ...powerContext.warnings, ...staleness.warnings];
 
 	return {
 		...workout,
