@@ -20,7 +20,7 @@ Ingens via Docker Compose with a Tailscale funnel for public HTTPS access.
 | `update_wellness` | Update wellness data for a date |
 | `list_events` | Calendar events (planned workouts, notes, races) |
 | `create_event` | Create a calendar event |
-| `suggest_workout` | Daily personalised workout suggestion (Run or Swim) based on 14-day training load, wellness, and recovery |
+| `suggest_workout` | Daily personalised workout (Run or Swim) with power source detection, terrain guidance, and dual-target prescription (power + HR cap) |
 
 ## Quick start
 

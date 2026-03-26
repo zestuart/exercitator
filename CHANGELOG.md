@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Extended `ActivitySummary` type with power fields (`power_load`, `hr_load`, `power_field`, `stream_types`, `icu_rolling_ftp`, `total_elevation_gain`)
 - Extended `WorkoutSuggestion` with `terrain`, `terrain_rationale`, `power_context` fields
 - Extended `WorkoutSegment` with `target_power_low`, `target_power_high` fields
-- 58+ unit and integration tests covering the full engine pipeline including power source detection and terrain selection
+- 65 unit and integration tests covering the full engine pipeline including power source detection, terrain selection, and readiness warnings
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - PKCE S256: replaced `createHmac` (empty key) with `createHash("sha256")` — HMAC ≠ SHA-256
 - OAuth registration: return `token_endpoint_auth_method: "none"` for browser-based flow
 - `create_event`: append `T00:00:00` to date-only strings (intervals.icu requires datetime)
+- Stale session handling: return HTTP 404 for unknown `mcp-session-id` instead of creating broken transport
+- Monotony override: non-sport activities (WeightTraining, yoga) now break a run/swim streak
+- Swim pace formatting: `threshold_pace` converted from secs/metre to secs/100m before rendering
+- Minimum session durations enforced (recovery 20min, base 25min, tempo/intervals 30min, long 45min run/35min swim)
+- Swim terrain: return `"pool"` instead of misleading `"flat"` for swim workouts
+- Readiness warnings: emit component-level advisories (HRV below baseline, sleep under 7h, negative TSB, elevated fatigue/soreness)
 
 ### Security
 - Fixed open redirect in OAuth authorisation flow — redirect_uri validated against localhost allowlist
