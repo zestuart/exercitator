@@ -9,9 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Name**: Exercitator
-**Description**: MCP bridge for Claude to access the intervals.icu API, hosted on Arca Ingens via Docker and Tailscale funnel
-**Domain**: exercitator.tail*.ts.net (Tailscale funnel)
+**Name**: Exercitator + Praescriptor
+**Description**: MCP bridge for Claude to access the intervals.icu API, plus a web UI serving daily workout prescriptions. Hosted on Arca Ingens via Docker and Tailscale.
+**Domains**: `exercitator.tail7ab379.ts.net` (MCP, funnel — public) · `praescriptor.tail7ab379.ts.net` (web UI, serve — tailnet only)
 **Repository**: https://github.com/zestuart/exercitator
 
 ## Stack
@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Type checking**: `tsc --noEmit`
 - **Test runner**: Vitest
 - **Containerisation**: Docker + Docker Compose
-- **Networking**: Tailscale funnel on Arca Ingens
+- **Networking**: Tailscale funnel (MCP, public) + Tailscale serve (web UI, tailnet-only) on Arca Ingens
 - **External API**: [intervals.icu](https://intervals.icu) REST API
 
 ## Architecture
@@ -49,7 +49,15 @@ src/
     workout-selector.ts — category selection (rest/recovery/base/tempo/intervals/long)
     terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
     workout-builder.ts  — structured segment generation per sport × category
-    suggest.ts          — top-level orchestrator (fetches data, chains pipeline)
+    suggest.ts          — top-level orchestrator: fetchTrainingData, suggestWorkoutFromData, suggestWorkoutForSport, suggestWorkout
+  web/
+    server.ts           — Praescriptor HTTP entrypoint (port 3847)
+    routes.ts           — route handler (/, /api/prescriptions, /api/send/:sport, /health)
+    prescriptions.ts    — dual Run+Swim prescription generator with day-level cache
+    send.ts             — push workout to intervals.icu calendar with dedup
+    intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
+    invocations.ts      — deity invocations via Anthropic API with static fallbacks
+    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework)
 ```
 
 ### Key patterns
@@ -62,6 +70,7 @@ src/
 - **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Pipeline: power source detection → readiness scoring → sport selection → staleness check → workout category (with staleness ceiling) → terrain selection → structured segments with dual-target prescription (power + HR cap). Staleness tiers (normal/moderate/severe) apply pace buffers and can force HR-only targets for return-to-sport safety. Testable in isolation with fixture data.
 - **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
 - **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
+- **Praescriptor** (`src/web/`): Separate container, same codebase. Serves daily Run + Swim prescriptions as SSR HTML via Tailscale `serve` (tailnet-only, no funnel). Imports the DSW engine directly — no network calls between containers. Deity invocations generated via Anthropic API with static fallbacks. "Send to intervals.icu" with server-side dedup. Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges.
 
 ## Philosophy
 
@@ -209,6 +218,7 @@ MCP_OAUTH_CLIENT_ID=exercitator                   # OAuth client ID
 MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth token signing secret
 MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
 MCP_TOKEN_VERSION=1                               # Increment to revoke all tokens
+ANTHROPIC_API_KEY=<your-anthropic-api-key>         # Optional: deity invocations in Praescriptor
 QNAP_PASSWORD=<arca-ingens-password>              # SSH to Arca Ingens (dominus@192.168.4.180:2022)
 ```
 
@@ -231,6 +241,8 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **Tailscale funnel exposure**: The MCP server is publicly reachable via the funnel. All endpoints must validate requests — no open proxy behaviour.
 - **SQLite injection**: Any user-supplied parameters used in SQL queries must be parameterised.
 - **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
+- **Anthropic API key**: Optional, used server-side only by Praescriptor for deity invocations. Never sent to the client. Stored in `.env`.
+- **Praescriptor access**: Tailnet-only via `tailscale serve` (no funnel). No authentication layer — Tailscale provides device-level access control.
 - **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
 - **OAuth redirect URI**: Validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, localhost). Do not add arbitrary URIs.
 - **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.
@@ -268,10 +280,10 @@ When a deployment or production issue occurs:
 - **Target**: Arca Ingens (QNAP NAS) — `dominus@192.168.4.180:2022`
 - **Path on server**: `/share/Container/exercitator/`
 - **Method**: Tarball upload + `docker compose up -d --build` (no git on QNAP)
-- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`
+- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`) → `praescriptor-web:3847`
 - **Branch**: `main` — deploy from main only
-- **Containers**: `exercitator-mcp` (Node.js app) + `tailscale-exercitator` (funnel sidecar)
-- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external — do not delete)
+- **Containers**: `exercitator-mcp` (MCP server) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar)
+- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external) — do not delete external volumes
 
 ### Deploy procedure
 
@@ -295,13 +307,14 @@ sshpass -f /tmp/.qnap_pass scp -P 2022 /tmp/exercitator.tar.gz \
 sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
   'cd /share/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz'
 
-# 4. Rebuild MCP container only (Tailscale sidecar stays running)
+# 4. Rebuild app containers (Tailscale sidecars stay running)
 sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
   'export PATH=/share/CE_CACHEDEV1_DATA/.qpkg/container-station/usr/bin/.libs:$PATH && \
-   cd /share/Container/exercitator && docker compose up -d --build exercitator'
+   cd /share/Container/exercitator && docker compose up -d --build exercitator praescriptor'
 
-# 5. Verify
+# 5. Verify both services
 curl -s https://exercitator.tail7ab379.ts.net/health
+curl -s https://praescriptor.tail7ab379.ts.net/health
 
 # 6. Clean up
 rm -f /tmp/.qnap_pass /tmp/exercitator.tar.gz

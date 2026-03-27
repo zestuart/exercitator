@@ -47,7 +47,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Symmetric handling for both Run and Swim — per-sport units (/100m for swim, /km for run)
   - Integration point: after sport selection, staleness ceiling applied after readiness-based category selection
 - Readiness advisory warnings for individual components (HRV below baseline, sleep under 7h, negative TSB, elevated fatigue/soreness)
-- 76 unit and integration tests covering the full engine pipeline including power source detection, terrain selection, readiness warnings, and staleness checks
+- **Praescriptor** web UI — daily workout prescriptions rendered in ritualistic visual style
+  - New container (`praescriptor-web`) sharing the Exercitator codebase with a separate HTTP entrypoint
+  - Dual prescription cards: Run + Swim side-by-side, each with structured segments, readiness context, and terrain guidance
+  - Deity invocation system: Diana (run), Amphitrite (swim), Minerva (rationale), Apollo (closing) — generated via Anthropic API with static fallbacks
+  - "Send to intervals.icu" button with server-side dedup (HTTP 409 on duplicate, `?force=true` override)
+  - intervals.icu workout text formatter — converts `WorkoutSegment[]` to parseable workout description syntax
+  - In-memory prescription caching (day-level) to avoid redundant API calls on send
+  - Tailscale `serve` sidecar (tailnet-only, no funnel) at `praescriptor.tail7ab379.ts.net`
+  - Dark theme with sport-specific accents (green for run, teal for swim), Cormorant Garamond + JetBrains Mono
+  - SSR HTML — no client-side framework, no external JS dependencies
+  - Zone guides on every segment: watts for running (from FTP zones), HR bpm for swimming (from intervals.icu HR zones)
+- Engine refactoring: extracted `fetchTrainingData()`, `suggestWorkoutFromData()`, and `suggestWorkoutForSport()` from `src/engine/suggest.ts` to support forced sport selection without pipeline duplication
+- 94 unit and integration tests covering the full engine pipeline, web prescriptions, intervals.icu format, send dedup, and invocations
 
 ### Fixed
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request

@@ -39,9 +39,53 @@ services:
       - TS_USERSPACE=true
       - TS_SERVE_CONFIG=/config/serve.json
 
+  praescriptor:
+    build: .
+    container_name: praescriptor-web
+    restart: unless-stopped
+    entrypoint: ["node", "dist/web/server.js"]
+    expose:
+      - "3847"
+    environment:
+      - INTERVALS_ICU_API_KEY=${INTERVALS_ICU_API_KEY:?required}
+      - PRAESCRIPTOR_PORT=3847
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
+      interval: 60s
+      timeout: 3s
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tailscale-praescriptor:
+    container_name: tailscale-praescriptor
+    image: tailscale/tailscale:latest
+    hostname: praescriptor
+    restart: unless-stopped
+    volumes:
+      - praescriptor-tailscale-state:/var/lib/tailscale
+      - ./tailscale-config-praescriptor:/config:ro
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+      - TS_SERVE_CONFIG=/config/serve.json
+
 volumes:
   exercitator-data:
     name: exercitator-data
   tailscale-state:
     name: exercitator-tailscale-state
+    external: true
+  praescriptor-tailscale-state:
+    name: praescriptor-tailscale-state
     external: true

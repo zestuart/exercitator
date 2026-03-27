@@ -1,5 +1,10 @@
 /**
  * Top-level orchestrator for the Daily Suggested Workout engine.
+ *
+ * Exports three layers:
+ *   fetchTrainingData()            — shared data-fetching (4 API calls)
+ *   suggestWorkoutForSport()       — full pipeline for a fixed sport
+ *   suggestWorkout()               — auto-selects sport, then runs pipeline
  */
 
 import type { IntervalsClient } from "../intervals.js";
@@ -31,12 +36,22 @@ const DEFAULT_SPORT_SETTINGS: Omit<SportSettings, "type"> = {
 	power_zones: null,
 };
 
-export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSuggestion> {
+// ---------------------------------------------------------------------------
+// Shared data-fetching layer
+// ---------------------------------------------------------------------------
+
+export interface TrainingData {
+	activities: ActivitySummary[];
+	wellness: WellnessRecord[];
+	runSettings: SportSettings;
+	swimSettings: SportSettings;
+}
+
+export async function fetchTrainingData(client: IntervalsClient): Promise<TrainingData> {
 	const now = new Date();
 	const d14Ago = new Date(now.getTime() - 14 * 86_400_000);
 	const d7Ago = new Date(now.getTime() - 7 * 86_400_000);
 
-	// Fetch all data in parallel
 	const [activities, wellness, runSettings, swimSettings] = await Promise.all([
 		client.get<ActivitySummary[]>(`/athlete/${client.athleteId}/activities`, {
 			oldest: dateStr(d14Ago),
@@ -54,39 +69,41 @@ export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSu
 			.catch((): SportSettings => ({ type: "Swim", ...DEFAULT_SPORT_SETTINGS })),
 	]);
 
-	// Step 1: Detect power source
+	return { activities, wellness, runSettings, swimSettings };
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline for a fixed sport
+// ---------------------------------------------------------------------------
+
+export function suggestWorkoutFromData(
+	data: TrainingData,
+	sport: "Run" | "Swim",
+	now: Date = new Date(),
+	sportSelectionReason?: string,
+): WorkoutSuggestion {
+	const { activities, wellness, runSettings, swimSettings } = data;
+
 	const powerContext = detectPowerSource(activities);
-
-	// Step 2: Compute readiness
 	const readiness = computeReadiness(wellness, activities, now);
+	const staleness = computeStaleness(activities, sport, now);
 
-	// Step 3: Select sport
-	const sportSelection = selectSport(activities, readiness.score, now, powerContext);
-
-	// Step 3b: Check sport-specific staleness
-	const staleness = computeStaleness(activities, sportSelection.sport, now);
-
-	// Step 4: Select workout category (readiness-based)
 	const readinessCategory = selectWorkoutCategory(
 		readiness.score,
 		activities,
-		sportSelection.sport,
+		sport,
 		now,
 		powerContext,
 	);
-
-	// Step 4b: Apply staleness ceiling (can only lower category, never raise)
 	const category = applyStaleness(readinessCategory, staleness.tier);
 
-	// Step 5: Select terrain
-	const terrainSelection = selectTerrain(category, activities, now, sportSelection.sport);
+	const terrainSelection = selectTerrain(category, activities, now, sport);
 
-	// Step 6: Build workout
-	const settings = sportSelection.sport === "Run" ? runSettings : swimSettings;
+	const settings = sport === "Run" ? runSettings : swimSettings;
 	const latestCtl = wellness.length > 0 ? (wellness[wellness.length - 1].ctl ?? 20) : 20;
 	const workout = buildWorkout(
 		category,
-		sportSelection.sport,
+		sport,
 		settings,
 		readiness.score,
 		latestCtl,
@@ -95,16 +112,42 @@ export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSu
 		staleness.hrOnly,
 	);
 
-	// Combine all warnings
 	const warnings = [...readiness.warnings, ...powerContext.warnings, ...staleness.warnings];
 
 	return {
 		...workout,
 		readiness_score: readiness.score,
-		sport_selection_reason: sportSelection.reason,
+		sport_selection_reason: sportSelectionReason ?? `Forced: ${sport}`,
 		terrain: terrainSelection.terrain,
 		terrain_rationale: terrainSelection.rationale,
 		power_context: powerContext,
 		warnings,
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Convenience: fetch + fixed sport
+// ---------------------------------------------------------------------------
+
+export async function suggestWorkoutForSport(
+	client: IntervalsClient,
+	sport: "Run" | "Swim",
+): Promise<WorkoutSuggestion> {
+	const data = await fetchTrainingData(client);
+	return suggestWorkoutFromData(data, sport);
+}
+
+// ---------------------------------------------------------------------------
+// Full auto: fetch + select sport + pipeline
+// ---------------------------------------------------------------------------
+
+export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSuggestion> {
+	const data = await fetchTrainingData(client);
+	const now = new Date();
+
+	const powerContext = detectPowerSource(data.activities);
+	const readiness = computeReadiness(data.wellness, data.activities, now);
+	const sportSelection = selectSport(data.activities, readiness.score, now, powerContext);
+
+	return suggestWorkoutFromData(data, sportSelection.sport, now, sportSelection.reason);
 }

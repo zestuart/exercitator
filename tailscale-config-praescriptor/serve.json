@@ -1,0 +1,16 @@
+{
+	"TCP": {
+		"443": {
+			"HTTPS": true
+		}
+	},
+	"Web": {
+		"praescriptor.tail7ab379.ts.net:443": {
+			"Handlers": {
+				"/": {
+					"Proxy": "http://praescriptor-web:3847"
+				}
+			}
+		}
+	}
+}
