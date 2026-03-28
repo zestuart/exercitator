@@ -177,6 +177,36 @@ describe("detectPowerSource", () => {
 		expect(result.warnings).toHaveLength(0);
 	});
 
+	it("detects enriched Stryd FIT upload as stryd with no correction", () => {
+		const enrichedUpload = makeRunActivity({
+			id: "enriched1",
+			start_date_local: "2026-03-27T04:11:07",
+			power_field: "power",
+			stream_types: [
+				"heartrate",
+				"watts",
+				"cadence",
+				"altitude",
+				"Power",
+				"StrydLSS",
+				"StrydFormPower",
+				"StrydILR",
+			],
+			device_name: "STRYD",
+			external_id: "stryd-6151018183557120.fit",
+			source: "UPLOAD",
+		});
+
+		const result = detectPowerSource([enrichedUpload]);
+
+		// enriched Stryd FIT: device_name "STRYD" + external_id contains "stryd"
+		// Should hit Stryd native branch, not the Garmin+Stryd correction branch
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.confidence).toBe("high");
+		expect(result.warnings).toHaveLength(0);
+	});
+
 	it("does not treat non-Stryd Apple Watch recording as Stryd", () => {
 		const appleWatchNative = makeRunActivity({
 			id: "aw2",

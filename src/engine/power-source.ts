@@ -24,15 +24,22 @@ export function hasStrydStreams(activity: ActivitySummary): boolean {
 	return STRYD_STREAM_MARKERS.some((marker) => activity.stream_types?.includes(marker));
 }
 
-/** Stryd app recording on a non-Garmin device (e.g. Apple Watch via HealthFit).
+/** Stryd-native recording: Apple Watch via HealthFit, or enriched Stryd FIT upload.
  *  The power field is lowercase "power" but the power IS from Stryd — no correction needed. */
 export function isStrydNativeRecording(activity: ActivitySummary): boolean {
-	return (activity.external_id?.includes("Stryd") ?? false) && isNonGarminDevice(activity);
+	if (!activity.external_id) return false;
+	const extLower = activity.external_id.toLowerCase();
+	if (!extLower.includes("stryd")) return false;
+	return isNonGarminDevice(activity) || isStrydDevice(activity);
 }
 
 function isNonGarminDevice(activity: ActivitySummary): boolean {
 	if (!activity.device_name) return false;
 	return APPLE_WATCH_PATTERN.test(activity.device_name);
+}
+
+function isStrydDevice(activity: ActivitySummary): boolean {
+	return activity.device_name === "STRYD";
 }
 
 /**
