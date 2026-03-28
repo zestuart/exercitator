@@ -22,6 +22,12 @@ export interface ActivitySummary {
 	stream_types: string[] | null;
 	device_name: string | null;
 	total_elevation_gain: number | null;
+	/** Weighted average power as % of FTP (e.g. 90.07 = IF 0.90) */
+	icu_intensity: number | null;
+	/** Original filename from recording device (e.g. "2026-03-27-111107-Outdoor Running-Stryd.fit") */
+	external_id: string | null;
+	/** Upload source (e.g. "GARMIN_CONNECT", "OAUTH_CLIENT", "FILE_UPLOAD") */
+	source: string | null;
 }
 
 /** Wellness record for a single day */

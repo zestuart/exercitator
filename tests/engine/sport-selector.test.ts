@@ -29,6 +29,9 @@ function makeActivity(type: string, daysAgo: number, load = 50): ActivitySummary
 		stream_types: null,
 		device_name: null,
 		total_elevation_gain: null,
+		icu_intensity: null,
+		external_id: null,
+		source: null,
 	};
 }
 

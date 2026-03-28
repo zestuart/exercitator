@@ -10,6 +10,7 @@ function makeActivity(
 	load = 50,
 	rpe: number | null = null,
 	hrZones: number[] | null = null,
+	overrides: Partial<ActivitySummary> = {},
 ): ActivitySummary {
 	const d = new Date(NOW.getTime() - daysAgo * 86_400_000);
 	return {
@@ -35,6 +36,10 @@ function makeActivity(
 		stream_types: null,
 		device_name: null,
 		total_elevation_gain: null,
+		icu_intensity: null,
+		external_id: null,
+		source: null,
+		...overrides,
 	};
 }
 
@@ -107,5 +112,62 @@ describe("selectWorkoutCategory", () => {
 		];
 		// Readiness 48 → base, no long session → upgrades to long
 		expect(selectWorkoutCategory(48, activities, "Run", NOW)).toBe("long");
+	});
+
+	it("detects hard session via icu_intensity > 85 (no RPE)", () => {
+		// High-intensity session: icu_intensity 90, no RPE, moderate load.
+		// Use null HR zones to isolate the intensity signal (avoids highPct rebalancing).
+		const activities = [
+			makeActivity("Run", 1, 42, null, null, { icu_intensity: 90.07 }),
+			{ ...makeActivity("Run", 4, 60), moving_time: 6000 }, // prevent long trigger
+		];
+		// Readiness 75 + hard session yesterday (via intensity) → tempo, not intervals
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("tempo");
+	});
+
+	it("detects hard session via HR zone distribution (>25% in Z4+)", () => {
+		// High Z4+ time: 502+264+171+500 = 1437 out of ~2220 total = 64.7%
+		const highZones = [120, 180, 483, 502, 264, 171, 500];
+		// Include enough easy activities to keep overall highPct < 40% (avoids rebalancing)
+		const easyZones = [1500, 600, 200, 50, 50, 0, 0];
+		const activities = [
+			makeActivity("Run", 1, 42, null, highZones),
+			makeActivity("Run", 3, 40, null, easyZones),
+			{ ...makeActivity("Run", 5, 60, null, easyZones), moving_time: 6000 },
+		];
+		// Readiness 75 + hard session yesterday (via HR zones) → tempo
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("tempo");
+	});
+
+	it("does not flag easy session as hard via intensity or HR zones", () => {
+		// Low intensity, low HR zones — should NOT be detected as hard.
+		// Include multiple activities so sportCtl is high enough that load 30 doesn't
+		// trigger the load-based check (sportCtl = (30+50+50+50)/2 = 90, threshold = 63).
+		const easyZones = [1500, 600, 200, 50, 50, 0, 0];
+		const activities = [
+			makeActivity("Run", 1, 30, null, easyZones, { icu_intensity: 65.0 }),
+			makeActivity("Run", 3, 50),
+			makeActivity("Run", 5, 50),
+			makeActivity("Run", 7, 50),
+		];
+		// Readiness 75 + no hard session → intervals
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+	});
+
+	it("prevents back-to-back intense sessions (2026-03-27/28 scenario)", () => {
+		// Day 1: VO2max intervals — high intensity, no RPE logged.
+		// Use null HR zones on the hard session to isolate the intensity signal.
+		const vo2maxSession = makeActivity("Run", 1, 42, null, null, {
+			icu_intensity: 90.07,
+		});
+		// Older easy runs with low HR zones
+		const easyZones = [1200, 600, 300, 100, 0, 0, 0];
+		const easyRun = makeActivity("Run", 4, 30, null, easyZones, { icu_intensity: 65.0 });
+		const longRun = { ...makeActivity("Run", 6, 60, null, easyZones), moving_time: 6000 };
+
+		const activities = [vo2maxSession, easyRun, longRun];
+
+		// Readiness 71 (66–80 band): should be tempo (hard yesterday), NOT intervals
+		expect(selectWorkoutCategory(71, activities, "Run", NOW)).toBe("tempo");
 	});
 });

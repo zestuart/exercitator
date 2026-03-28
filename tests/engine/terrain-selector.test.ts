@@ -33,6 +33,9 @@ function makeRunActivity(
 		stream_types: null,
 		device_name: null,
 		total_elevation_gain: elevationGain,
+		icu_intensity: null,
+		external_id: null,
+		source: null,
 	};
 }
 

@@ -16,9 +16,29 @@ function daysAgo(dateStr: string, now: Date): number {
 	return (now.getTime() - new Date(dateStr).getTime()) / (1000 * 86400);
 }
 
-/** A "hard session" is one with load > 0.7 * sport CTL or RPE >= 7. */
+/** A "hard session" is one detected by any of: RPE, intensity ratio, HR zone
+ *  distribution, or absolute load. Multiple signals provide robustness when
+ *  individual metrics are missing (e.g. RPE not logged, power ecosystem mismatch). */
 function isHardSession(a: ActivitySummary, sportCtl: number, powerContext: PowerContext): boolean {
+	// Subjective: athlete rated it hard
 	if (a.perceived_exertion != null && a.perceived_exertion >= 7) return true;
+
+	// Intensity ratio: normalised power > 85% of FTP (hard tempo and above)
+	if (a.icu_intensity != null && a.icu_intensity > 85) return true;
+
+	// HR zone distribution: >25% of session in Z4+ is physiologically hard
+	if (a.icu_hr_zone_times) {
+		const total = a.icu_hr_zone_times.reduce((s, t) => s + t, 0);
+		if (total > 0) {
+			let highZoneTime = 0;
+			for (let i = 3; i < a.icu_hr_zone_times.length; i++) {
+				highZoneTime += a.icu_hr_zone_times[i] ?? 0;
+			}
+			if (highZoneTime / total > 0.25) return true;
+		}
+	}
+
+	// Load-based: original fallback — catches long endurance sessions
 	const load = getActivityLoad(a, powerContext);
 	return load > 0.7 * sportCtl;
 }

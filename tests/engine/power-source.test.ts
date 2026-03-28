@@ -35,6 +35,9 @@ function makeRunActivity(overrides: Partial<ActivitySummary> = {}): ActivitySumm
 		],
 		device_name: "Garmin Forerunner 970",
 		total_elevation_gain: 50,
+		icu_intensity: 78.4,
+		external_id: "2026-03-23-080000-Running.fit",
+		source: "GARMIN_CONNECT",
 		...overrides,
 	};
 }
@@ -147,6 +150,77 @@ describe("detectPowerSource", () => {
 		const result = detectPowerSource([]);
 		expect(result.source).toBe("none");
 	});
+
+	it("detects Apple Watch + Stryd as stryd with no correction", () => {
+		const appleWatchStryd = makeRunActivity({
+			id: "aw1",
+			start_date_local: "2026-03-27T11:11:07",
+			power_field: "power", // lowercase — standard watchOS field
+			stream_types: ["heartrate", "watts", "cadence", "altitude", "StrydStepLength"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-111107-Outdoor Running-Stryd.fit",
+			source: "OAUTH_CLIENT",
+			icu_intensity: 90.07,
+		});
+		// Older Garmin + Stryd CIQ runs in lookback window
+		const garminStryd = makeRunActivity({
+			id: "g1",
+			start_date_local: "2026-03-24T07:15:00",
+		});
+
+		const result = detectPowerSource([appleWatchStryd, garminStryd]);
+
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.confidence).toBe("high");
+		expect(result.ftp).toBe(322);
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("does not treat non-Stryd Apple Watch recording as Stryd", () => {
+		const appleWatchNative = makeRunActivity({
+			id: "aw2",
+			start_date_local: "2026-03-27T08:00:00",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "cadence"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-080000-Running.fit", // No "Stryd" in name
+			source: "OAUTH_CLIENT",
+		});
+
+		const result = detectPowerSource([appleWatchNative]);
+
+		// No Stryd streams in history, no Stryd in external_id → Garmin-only
+		expect(result.source).toBe("garmin");
+		expect(result.correction_factor).toBe(1.0);
+	});
+
+	it("mixed history: Apple Watch + Stryd most recent, Garmin older", () => {
+		const appleWatchStryd = makeRunActivity({
+			id: "aw1",
+			start_date_local: "2026-03-27T11:00:00",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "StrydStepLength"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-Outdoor Running-Stryd.fit",
+			source: "OAUTH_CLIENT",
+		});
+		const garminStryd1 = makeRunActivity({
+			id: "g1",
+			start_date_local: "2026-03-24T07:00:00",
+		});
+		const garminStryd2 = makeRunActivity({
+			id: "g2",
+			start_date_local: "2026-03-20T07:00:00",
+		});
+
+		const result = detectPowerSource([appleWatchStryd, garminStryd1, garminStryd2]);
+
+		// Should detect as Stryd native, not "Garmin active but Stryd connected"
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.confidence).toBe("high");
+	});
 });
 
 describe("getActivityLoad", () => {
@@ -180,5 +254,49 @@ describe("getActivityLoad", () => {
 			warnings: [],
 		};
 		expect(getActivityLoad(activity, ctx)).toBe(39);
+	});
+
+	it("uses power_load for Apple Watch + Stryd activity in Stryd context", () => {
+		const appleWatchStryd = makeRunActivity({
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "StrydStepLength"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-Outdoor Running-Stryd.fit",
+			source: "OAUTH_CLIENT",
+			power_load: 49,
+			hr_load: 42,
+		});
+		const ctx = {
+			source: "stryd" as const,
+			ftp: 322,
+			rolling_ftp: 322,
+			correction_factor: 1.0,
+			confidence: "high" as const,
+			warnings: [],
+		};
+		// Should use power_load (49), not fall back to hr_load (42)
+		expect(getActivityLoad(appleWatchStryd, ctx)).toBe(49);
+	});
+
+	it("falls back to hr_load for non-Stryd Apple Watch in Stryd context", () => {
+		const appleWatchNative = makeRunActivity({
+			power_field: "power",
+			stream_types: ["heartrate", "watts"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-Running.fit", // No "Stryd" in name
+			source: "OAUTH_CLIENT",
+			power_load: 48,
+			hr_load: 38,
+		});
+		const ctx = {
+			source: "stryd" as const,
+			ftp: 322,
+			rolling_ftp: 322,
+			correction_factor: 1.0,
+			confidence: "high" as const,
+			warnings: [],
+		};
+		// Not a Stryd recording and no CIQ streams → hr_load fallback
+		expect(getActivityLoad(appleWatchNative, ctx)).toBe(38);
 	});
 });

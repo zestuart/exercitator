@@ -21,7 +21,10 @@
 		"power_field": null,
 		"stream_types": null,
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": null
+		"total_elevation_gain": null,
+		"icu_intensity": null,
+		"external_id": "2026-03-23-022025-WeightTraining.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i134028918",
@@ -45,7 +48,10 @@
 		"power_field": "power",
 		"stream_types": ["heartrate", "watts", "cadence", "altitude"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 45
+		"total_elevation_gain": 45,
+		"icu_intensity": 71.1,
+		"external_id": "2026-03-22-125457-Cycling.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i133992808",
@@ -69,7 +75,10 @@
 		"power_field": "power",
 		"stream_types": ["heartrate", "watts", "cadence", "altitude"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 52
+		"total_elevation_gain": 52,
+		"icu_intensity": 97.1,
+		"external_id": "2026-03-22-094707-Cycling.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i133487444",
@@ -102,7 +111,10 @@
 			"StrydILR"
 		],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 92
+		"total_elevation_gain": 92,
+		"icu_intensity": 95.2,
+		"external_id": "2026-03-20-070126-TrailRun.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i132963404",
@@ -135,7 +147,10 @@
 			"StrydILR"
 		],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 78
+		"total_elevation_gain": 78,
+		"icu_intensity": 104.1,
+		"external_id": "2026-03-18-034845-TrailRun.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i132700001",
@@ -159,7 +174,10 @@
 		"power_field": null,
 		"stream_types": ["heartrate"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": null
+		"total_elevation_gain": null,
+		"icu_intensity": null,
+		"external_id": "2026-03-17-083000-Swimming.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i132394917",
@@ -183,7 +201,10 @@
 		"power_field": null,
 		"stream_types": null,
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": null
+		"total_elevation_gain": null,
+		"icu_intensity": null,
+		"external_id": "2026-03-16-021643-WeightTraining.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i131984243",
@@ -207,7 +228,10 @@
 		"power_field": "power",
 		"stream_types": ["heartrate", "watts", "cadence", "altitude"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 210
+		"total_elevation_gain": 210,
+		"icu_intensity": 82.4,
+		"external_id": "2026-03-14-035735-Cycling.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i131500001",
@@ -231,7 +255,10 @@
 		"power_field": "power",
 		"stream_types": ["heartrate", "watts", "cadence", "altitude"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": 25
+		"total_elevation_gain": 25,
+		"icu_intensity": 80.5,
+		"external_id": "2026-03-12-074500-Running.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i131200001",
@@ -255,7 +282,10 @@
 		"power_field": null,
 		"stream_types": ["heartrate"],
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": null
+		"total_elevation_gain": null,
+		"icu_intensity": null,
+		"external_id": "2026-03-11-080000-Swimming.fit",
+		"source": "GARMIN_CONNECT"
 	},
 	{
 		"id": "i130657573",
@@ -279,6 +309,9 @@
 		"power_field": null,
 		"stream_types": null,
 		"device_name": "Garmin Forerunner 970",
-		"total_elevation_gain": null
+		"total_elevation_gain": null,
+		"icu_intensity": null,
+		"external_id": "2026-03-09-021832-WeightTraining.fit",
+		"source": "GARMIN_CONNECT"
 	}
 ]

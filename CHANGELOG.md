@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 94 unit and integration tests covering the full engine pipeline, web prescriptions, intervals.icu format, send dedup, and invocations
 
 ### Fixed
+- Power source detection for Apple Watch + Stryd: Stryd watchOS app records `power_field: "power"` (lowercase) without CIQ stream markers, causing false Garmin correction (0.87×). Now detected via `external_id` containing "Stryd" + Apple Watch `device_name` pattern — no correction applied (fixes #8)
+- `getActivityLoad()` now uses `power_load` for Stryd native recordings (Apple Watch), not just CIQ recordings (Garmin) — fixes cascading underreported load
+- Hard session detection too narrow: `isHardSession()` now checks `icu_intensity > 85` and HR Z4+ > 25% of session time, in addition to RPE and load. Prevents back-to-back intense prescriptions when RPE is missing and load threshold is inflated (fixes #9)
+- Extended `ActivitySummary` with `icu_intensity`, `external_id`, `source` fields from intervals.icu API
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
 - Claude Desktop connector: accept both `/oauth/*` and `/*` paths for OAuth endpoints
 - Claude Desktop connector: accept `/` as alias for `/mcp` (POST after OAuth)

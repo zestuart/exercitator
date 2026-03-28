@@ -10,6 +10,7 @@ const STRYD_STREAM_MARKERS = ["StrydLSS", "StrydFormPower", "StrydILR"] as const
 const STRYD_POWER_FIELD = "Power";
 const GARMIN_POWER_FIELD = "power";
 const DEFAULT_GARMIN_TO_STRYD_FACTOR = 0.87;
+const APPLE_WATCH_PATTERN = /^Watch\d/;
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 
@@ -17,9 +18,21 @@ function isRun(type: string): boolean {
 	return RUN_TYPES.includes(type);
 }
 
+/** Stryd CIQ developer fields present (Garmin Connect IQ plugin). */
 function hasStrydStreams(activity: ActivitySummary): boolean {
 	if (!activity.stream_types) return false;
 	return STRYD_STREAM_MARKERS.some((marker) => activity.stream_types?.includes(marker));
+}
+
+/** Stryd app recording on a non-Garmin device (e.g. Apple Watch via HealthFit).
+ *  The power field is lowercase "power" but the power IS from Stryd — no correction needed. */
+function isStrydNativeRecording(activity: ActivitySummary): boolean {
+	return (activity.external_id?.includes("Stryd") ?? false) && isNonGarminDevice(activity);
+}
+
+function isNonGarminDevice(activity: ActivitySummary): boolean {
+	if (!activity.device_name) return false;
+	return APPLE_WATCH_PATTERN.test(activity.device_name);
 }
 
 /**
@@ -69,8 +82,21 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 		};
 	}
 
-	// Stryd is active power source (capital P)
+	// Stryd is active power source (capital P — CIQ developer field on Garmin)
 	if (activePowerField === STRYD_POWER_FIELD && athleteHasStryd) {
+		return {
+			source: "stryd",
+			ftp: rawFtp ?? 0,
+			rolling_ftp: mostRecentRun.icu_rolling_ftp,
+			correction_factor: 1.0,
+			confidence: "high",
+			warnings,
+		};
+	}
+
+	// Stryd app on non-Garmin device (e.g. Apple Watch via HealthFit).
+	// power_field is lowercase "power" but IS Stryd power — no correction needed.
+	if (activePowerField === GARMIN_POWER_FIELD && isStrydNativeRecording(mostRecentRun)) {
 		return {
 			source: "stryd",
 			ftp: rawFtp ?? 0,
@@ -145,8 +171,13 @@ export function getActivityLoad(activity: ActivitySummary, powerContext: PowerCo
 		return activity.hr_load ?? activity.icu_training_load;
 	}
 
-	// If the activity has Stryd data and we're in Stryd mode, use power_load
-	if (powerContext.source === "stryd" && hasStrydStreams(activity) && activity.power_load != null) {
+	// If the activity has Stryd data and we're in Stryd mode, use power_load.
+	// Covers both CIQ (Garmin) and native (Apple Watch) Stryd recordings.
+	if (
+		powerContext.source === "stryd" &&
+		(hasStrydStreams(activity) || isStrydNativeRecording(activity)) &&
+		activity.power_load != null
+	) {
 		return activity.power_load;
 	}
 
