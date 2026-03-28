@@ -9,9 +9,10 @@
  * caught, logged, and the original activities returned unchanged.
  */
 
-import { isAlreadyEnriched, recordEnrichment } from "../db.js";
+import { isAlreadyEnriched, recordEnrichment, saveVigilMetrics } from "../db.js";
 import { hasStrydStreams, isStrydNativeRecording } from "../engine/power-source.js";
 import type { ActivitySummary } from "../engine/types.js";
+import { extractMetrics, parseFitBuffer } from "../engine/vigil/fit-parser.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydActivity, StrydClient } from "./client.js";
 
@@ -65,6 +66,29 @@ async function enrichActivity(
 ): Promise<EnrichmentResult> {
 	// Download full FIT from Stryd PowerCenter
 	const fitBuffer = await strydClient.downloadFit(strydActivity.id);
+
+	// Extract Vigil metrics from the FIT before uploading (incremental pipeline).
+	// Failures are non-blocking — enrichment continues regardless.
+	try {
+		const records = await parseFitBuffer(fitBuffer);
+		const activityDate = icuActivity.start_date_local.slice(0, 10);
+		const metrics = extractMetrics(
+			String(strydActivity.id),
+			activityDate,
+			records,
+			"Run",
+			strydActivity.rpe ?? null,
+			strydActivity.feel ?? null,
+			strydActivity.surface_type ?? null,
+			icuActivity.id,
+		);
+		if (metrics) {
+			saveVigilMetrics(metrics);
+			console.error(`Vigil: extracted metrics for Stryd ${strydActivity.id}`);
+		}
+	} catch (err) {
+		console.error(`Vigil: metric extraction failed for Stryd ${strydActivity.id}:`, err);
+	}
 
 	// Upload to intervals.icu (creates a new activity with full developer fields)
 	const result = (await intervalsClient.uploadFile(

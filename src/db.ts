@@ -167,6 +167,12 @@ export function recordEnrichment(
 
 import type { VigilBaseline, VigilMetrics } from "./engine/vigil/types.js";
 
+/** Check if any Vigil metrics exist at all (for triggering initial backfill). */
+export function hasAnyVigilMetrics(): boolean {
+	const row = getDb().prepare("SELECT 1 FROM vigil_metrics LIMIT 1").get();
+	return row !== undefined;
+}
+
 /** Check if Vigil metrics have already been computed for a Stryd activity. */
 export function hasVigilMetrics(activityId: string): boolean {
 	const row = getDb().prepare("SELECT 1 FROM vigil_metrics WHERE activity_id = ?").get(activityId);

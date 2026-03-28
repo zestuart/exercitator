@@ -3,8 +3,10 @@
  * Caches results per day to avoid redundant API calls on /api/send.
  */
 
+import { hasAnyVigilMetrics } from "../db.js";
 import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
+import { runBackfill } from "../engine/vigil/backfill.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
@@ -60,6 +62,10 @@ export async function generatePrescriptions(
 	// Count enrichments: new IDs that weren't in the pre-enrichment set
 	const strydEnriched = data.activities.filter((a) => !preEnrichIds.has(a.id)).length;
 
+	// Vigil: one-off 90-day backfill if vigil_metrics is empty and Stryd is available.
+	// Runs once, then incremental processing handles new activities.
+	await runVigilBackfillIfNeeded(strydClient ?? null);
+
 	// Fetch authoritative critical power from Stryd (used as run FTP)
 	const strydCp = await fetchStrydCp(strydClient ?? null);
 
@@ -96,6 +102,19 @@ async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | n
 	} catch (err) {
 		console.error("Stryd CP fetch failed:", err);
 		return null;
+	}
+}
+
+async function runVigilBackfillIfNeeded(strydClient: StrydClient | null): Promise<void> {
+	if (!strydClient) return;
+	if (hasAnyVigilMetrics()) return;
+
+	try {
+		console.error("Vigil: no metrics found — running 90-day backfill from Stryd");
+		const count = await runBackfill(strydClient);
+		console.error(`Vigil: backfill complete — ${count} activities processed`);
+	} catch (err) {
+		console.error("Vigil backfill failed:", err);
 	}
 }
 
