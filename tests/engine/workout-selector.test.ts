@@ -91,15 +91,26 @@ describe("selectWorkoutCategory", () => {
 		expect(selectWorkoutCategory(90, activities, "Run", NOW)).toBe("tempo");
 	});
 
-	it("bumps base to tempo when zone distribution is too low-aerobic", () => {
+	it("does not bump base to tempo when hard-session guard is active", () => {
 		const lowZones = [2000, 1800, 100, 50, 50, 0, 0];
 		const activitiesWithHard = [
-			makeActivity("Run", 1, 80, 8, lowZones),
+			makeActivity("Run", 1, 80, 8, lowZones), // Hard session yesterday
 			makeActivity("Run", 3, 40, null, lowZones),
 			{ ...makeActivity("Run", 5, 60, null, lowZones), moving_time: 6000 },
 		];
-		// Readiness 55 + hard session yesterday → base, but >70% low zones + readiness > 50 → bumped to tempo
-		expect(selectWorkoutCategory(55, activitiesWithHard, "Run", NOW)).toBe("tempo");
+		// Readiness 55 + hard session yesterday → base (guarded), >70% low zones should NOT override
+		expect(selectWorkoutCategory(55, activitiesWithHard, "Run", NOW)).toBe("base");
+	});
+
+	it("bumps base to tempo when >70% Z1-Z2 and no recent hard session", () => {
+		const lowZones = [2000, 1800, 100, 50, 50, 0, 0];
+		const activities = [
+			makeActivity("Run", 3, 40, null, lowZones), // Hard 3 days ago
+			makeActivity("Run", 5, 40, null, lowZones),
+			{ ...makeActivity("Run", 7, 60, null, lowZones), moving_time: 6000 },
+		];
+		// Readiness 55 + daysSinceHard >= 2 → tempo (not base, so the lowPct check doesn't apply)
+		expect(selectWorkoutCategory(55, activities, "Run", NOW)).toBe("tempo");
 	});
 
 	it("triggers long session when no >90min session in 7 days", () => {
@@ -152,6 +163,18 @@ describe("selectWorkoutCategory", () => {
 		];
 		// Readiness 75 + no hard session → intervals
 		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+	});
+
+	it("zone rebalancing does not override hard-session guard (issue #11 scenario)", () => {
+		// Readiness 64, VO2max yesterday (intensity 90), 14d dominated by Z1-Z2
+		const lowZones = [2000, 1800, 100, 50, 50, 0, 0];
+		const activities = [
+			makeActivity("Run", 1, 42, null, null, { icu_intensity: 90.07 }), // VO2max yesterday
+			makeActivity("Run", 4, 40, null, lowZones),
+			{ ...makeActivity("Run", 6, 50, null, lowZones), moving_time: 6000 }, // long run within 7d
+		];
+		// Hard session yesterday → base (guarded). >70% Z1-Z2 should NOT bump to tempo.
+		expect(selectWorkoutCategory(64, activities, "Run", NOW)).toBe("base");
 	});
 
 	it("prevents back-to-back intense sessions (2026-03-27/28 scenario)", () => {

@@ -45,6 +45,13 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Added explicit handling for stale session IDs — return HTTP 404 with a JSON-RPC error body before reaching the new-session code path. This is spec-correct per the MCP streamable-http transport specification. The Claude.ai connector does not currently auto-recover from 404 (requires manual reconnection), but the error is now clear instead of cryptic.
 **Prevention**: Always check for stale session IDs between the "existing session" lookup and the "new session" creation. Never create a new transport for a request that carries a session ID not in the session map.
 
+## 2026-03-28 — Zone rebalancing silently undid hard-session protection (#11)
+
+**What happened**: After deploying the #9 fix for hard session detection, the engine correctly identified yesterday's VO2max session as hard and selected `base` — then the HR zone distribution rebalancing (`lowPct > 0.7`) bumped it back to `tempo`. The engine prescribed threshold work the day after VO2max intervals, with its own "negative TSB" warning contradicting the prescription.
+**Root cause**: The rebalancing logic didn't distinguish why `base` was selected. Two paths lead to `base` in the 51–65 readiness band: (1) genuinely moderate readiness (36–50), (2) protective downshift from a hard session. The rebalancing was appropriate for case 1 but destructive for case 2. This was a silent regression path — the #9 fix appeared to work in unit tests but the downstream rebalancing undid it in production.
+**Fix**: Added a `hardSessionGuard` flag (`readinessScore > 50 && daysSinceHard < 2`). When active, `lowPct > 0.7` cannot bump `base→tempo`, and `highPct > 0.4` cannot push `tempo→base` (protects the 66–80 band). The guard only prevents *upward* rebalancing; downward rebalancing (reducing intensity) still applies.
+**Prevention**: When a multi-stage pipeline makes a decision (e.g. "select base because hard session"), downstream stages must know the *reason* for the decision, not just the result. A boolean flag is the simplest mechanism. Test the full pipeline path, not just the individual stage.
+
 ## 2026-03-28 — Apple Watch + Stryd misdetected as Garmin native power (#8)
 
 **What happened**: When recording a run with the Stryd watchOS app on Apple Watch (synced via HealthFit), `detectPowerSource()` incorrectly identified the power field as Garmin native and applied the 0.87 correction factor. FTP was reported as 280 instead of 322, producing artificially low zone targets.
