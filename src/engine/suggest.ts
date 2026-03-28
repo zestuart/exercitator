@@ -120,7 +120,12 @@ export function suggestWorkoutFromData(
 		staleness.hrOnly,
 	);
 
-	const warnings = [...readiness.warnings, ...powerContext.warnings, ...staleness.warnings];
+	// Power context warnings (Stryd/Garmin detection) are only relevant for running
+	const warnings = [
+		...readiness.warnings,
+		...(sport === "Run" ? powerContext.warnings : []),
+		...staleness.warnings,
+	];
 
 	return {
 		...workout,
