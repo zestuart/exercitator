@@ -45,6 +45,13 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Added explicit handling for stale session IDs — return HTTP 404 with a JSON-RPC error body before reaching the new-session code path. This is spec-correct per the MCP streamable-http transport specification. The Claude.ai connector does not currently auto-recover from 404 (requires manual reconnection), but the error is now clear instead of cryptic.
 **Prevention**: Always check for stale session IDs between the "existing session" lookup and the "new session" creation. Never create a new transport for a request that carries a session ID not in the session map.
 
+## 2026-03-28 — 66–80 readiness band hard-session downshift insufficient (tempo instead of base)
+
+**What happened**: With readiness 68 and a VO2max session yesterday (correctly detected via `icu_intensity: 90.07`), the engine prescribed threshold tempo. The 66–80 band's hard-session downshift only went from `intervals` to `tempo`, not to `base`. Additionally, the `hardSessionGuard` from the #11 fix was blocking the `highPct > 0.4 → tempo→base` rebalancing — a downward shift that would have been protective.
+**Root cause**: Two compounding issues: (1) The decision matrix treated the 66–80 band differently from 51–65 — hard session gave `tempo` not `base`, assuming higher readiness meant moderate intensity was acceptable. Physiologically wrong after VO2max. (2) The `hardSessionGuard` was applied symmetrically to both upward and downward rebalancing, but only upward shifts needed blocking.
+**Fix**: (1) Changed 66–80 band: `daysSinceHard < 2` now gives `base` (matching 51–65 band). (2) Removed `!hardSessionGuard` from the `highPct > 0.4 && tempo → base` rebalancing path — downward shifts are always safe.
+**Prevention**: When designing a decision matrix with protective guards, ensure the guard floor is low enough for the worst-case stimulus (VO2max, race, etc.), not just the average case. And when adding guard flags to rebalancing, consider directionality — blocking downward (protective) shifts defeats the purpose.
+
 ## 2026-03-28 — Zone rebalancing silently undid hard-session protection (#11)
 
 **What happened**: After deploying the #9 fix for hard session detection, the engine correctly identified yesterday's VO2max session as hard and selected `base` — then the HR zone distribution rebalancing (`lowPct > 0.7`) bumped it back to `tempo`. The engine prescribed threshold work the day after VO2max intervals, with its own "negative TSB" warning contradicting the prescription.

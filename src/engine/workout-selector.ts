@@ -142,7 +142,7 @@ export function selectWorkoutCategory(
 	} else if (readinessScore <= 65) {
 		category = daysSinceHard >= 2 ? "tempo" : "base";
 	} else if (readinessScore <= 80) {
-		category = daysSinceHard >= 2 ? "intervals" : "tempo";
+		category = daysSinceHard >= 2 ? "intervals" : "base";
 	} else {
 		category = daysSinceHard >= 3 ? "intervals" : "tempo";
 	}
@@ -151,13 +151,14 @@ export function selectWorkoutCategory(
 	// Zone rebalancing must not override this protection.
 	const hardSessionGuard = readinessScore > 50 && daysSinceHard < 2;
 
-	// Load focus balancing — skip upward rebalancing when hard-session guard is active
+	// Load focus balancing — hard-session guard blocks upward shifts only.
+	// Downward shifts (tempo→base when too much high-zone work) are always allowed.
 	const { lowPct, highPct } = hrZoneDistribution(activities);
 	if (lowPct > 0.7 && category === "base" && readinessScore > 50 && !hardSessionGuard) {
 		category = "tempo";
 	} else if (highPct > 0.4 && category === "intervals") {
 		category = "tempo";
-	} else if (highPct > 0.4 && category === "tempo" && !hardSessionGuard) {
+	} else if (highPct > 0.4 && category === "tempo") {
 		category = "base";
 	}
 

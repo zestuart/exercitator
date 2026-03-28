@@ -132,8 +132,8 @@ describe("selectWorkoutCategory", () => {
 			makeActivity("Run", 1, 42, null, null, { icu_intensity: 90.07 }),
 			{ ...makeActivity("Run", 4, 60), moving_time: 6000 }, // prevent long trigger
 		];
-		// Readiness 75 + hard session yesterday (via intensity) → tempo, not intervals
-		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("tempo");
+		// Readiness 75 + hard session yesterday (via intensity) → base, not intervals
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("base");
 	});
 
 	it("detects hard session via HR zone distribution (>25% in Z4+)", () => {
@@ -146,8 +146,8 @@ describe("selectWorkoutCategory", () => {
 			makeActivity("Run", 3, 40, null, easyZones),
 			{ ...makeActivity("Run", 5, 60, null, easyZones), moving_time: 6000 },
 		];
-		// Readiness 75 + hard session yesterday (via HR zones) → tempo
-		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("tempo");
+		// Readiness 75 + hard session yesterday (via HR zones) → base
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("base");
 	});
 
 	it("does not flag easy session as hard via intensity or HR zones", () => {
@@ -190,8 +190,8 @@ describe("selectWorkoutCategory", () => {
 
 		const activities = [vo2maxSession, easyRun, longRun];
 
-		// Readiness 71 (66–80 band): should be tempo (hard yesterday), NOT intervals
-		expect(selectWorkoutCategory(71, activities, "Run", NOW)).toBe("tempo");
+		// Readiness 71 (66–80 band): should be base (hard yesterday), NOT intervals or tempo
+		expect(selectWorkoutCategory(71, activities, "Run", NOW)).toBe("base");
 	});
 
 	it("uses enriched activity icu_intensity when original is deleted", () => {
