@@ -90,6 +90,24 @@ export interface WorkoutSegment {
 	rest_duration_secs?: number;
 }
 
+/** Vigil alert summary for inclusion in workout suggestion output. */
+export interface VigilSummary {
+	severity: 0 | 1 | 2 | 3;
+	summary: string;
+	recommendation: string;
+	flags: {
+		metric: string;
+		zScore: number;
+		weight: number;
+		weightedZ: number;
+		value7d: number;
+		value30d: number;
+	}[];
+	baselineWindow: string;
+	acuteWindow: string;
+	status: "active" | "building" | "inactive";
+}
+
 /** Complete workout suggestion returned by the engine */
 export interface WorkoutSuggestion {
 	sport: "Run" | "Swim";
@@ -105,4 +123,5 @@ export interface WorkoutSuggestion {
 	terrain_rationale: string;
 	power_context: PowerContext;
 	warnings: string[];
+	vigil?: VigilSummary;
 }

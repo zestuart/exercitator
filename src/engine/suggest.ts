@@ -17,9 +17,11 @@ import type {
 	ActivitySummary,
 	PowerContext,
 	SportSettings,
+	VigilSummary,
 	WellnessRecord,
 	WorkoutSuggestion,
 } from "./types.js";
+import { runVigilPipeline } from "./vigil/index.js";
 import { buildWorkout } from "./workout-builder.js";
 import { selectWorkoutCategory } from "./workout-selector.js";
 
@@ -96,12 +98,19 @@ export function suggestWorkoutFromData(
 	const readiness = computeReadiness(wellness, activities, now);
 	const staleness = computeStaleness(activities, sport, now);
 
+	// Vigil: biomechanical deviation alert (running sports only, requires Stryd metrics in DB)
+	// Stryd stores all activities as sport="Run" regardless of intervals.icu classification,
+	// so always query with "Run" for the Vigil pipeline.
+	const isRunSport = ["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport);
+	const vigilResult = isRunSport ? runVigilPipeline("Run", now) : null;
+
 	const readinessCategory = selectWorkoutCategory(
 		readiness.score,
 		activities,
 		sport,
 		now,
 		powerContext,
+		vigilResult?.alert,
 	);
 	const category = applyStaleness(readinessCategory, staleness.tier);
 
@@ -127,6 +136,27 @@ export function suggestWorkoutFromData(
 		...staleness.warnings,
 	];
 
+	// Build Vigil summary for output (only when active or building)
+	let vigil: VigilSummary | undefined;
+	if (vigilResult && vigilResult.status !== "inactive") {
+		vigil = {
+			severity: vigilResult.alert.severity,
+			summary: vigilResult.alert.summary,
+			recommendation: vigilResult.alert.recommendation,
+			flags: vigilResult.alert.flags.map((f) => ({
+				metric: f.metric,
+				zScore: f.zScore,
+				weight: f.weight,
+				weightedZ: f.weightedZ,
+				value7d: f.value7d,
+				value30d: f.value30d,
+			})),
+			baselineWindow: vigilResult.baselineWindow,
+			acuteWindow: vigilResult.acuteWindow,
+			status: vigilResult.status,
+		};
+	}
+
 	return {
 		...workout,
 		readiness_score: readiness.score,
@@ -135,6 +165,7 @@ export function suggestWorkoutFromData(
 		terrain_rationale: terrainSelection.rationale,
 		power_context: powerContext,
 		warnings,
+		vigil,
 	};
 }
 

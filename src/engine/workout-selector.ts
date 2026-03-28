@@ -4,6 +4,7 @@
 
 import { getActivityLoad } from "./power-source.js";
 import type { ActivitySummary, PowerContext, WorkoutCategory } from "./types.js";
+import type { VigilAlert } from "./vigil/types.js";
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 const SWIM_TYPES = ["Swim", "OpenWaterSwim", "VirtualSwim"];
@@ -115,6 +116,7 @@ export function selectWorkoutCategory(
 	sport: "Run" | "Swim",
 	now: Date = new Date(),
 	powerContext?: PowerContext,
+	vigilAlert?: VigilAlert,
 ): WorkoutCategory {
 	// Default power context if not provided (backward compatibility)
 	const ctx: PowerContext = powerContext ?? {
@@ -167,6 +169,29 @@ export function selectWorkoutCategory(
 		const longThreshold = sport === "Swim" ? 3600 : 5400; // 60min swim, 90min run
 		if (!hasLongSession(activities, longThreshold, now)) {
 			category = "long";
+		}
+	}
+
+	// Vigil protective downshift — biomechanical deviation alert.
+	// Applied last so it overrides all upstream category selection.
+	// vigilDownshift flag prevents any downstream rebalancing (none exists yet,
+	// but protects against future additions).
+	if (vigilAlert && vigilAlert.severity >= 2) {
+		const downshiftMap: Record<string, WorkoutCategory> = {
+			intervals: "tempo",
+			tempo: "base",
+			long: "base",
+			base: "base",
+			recovery: "recovery",
+			rest: "rest",
+		};
+		category = downshiftMap[category] ?? "base";
+
+		if (vigilAlert.severity === 3) {
+			// Force base regardless of what upstream selected
+			if (category !== "rest" && category !== "recovery") {
+				category = "base";
+			}
 		}
 	}
 

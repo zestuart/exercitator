@@ -33,9 +33,9 @@ src/
   index.ts              — entry point, transport selection, session management
   intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
-  db.ts                 — SQLite cache + enrichment tracking (better-sqlite3, WAL mode)
+  db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines (better-sqlite3, WAL mode)
   stryd/
-    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT)
+    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT, post-run report fields)
     enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
   tools/
     athlete.ts          — get_athlete_profile, get_sport_settings
@@ -53,6 +53,14 @@ src/
     terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
     workout-builder.ts  — structured segment generation per sport × category
     suggest.ts          — top-level orchestrator: fetchTrainingData, suggestWorkoutFromData, suggestWorkoutForSport, suggestWorkout
+    vigil/
+      types.ts          — Vigil interfaces, metric weights, Stryd FIT field constants
+      fit-parser.ts     — FIT file parsing, Stryd developer field extraction, per-activity metric computation
+      metrics.ts        — scoreable metric extraction from VigilMetrics, field-to-metric-name mapping
+      baseline.ts       — 30-day rolling mean + stddev, 7-day acute window, min activity thresholds
+      scorer.ts         — z-score deviation scoring, directional concern mapping, composite severity 0–3
+      index.ts          — pipeline orchestrator: check data → baselines → score → alert
+      backfill.ts       — 90-day Stryd FIT backfill + incremental per-activity processing
   web/
     server.ts           — Praescriptor HTTP entrypoint (port 3847)
     routes.ts           — route handler (/, /api/prescriptions, /api/send/:sport, /health)
@@ -75,8 +83,9 @@ src/
 - **Hard session detection** (`src/engine/workout-selector.ts`): Multi-signal `isHardSession()` — RPE ≥ 7, `icu_intensity > 85` (normalised power as % of FTP), HR Z4+ > 25% of session time, load > 0.7 × sportCtl. Multiple signals prevent back-to-back intense prescriptions when individual metrics are missing. A `hardSessionGuard` flag prevents HR zone distribution rebalancing from overriding the protective category downshift.
 - **Stryd FIT enrichment** (`src/stryd/`): Optional pipeline that detects low-fidelity Apple Watch + Stryd activities (missing CIQ developer fields), downloads the full FIT from Stryd PowerCenter API, uploads to intervals.icu, and deletes the original HealthFit activity (deletion prevents duplicate load and analysis pipeline confusion). Runs before prescription generation. Tracked in SQLite (`stryd_enrichments` table) to prevent re-processing. Graceful degradation: skipped entirely if `STRYD_EMAIL`/`STRYD_PASSWORD` not set. Failures never break prescriptions.
 - **Stryd critical power as FTP** (`src/stryd/client.ts`): When Stryd credentials are available, the latest CP from `/cp/history` overrides intervals.icu's inferred FTP for running prescriptions. This is the authoritative value — measured directly by the foot pod, not inferred from activity data. Only applies when `detectPowerSource()` identifies Stryd as the active power source. Swim FTP is unaffected.
+- **Vigil** (`src/engine/vigil/`): Biomechanical injury warning system. Detects abnormal deviations in Stryd running metrics from the athlete's personal 30-day baseline using z-score deviation scoring. Data sourced directly from Stryd FIT files (not intervals.icu streams API) — avoids rate limits and provides access to all developer fields. 90-day deep backfill on first run, then incremental per-activity extraction. Metric weights reflect shoe-mounted IMU reliability: GCT/LSS 1.0, Form Power Ratio 0.8, ILR 0.5 (noisier from foot mount), drift metrics 0.8–1.0. Composite-only alerting: severity 0–3 requiring 2+ metrics to deviate simultaneously. Severity ≥ 2 triggers protective downshift in workout-selector; severity ≥ 2 writes to intervals.icu wellness `injury` field (2=Niggle, 3=Poor, never 4=Injured automatically). Runs for all running sport types (Run, TrailRun, VirtualRun, Treadmill) — normalises to "Run" for Stryd queries since Stryd stores all activities as "Run" regardless of intervals.icu classification. `StrydActivity` extended with `rpe`, `feel`, `surface_type` from post-run reports. **Stryd Duo**: bilateral data arrives as balance percentages (left foot share, 50% = symmetric), not separate L/R streams. Fields: `Leg Spring Stiffness Balance`, `Vertical Oscillation Balance`, `Impact Loading Rate Balance`, `stance_time_balance`. Asymmetry = `|balance - 50| × 2`. Mixed-pod handling: bilateral baselines computed from Duo activities only (min 5); unilateral baselines from all activities. Stored in SQLite: `vigil_metrics` (per-activity summaries with bilateral columns) + `vigil_baselines` (rolling 30d + 7d acute windows). Full spec: `phase2/injury-warning-spec.md`.
 - **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
-- **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
+- **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile), Stryd enrichment tracking, and Vigil biomechanical metrics/baselines. WAL mode for concurrent reads. DB path configurable via `EXERCITATOR_DB_PATH` env var (supports `:memory:` for tests).
 - **Praescriptor** (`src/web/`): Separate container, same codebase. Serves daily Run + Swim prescriptions as SSR HTML via Tailscale `serve` (tailnet-only, no funnel). Imports the DSW engine directly — no network calls between containers. Deity invocations generated via Anthropic API with static fallbacks. "Send to intervals.icu" with server-side dedup. Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges.
 
 ## Philosophy

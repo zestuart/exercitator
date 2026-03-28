@@ -101,6 +101,34 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Updated `StrydClient.listActivities()` to use the correct endpoint with epoch-based `from`/`to` params. Discovered via browser dev tools HAR capture.
 **Prevention**: When porting from a reference script that calls an undocumented API, always verify the endpoints work before writing tests. Capture a fresh HAR from the web app to confirm current request patterns. Undocumented APIs change without notice.
 
+## 2026-03-28 — Vigil pipeline only ran for exact sport="Run", missing TrailRun/Treadmill
+
+**What happened**: End-to-end review (Chain of Reasoning) found that `suggestWorkoutFromData` checked `sport === "Run"` before running the Vigil pipeline. When the sport selector chose "TrailRun" or "Treadmill", Vigil was silently skipped — no biomechanical monitoring for those activities.
+**Root cause**: The initial wiring used a simple string equality check against "Run", not accounting for intervals.icu's run-type variants (TrailRun, VirtualRun, Treadmill). Separately, Stryd stores all activities as `sport = "Run"` in vigil_metrics regardless of intervals.icu's classification, so querying with the exact sport type would return no results for non-"Run" types.
+**Fix**: Changed to check against all run types (`["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport)`) and normalise to "Run" when calling `runVigilPipeline()`, matching how Stryd data is stored.
+**Prevention**: When wiring a subsystem that operates on a sport category (running), always match the full set of sport type variants, not a single string. The `RUN_TYPES` constant in workout-selector.ts already defined this set — should have reused it or defined a shared constant.
+
+## 2026-03-28 — Stryd Duo provides balance percentages, not separate L/R streams
+
+**What happened**: The Vigil spec assumed Duo would provide separate left/right streams (e.g. `StrydL_GCT`, `StrydR_GCT`) based on CIQ naming conventions. Real Duo FIT data contains **balance percentages** instead: `Leg Spring Stiffness Balance` (52.0%), `stance_time_balance` (48.5%), etc. Also discovered field name differences: `stance_time` not "Ground Time", `Impact` (Body Weight) not "Impact Loading Rate", `vertical_oscillation` in mm not cm.
+**Root cause**: The spec's bilateral field patterns were marked [UNVERIFIED] and based on guesses from CIQ naming conventions. Stryd's Duo uses a different paradigm — balance is a single percentage representing the left foot's share (50% = symmetric), not paired L/R absolute values.
+**Fix**: Wrote a discovery script to download a real Duo FIT and inspect `field_descriptions`. Updated `STRYD_FIT_FIELDS` constants, added `balanceToAsymmetry()` (asymmetry = `|balance - 50| × 2`), and `splitByBalance()` to derive L/R from `total × balance`. Also fixed `vertical_oscillation` mm→cm conversion.
+**Prevention**: When designing for hardware you don't yet have data from, always mark field assumptions as unverified and build a discovery step as the first task. The 10-minute script saved hours of debugging incorrect assumptions. For any undocumented sensor API, capture real data before writing production code.
+
+## 2026-03-28 — SSR HTML tests matching CSS class names instead of rendered elements
+
+**What happened**: Vigil render tests checking `not.toContain("vigil-section")` failed even when no Vigil section was rendered. The HTML contained `vigil-section` in the inlined `<style>` block as a CSS class definition, not as a rendered element.
+**Root cause**: The `renderPage()` function inlines all CSS into a `<style>` tag. String matching on the full HTML output matches CSS class definitions (`.vigil-section { ... }`) as well as actual rendered elements (`class="vigil-section"`). When testing that an element is *not* rendered, the CSS definition creates a false match.
+**Fix**: Added a `htmlBody()` helper that slices the HTML after `</style>`, testing only the rendered body content. Also used more specific selectors (`vigil-header` for element presence) that only appear in rendered output, not CSS definitions.
+**Prevention**: When testing SSR output with inlined styles, always strip the `<style>` block before asserting on absence. Alternatively, test for element-specific content (text, attributes) rather than class names that also appear in CSS.
+
+## 2026-03-28 — Module-level const captures env var at import time, not at use time
+
+**What happened**: Vigil DB tests failed with stale data from prior tests despite setting `EXERCITATOR_DB_PATH` in `beforeEach`. The `getVigilMetrics()` function returned 4 rows when only 1 was saved — data from the previous test's DB was leaking through.
+**Root cause**: `db.ts` declared `const DB_PATH = process.env.EXERCITATOR_DB_PATH ?? "data/exercitator.db"` at module scope. This evaluates once when the module is first imported, not when `getDb()` is called. Changing the env var in `beforeEach` had no effect — `DB_PATH` was already captured. Even with `_resetDb()` clearing the singleton, the new `getDb()` call used the original path.
+**Fix**: Replaced `const DB_PATH` with `function getDbPath()` that reads the env var on each call. Also added `:memory:` guard to skip `mkdirSync` when using in-memory SQLite for tests.
+**Prevention**: When a module needs to respect env var changes (especially in tests), never capture the env var in a module-level const. Use a function that reads `process.env` at call time. This is a common ESM/Node.js testing pitfall — modules are cached, consts are evaluated once.
+
 ## 2026-03-26 — Tailscale sidecar DNS clash with Docker container name
 
 **What happened**: Praescriptor's Tailscale sidecar returned 502 when proxying to `http://praescriptor:3847`. The container was running and healthy on the Docker network.

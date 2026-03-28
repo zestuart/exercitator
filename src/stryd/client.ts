@@ -14,6 +14,12 @@ const API_BASE = "https://api.stryd.com/b/api/v1";
 const API_TIMEOUT_MS = 30_000;
 const FIT_DOWNLOAD_TIMEOUT_MS = 60_000;
 
+/** Maximum FIT file size (10 MB — largest real Stryd FIT is ~200 KB). */
+const MAX_FIT_SIZE_BYTES = 10 * 1024 * 1024;
+
+/** Allowed hostnames for Stryd FIT download URLs. */
+const ALLOWED_FIT_HOSTS = ["storage.googleapis.com", "storage.cloud.google.com"];
+
 const BROWSER_HEADERS: Record<string, string> = {
 	"User-Agent":
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -33,6 +39,12 @@ export interface StrydActivity {
 	distance: number;
 	elapsed_time: number;
 	average_power: number;
+	/** 1-10 RPE from Stryd post-run report (if submitted) */
+	rpe?: number;
+	/** Subjective feel from Stryd post-run report */
+	feel?: string;
+	/** Surface tag from Stryd post-run report */
+	surface_type?: string;
 }
 
 export class StrydClient {
@@ -117,6 +129,12 @@ export class StrydClient {
 
 		const { url: signedUrl } = (await metaRes.json()) as { url: string };
 
+		// Validate signed URL against allowed hosts (SSRF prevention)
+		const parsedUrl = new URL(signedUrl);
+		if (!ALLOWED_FIT_HOSTS.includes(parsedUrl.hostname)) {
+			throw new Error(`Stryd FIT download URL on unexpected host: ${parsedUrl.hostname}`);
+		}
+
 		// Step 2: Download binary FIT (no auth needed — signed URL)
 		const fitRes = await fetch(signedUrl, {
 			signal: AbortSignal.timeout(FIT_DOWNLOAD_TIMEOUT_MS),
@@ -127,6 +145,11 @@ export class StrydClient {
 		}
 
 		const arrayBuffer = await fitRes.arrayBuffer();
+		if (arrayBuffer.byteLength > MAX_FIT_SIZE_BYTES) {
+			throw new Error(
+				`Stryd FIT file too large (${arrayBuffer.byteLength} bytes, limit ${MAX_FIT_SIZE_BYTES})`,
+			);
+		}
 		return Buffer.from(arrayBuffer);
 	}
 

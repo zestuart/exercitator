@@ -4,7 +4,7 @@
  */
 
 import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
-import type { WorkoutSuggestion } from "../engine/types.js";
+import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
@@ -24,6 +24,8 @@ export interface DataSource {
 	strydEnriched: number;
 	/** Stryd critical power in watts, if used as FTP source. */
 	strydCp: number | null;
+	/** Vigil status from the run prescription (null for swim-only or no Vigil data). */
+	vigil: VigilSummary | null;
 }
 
 export interface DualPrescription {
@@ -68,7 +70,7 @@ export async function generatePrescriptions(
 		suggestWorkoutFromData(data, "Swim", now),
 	];
 
-	const dataSource = buildDataSource(data, strydEnriched, strydCp);
+	const dataSource = buildDataSource(data, strydEnriched, strydCp, run.vigil ?? null);
 	const prescription: DualPrescription = {
 		run,
 		swim,
@@ -101,6 +103,7 @@ function buildDataSource(
 	data: TrainingData,
 	strydEnriched: number,
 	strydCp: number | null,
+	vigil: VigilSummary | null,
 ): DataSource {
 	const { activities, wellness } = data;
 
@@ -123,5 +126,6 @@ function buildDataSource(
 		wellnessRange: wellDates.length > 0 ? [wellDates[0], wellDates[wellDates.length - 1]] : null,
 		strydEnriched,
 		strydCp,
+		vigil,
 	};
 }

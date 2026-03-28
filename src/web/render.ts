@@ -3,7 +3,7 @@
  * Produces a self-contained page with inlined CSS and JS.
  */
 
-import type { WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
+import type { VigilSummary, WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type { Invocations } from "./invocations.js";
 import type { DataSource } from "./prescriptions.js";
 
@@ -112,6 +112,39 @@ function renderWarnings(warnings: string[]): string {
 	return `<div class="warnings"><ul>${items}</ul></div>`;
 }
 
+function renderVigilSection(vigil: VigilSummary | undefined): string {
+	if (!vigil || vigil.severity === 0) return "";
+
+	const severityClass = vigil.severity === 3 ? "vigil-alert" : "vigil-caution";
+	const icons = "\u26A0".repeat(vigil.severity);
+
+	const flagLines = vigil.flags
+		.slice(0, 4)
+		.map((f) => {
+			const sign = f.zScore > 0 ? "+" : "";
+			const weightNote =
+				f.weight < 1.0
+					? ` <span class="vigil-weight">* weighted ${f.weight} \u2014 raw z = ${sign}${f.zScore.toFixed(1)}\u03C3</span>`
+					: "";
+			const displayZ = f.zScore * f.weight;
+			const displaySign = displayZ > 0 ? "+" : "";
+			return `<span class="vigil-flag">${escapeHtml(f.metric)} ${displaySign}${displayZ.toFixed(1)}\u03C3${weightNote}</span>`;
+		})
+		.join(", ");
+
+	const details =
+		vigil.severity >= 2
+			? `<div class="vigil-detail">${escapeHtml(vigil.recommendation)}</div>`
+			: "";
+
+	return `
+		<div class="vigil-section ${severityClass}">
+			<div class="vigil-header">${icons} ${escapeHtml(vigil.summary)}</div>
+			<div class="vigil-flags">${flagLines}</div>
+			${details}
+		</div>`;
+}
+
 function renderCard(
 	suggestion: WorkoutSuggestion,
 	invocations: Invocations,
@@ -147,6 +180,8 @@ function renderCard(
 
 		${renderWarnings(suggestion.warnings)}
 
+		${renderVigilSection(suggestion.vigil)}
+
 		<div class="segments">
 			${segments}
 		</div>
@@ -173,6 +208,25 @@ function renderCard(
 	</div>`;
 }
 
+function renderVigilDataSource(vigil: VigilSummary | null): string {
+	if (!vigil) return "";
+
+	const cssClass = vigil.severity >= 2 ? "ds-vigil-warn" : "ds-vigil";
+
+	if (vigil.status === "inactive") {
+		return `<span class="${cssClass}">Vigil: no Stryd data</span>`;
+	}
+	if (vigil.status === "building") {
+		return `<span class="${cssClass}">${escapeHtml(vigil.summary)}</span>`;
+	}
+	if (vigil.severity === 0) {
+		return `<span class="${cssClass}">Vigil: clear</span>`;
+	}
+
+	const flagCount = vigil.flags.length;
+	return `<span class="${cssClass}">Vigil: ${flagCount} flag${flagCount !== 1 ? "s" : ""} (sev ${vigil.severity})</span>`;
+}
+
 function renderDataSource(ds: DataSource, generatedAt: string): string {
 	const time = generatedAt.slice(11, 16);
 
@@ -194,6 +248,8 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 	const strydNote =
 		strydParts.length > 0 ? `<span class="ds-enriched">Stryd: ${strydParts.join(", ")}</span>` : "";
 
+	const vigilNote = renderVigilDataSource(ds.vigil);
+
 	return `
 	<div class="data-source">
 		<span class="ds-item"><span class="ds-label">Activities</span> ${ds.activityCount} (${actRange})</span>
@@ -202,6 +258,7 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 		<span class="ds-sep">&middot;</span>
 		<span class="ds-item"><span class="ds-label">Wellness</span> ${ds.wellnessCount}d (${wellRange})</span>
 		${strydNote ? `<span class="ds-sep">&middot;</span>${strydNote}` : ""}
+		${vigilNote ? `<span class="ds-sep">&middot;</span>${vigilNote}` : ""}
 		<span class="ds-sep">&middot;</span>
 		<span class="ds-item"><span class="ds-label">Generated</span> ${time}</span>
 	</div>`;
@@ -377,6 +434,9 @@ body {
 
 .ds-enriched { color: var(--gold-dim); }
 
+.ds-vigil { color: var(--text-dim); }
+.ds-vigil-warn { color: var(--warn); }
+
 .cards {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -473,6 +533,51 @@ body {
 
 .warnings li::before {
 	content: "\\26A0  ";
+}
+
+.vigil-section {
+	border-radius: 4px;
+	padding: 0.6rem 1rem;
+	margin: 0.8rem 0;
+}
+
+.vigil-caution {
+	background: rgba(180, 83, 9, 0.1);
+	border: 1px solid rgba(180, 83, 9, 0.3);
+}
+
+.vigil-alert {
+	background: rgba(180, 40, 40, 0.12);
+	border: 1px solid rgba(180, 40, 40, 0.4);
+}
+
+.vigil-header {
+	font-size: 0.82rem;
+	font-weight: 500;
+	margin-bottom: 0.3rem;
+}
+
+.vigil-caution .vigil-header { color: var(--warn); }
+.vigil-alert .vigil-header { color: #c04040; }
+
+.vigil-flags {
+	font-size: 0.75rem;
+	color: var(--text-dim);
+}
+
+.vigil-flag { white-space: nowrap; }
+
+.vigil-weight {
+	font-size: 0.68rem;
+	color: var(--text-dim);
+	opacity: 0.7;
+}
+
+.vigil-detail {
+	font-size: 0.78rem;
+	color: var(--text-dim);
+	margin-top: 0.3rem;
+	font-style: italic;
 }
 
 .segments {

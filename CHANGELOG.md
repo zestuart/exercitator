@@ -64,12 +64,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `src/stryd/enricher.ts` — detection (`needsEnrichment`), matching (same calendar day + distance ±5%), enrichment orchestrator with per-activity error isolation
   - `src/intervals.ts` — added `uploadFile()` method for multipart/form-data FIT uploads
   - `src/db.ts` — added `stryd_enrichments` table for enrichment tracking
+- **Vigil Phase 1** — biomechanical injury warning system data layer (issues #12–16)
+  - `src/engine/vigil/types.ts` — `VigilMetrics`, `VigilAlert`, `VigilFlag`, `VigilBaseline` interfaces; metric weight constants (GCT/LSS 1.0, Form Power Ratio 0.8, ILR 0.5); Stryd FIT developer field name constants
+  - `src/engine/vigil/fit-parser.ts` — FIT file parsing via `fit-file-parser`, Stryd developer field detection, per-activity metric extraction (averages, GCT drift via quartile comparison, power:HR drift via 5-minute windowed ratio)
+  - `src/engine/vigil/backfill.ts` — 90-day Stryd FIT backfill pipeline with rate limiting (500ms between downloads); incremental per-activity processing for enrichment integration
+  - `src/db.ts` — `vigil_metrics` table (per-activity summaries with bilateral Duo stubs) + `vigil_baselines` table (30d rolling + 7d acute windows); CRUD helpers; `:memory:` DB support for test isolation
+  - Extended `StrydActivity` with `rpe`, `feel`, `surface_type` from Stryd post-run report (already returned by calendar API)
+  - `fit-file-parser` npm dependency added
+  - 18 new tests (FIT parsing, metric extraction, drift detection, DB operations, baseline upserts)
+- **Vigil Phase 2** — baseline model and deviation scoring
+  - `src/engine/vigil/metrics.ts` — scoreable metric extraction from VigilMetrics rows, field-to-metric-name mapping
+  - `src/engine/vigil/baseline.ts` — 30-day rolling mean + stddev, 7-day acute window, minimum activity thresholds (5 for 30d, 2 for 7d), pure computation variant for testing
+  - 10 new tests (baseline computation, insufficient data, partial nulls, stddev, acute vs chronic windows, bilateral)
+- **Vigil Phase 3** — scoring engine, protective downshift, and pipeline wiring
+  - `src/engine/vigil/scorer.ts` — z-score deviation with directional concern mapping, metric weights, composite severity 0–3, bilateral severity boost
+  - `src/engine/vigil/index.ts` — pipeline orchestrator (check data → compute baselines → score → alert)
+  - `src/engine/workout-selector.ts` — Vigil protective downshift at severity ≥ 2 (one category down), severity 3 forces base; preserves rest/recovery
+  - `src/engine/types.ts` — `VigilSummary` interface added to `WorkoutSuggestion`
+  - `src/engine/suggest.ts` — Vigil pipeline wired into `suggestWorkoutFromData()` for all running sports (Run, TrailRun, VirtualRun, Treadmill); normalises to "Run" for Stryd data queries; `VigilSummary` included in output
+  - 21 new tests (scorer thresholds, ILR weight dampening, bilateral boost, downshift integration, guard coexistence)
+- **Vigil Phase 4** — surface layer (Praescriptor UI + MCP response)
+  - Vigil section on run prescription cards: severity 1 amber advisory, severity 2 amber warning with downshift detail, severity 3 red alert; weighted z-score display with ILR annotation
+  - Data source bar: Vigil status (active/building/inactive, flag count, severity)
+  - `DataSource.vigil` field for rendering pipeline
+  - CSS: `.vigil-section`, `.vigil-caution`, `.vigil-alert` with amber/red palette variants
+  - 12 new tests (severity levels, weight annotations, swim exclusion, data source bar variants)
+- **Vigil Phase 5** — Stryd Duo bilateral metrics (confirmed with real Duo FIT data)
+  - Duo provides **balance percentages** (left foot share, 50% = symmetric), not separate L/R streams: `Leg Spring Stiffness Balance`, `Vertical Oscillation Balance`, `Impact Loading Rate Balance`, `stance_time_balance`
+  - `hasBilateralFields()` detection from balance field presence
+  - Asymmetry computed as `|balance - 50| × 2` (e.g. 55% balance = 10% asymmetry)
+  - L/R values derived from `total × (balance / 100)` for GCT, LSS, VO, ILR
+  - Mixed-pod handling: bilateral baselines computed from Duo activities only (min 5); unilateral baselines from all activities
+  - Updated FIT field names from real data: `stance_time` (not "Ground Time"), `Impact` in Body Weight (not "Impact Loading Rate"), `vertical_oscillation` in mm (converted to cm)
+  - Bilateral severity boost already wired in Phase 3 scorer
+  - 8 new Duo-specific tests (asymmetry extraction, L/R derivation, symmetric balance, developing asymmetry, mixed-pod baselines)
 - Praescriptor: refresh button (↻) in header to regenerate prescriptions from fresh data (`POST /api/refresh` invalidates day-level cache)
 - Praescriptor: data source bar showing activity count, device breakdown, wellness window, Stryd CP/enrichment, and generation timestamp
 - Stryd critical power used as authoritative FTP for running prescriptions — sourced directly from the foot pod via Stryd PowerCenter API (`/cp/history`), overriding intervals.icu's inferred FTP when Stryd is the detected power source
-- 124 unit and integration tests covering the full engine pipeline, web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
+- 212 unit and integration tests covering the full engine pipeline, Vigil (FIT parsing, Duo bilateral, DB, metrics, baselines, scoring, integration, rendering), web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 
 ### Fixed
+- Vigil pipeline now runs for all running sport types (TrailRun, VirtualRun, Treadmill), not just "Run" — normalises to "Run" for Stryd data queries since Stryd stores all activities as "Run" regardless of intervals.icu classification
 - Power source detection for Apple Watch + Stryd: Stryd watchOS app records `power_field: "power"` (lowercase) without CIQ stream markers, causing false Garmin correction (0.87×). Now detected via `external_id` containing "Stryd" + Apple Watch `device_name` pattern — no correction applied (fixes #8)
 - `getActivityLoad()` now uses `power_load` for Stryd native recordings (Apple Watch), not just CIQ recordings (Garmin) — fixes cascading underreported load
 - Hard session detection too narrow: `isHardSession()` now checks `icu_intensity > 85` and HR Z4+ > 25% of session time, in addition to RPE and load. Prevents back-to-back intense prescriptions when RPE is missing and load threshold is inflated (fixes #9)

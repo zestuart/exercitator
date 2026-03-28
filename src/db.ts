@@ -9,19 +9,30 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 
-const DB_PATH = process.env.EXERCITATOR_DB_PATH ?? "data/exercitator.db";
+function getDbPath(): string {
+	return process.env.EXERCITATOR_DB_PATH ?? "data/exercitator.db";
+}
 
 let db: Database.Database | null = null;
+
+/** Reset the DB connection (for testing only). */
+export function _resetDb(): void {
+	if (db) db.close();
+	db = null;
+}
 
 export function getDb(): Database.Database {
 	if (db) return db;
 
-	const dir = dirname(DB_PATH);
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
+	const dbPath = getDbPath();
+	if (dbPath !== ":memory:") {
+		const dir = dirname(dbPath);
+		if (!existsSync(dir)) {
+			mkdirSync(dir, { recursive: true });
+		}
 	}
 
-	db = new Database(DB_PATH);
+	db = new Database(dbPath);
 	db.pragma("journal_mode = WAL");
 	db.pragma("foreign_keys = ON");
 
@@ -31,6 +42,54 @@ export function getDb(): Database.Database {
 			value TEXT NOT NULL,
 			ttl   INTEGER NOT NULL,
 			ts    INTEGER NOT NULL DEFAULT (unixepoch())
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS vigil_metrics (
+			activity_id       TEXT PRIMARY KEY,
+			icu_activity_id   TEXT,
+			computed_at       TEXT NOT NULL,
+			activity_date     TEXT NOT NULL,
+			sport             TEXT NOT NULL,
+			surface_type      TEXT,
+			avg_gct_ms        REAL,
+			avg_lss           REAL,
+			avg_form_power    REAL,
+			avg_ilr           REAL,
+			avg_vo_cm         REAL,
+			avg_cadence       REAL,
+			form_power_ratio  REAL,
+			gct_drift_pct     REAL,
+			power_hr_drift    REAL,
+			stryd_rpe         INTEGER,
+			stryd_feel        TEXT,
+			l_avg_gct_ms      REAL,
+			r_avg_gct_ms      REAL,
+			l_avg_lss         REAL,
+			r_avg_lss         REAL,
+			l_avg_vo_cm       REAL,
+			r_avg_vo_cm       REAL,
+			l_avg_ilr         REAL,
+			r_avg_ilr         REAL,
+			gct_asymmetry_pct REAL,
+			lss_asymmetry_pct REAL,
+			vo_asymmetry_pct  REAL,
+			ilr_asymmetry_pct REAL
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS vigil_baselines (
+			sport            TEXT NOT NULL,
+			metric           TEXT NOT NULL,
+			computed_at      TEXT NOT NULL,
+			mean_30d         REAL NOT NULL,
+			stddev_30d       REAL NOT NULL,
+			mean_7d          REAL,
+			sample_count_30d INTEGER NOT NULL,
+			sample_count_7d  INTEGER,
+			PRIMARY KEY (sport, metric)
 		)
 	`);
 
@@ -100,4 +159,163 @@ export function recordEnrichment(
 			"INSERT OR REPLACE INTO stryd_enrichments (icu_activity_id, stryd_activity_id, enriched_icu_id) VALUES (?, ?, ?)",
 		)
 		.run(icuActivityId, strydActivityId, enrichedIcuId);
+}
+
+// ---------------------------------------------------------------------------
+// Vigil metric tracking
+// ---------------------------------------------------------------------------
+
+import type { VigilBaseline, VigilMetrics } from "./engine/vigil/types.js";
+
+/** Check if Vigil metrics have already been computed for a Stryd activity. */
+export function hasVigilMetrics(activityId: string): boolean {
+	const row = getDb().prepare("SELECT 1 FROM vigil_metrics WHERE activity_id = ?").get(activityId);
+	return row !== undefined;
+}
+
+/** Save computed Vigil metrics for an activity. */
+export function saveVigilMetrics(m: VigilMetrics): void {
+	getDb()
+		.prepare(
+			`INSERT OR REPLACE INTO vigil_metrics (
+				activity_id, icu_activity_id, computed_at, activity_date, sport, surface_type,
+				avg_gct_ms, avg_lss, avg_form_power, avg_ilr, avg_vo_cm, avg_cadence,
+				form_power_ratio, gct_drift_pct, power_hr_drift, stryd_rpe, stryd_feel,
+				l_avg_gct_ms, r_avg_gct_ms, l_avg_lss, r_avg_lss,
+				l_avg_vo_cm, r_avg_vo_cm, l_avg_ilr, r_avg_ilr,
+				gct_asymmetry_pct, lss_asymmetry_pct, vo_asymmetry_pct, ilr_asymmetry_pct
+			) VALUES (
+				?, ?, datetime('now'), ?, ?, ?,
+				?, ?, ?, ?, ?, ?,
+				?, ?, ?, ?, ?,
+				?, ?, ?, ?,
+				?, ?, ?, ?,
+				?, ?, ?, ?
+			)`,
+		)
+		.run(
+			m.activityId,
+			m.icuActivityId,
+			m.activityDate,
+			m.sport,
+			m.surfaceType,
+			m.avgGctMs,
+			m.avgLss,
+			m.avgFormPower,
+			m.avgIlr,
+			m.avgVoCm,
+			m.avgCadence,
+			m.formPowerRatio,
+			m.gctDriftPct,
+			m.powerHrDrift,
+			m.strydRpe,
+			m.strydFeel,
+			m.lAvgGctMs,
+			m.rAvgGctMs,
+			m.lAvgLss,
+			m.rAvgLss,
+			m.lAvgVoCm,
+			m.rAvgVoCm,
+			m.lAvgIlr,
+			m.rAvgIlr,
+			m.gctAsymmetryPct,
+			m.lssAsymmetryPct,
+			m.voAsymmetryPct,
+			m.ilrAsymmetryPct,
+		);
+}
+
+/** Fetch Vigil metrics for a date range, ordered by date descending. */
+export function getVigilMetrics(
+	sport: string,
+	oldestDate: string,
+	newestDate: string,
+): VigilMetrics[] {
+	const rows = getDb()
+		.prepare(
+			`SELECT * FROM vigil_metrics
+			 WHERE sport = ? AND activity_date >= ? AND activity_date <= ?
+			 ORDER BY activity_date DESC`,
+		)
+		.all(sport, oldestDate, newestDate) as Record<string, unknown>[];
+
+	return rows.map(rowToVigilMetrics);
+}
+
+/** Count Vigil metrics for a sport in a date range. */
+export function countVigilMetrics(sport: string, oldestDate: string, newestDate: string): number {
+	const row = getDb()
+		.prepare(
+			`SELECT COUNT(*) as cnt FROM vigil_metrics
+			 WHERE sport = ? AND activity_date >= ? AND activity_date <= ?`,
+		)
+		.get(sport, oldestDate, newestDate) as { cnt: number };
+	return row.cnt;
+}
+
+function rowToVigilMetrics(r: Record<string, unknown>): VigilMetrics {
+	return {
+		activityId: r.activity_id as string,
+		icuActivityId: r.icu_activity_id as string | null,
+		activityDate: r.activity_date as string,
+		sport: r.sport as string,
+		surfaceType: r.surface_type as string | null,
+		avgGctMs: r.avg_gct_ms as number | null,
+		avgLss: r.avg_lss as number | null,
+		avgFormPower: r.avg_form_power as number | null,
+		avgIlr: r.avg_ilr as number | null,
+		avgVoCm: r.avg_vo_cm as number | null,
+		avgCadence: r.avg_cadence as number | null,
+		formPowerRatio: r.form_power_ratio as number | null,
+		gctDriftPct: r.gct_drift_pct as number | null,
+		powerHrDrift: r.power_hr_drift as number | null,
+		strydRpe: r.stryd_rpe as number | null,
+		strydFeel: r.stryd_feel as string | null,
+		lAvgGctMs: r.l_avg_gct_ms as number | null,
+		rAvgGctMs: r.r_avg_gct_ms as number | null,
+		lAvgLss: r.l_avg_lss as number | null,
+		rAvgLss: r.r_avg_lss as number | null,
+		lAvgVoCm: r.l_avg_vo_cm as number | null,
+		rAvgVoCm: r.r_avg_vo_cm as number | null,
+		lAvgIlr: r.l_avg_ilr as number | null,
+		rAvgIlr: r.r_avg_ilr as number | null,
+		gctAsymmetryPct: r.gct_asymmetry_pct as number | null,
+		lssAsymmetryPct: r.lss_asymmetry_pct as number | null,
+		voAsymmetryPct: r.vo_asymmetry_pct as number | null,
+		ilrAsymmetryPct: r.ilr_asymmetry_pct as number | null,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Vigil baseline tracking
+// ---------------------------------------------------------------------------
+
+/** Save or update a baseline entry. */
+export function saveVigilBaseline(b: VigilBaseline): void {
+	getDb()
+		.prepare(
+			`INSERT OR REPLACE INTO vigil_baselines (
+				sport, metric, computed_at, mean_30d, stddev_30d,
+				mean_7d, sample_count_30d, sample_count_7d
+			) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
+		)
+		.run(b.sport, b.metric, b.mean30d, b.stddev30d, b.mean7d, b.sampleCount30d, b.sampleCount7d);
+}
+
+/** Fetch all baselines for a sport. */
+export function getVigilBaselines(sport: string): VigilBaseline[] {
+	const rows = getDb()
+		.prepare("SELECT * FROM vigil_baselines WHERE sport = ?")
+		.all(sport) as Record<string, unknown>[];
+
+	return rows.map((r) => ({
+		sport: r.sport as string,
+		metric: r.metric as string,
+		computedAt: r.computed_at as string,
+		mean30d: r.mean_30d as number,
+		stddev30d: r.stddev_30d as number,
+		mean7d: r.mean_7d as number | null,
+		sampleCount30d: r.sample_count_30d as number,
+		sampleCount7d: r.sample_count_7d as number | null,
+	}));
 }
