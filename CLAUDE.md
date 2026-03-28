@@ -33,7 +33,10 @@ src/
   index.ts              — entry point, transport selection, session management
   intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
-  db.ts                 — SQLite cache layer (better-sqlite3, WAL mode)
+  db.ts                 — SQLite cache + enrichment tracking (better-sqlite3, WAL mode)
+  stryd/
+    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT)
+    enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
   tools/
     athlete.ts          — get_athlete_profile, get_sport_settings
     activities.ts       — list_activities, get_activity, get_activity_streams, get_power_curve
@@ -70,6 +73,7 @@ src/
 - **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Pipeline: power source detection → readiness scoring → sport selection → staleness check → workout category (with staleness ceiling) → terrain selection → structured segments with dual-target prescription (power + HR cap). Staleness tiers (normal/moderate/severe) apply pace buffers and can force HR-only targets for return-to-sport safety. Testable in isolation with fixture data.
 - **Power source detection** (`src/engine/power-source.ts`): Supports three ecosystems: Stryd CIQ (Garmin, `power_field: "Power"`), Stryd native (Apple Watch via HealthFit, `power_field: "power"` with `external_id` containing "Stryd"), and Garmin native. Apple Watch detection uses `device_name` pattern (`/^Watch\d/`) + `external_id` to avoid false Garmin correction. `getActivityLoad()` correctly uses `power_load` for both CIQ and native Stryd recordings.
 - **Hard session detection** (`src/engine/workout-selector.ts`): Multi-signal `isHardSession()` — RPE ≥ 7, `icu_intensity > 85` (normalised power as % of FTP), HR Z4+ > 25% of session time, load > 0.7 × sportCtl. Multiple signals prevent back-to-back intense prescriptions when individual metrics are missing.
+- **Stryd FIT enrichment** (`src/stryd/`): Optional pipeline that detects low-fidelity Apple Watch + Stryd activities (missing CIQ developer fields), downloads the full FIT from Stryd PowerCenter API, uploads to intervals.icu, and marks the original as ignored. Runs before prescription generation. Tracked in SQLite (`stryd_enrichments` table) to prevent re-processing. Graceful degradation: skipped entirely if `STRYD_EMAIL`/`STRYD_PASSWORD` not set. Failures never break prescriptions.
 - **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
 - **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile). WAL mode for concurrent reads.
 - **Praescriptor** (`src/web/`): Separate container, same codebase. Serves daily Run + Swim prescriptions as SSR HTML via Tailscale `serve` (tailnet-only, no funnel). Imports the DSW engine directly — no network calls between containers. Deity invocations generated via Anthropic API with static fallbacks. "Send to intervals.icu" with server-side dedup. Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges.
@@ -221,6 +225,8 @@ MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth token signing secret
 MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
 MCP_TOKEN_VERSION=1                               # Increment to revoke all tokens
 ANTHROPIC_API_KEY=<your-anthropic-api-key>         # Optional: deity invocations in Praescriptor
+STRYD_EMAIL=<your-stryd-email>                    # Optional: Stryd FIT enrichment
+STRYD_PASSWORD=<your-stryd-password>              # Optional: Stryd FIT enrichment
 QNAP_PASSWORD=<arca-ingens-password>              # SSH to Arca Ingens (dominus@192.168.4.180:2022)
 ```
 
@@ -245,6 +251,7 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
 - **Anthropic API key**: Optional, used server-side only by Praescriptor for deity invocations. Never sent to the client. Stored in `.env`.
 - **Praescriptor access**: Tailnet-only via `tailscale serve` (no funnel). No authentication layer — Tailscale provides device-level access control.
+- **Stryd credentials**: Optional `STRYD_EMAIL`/`STRYD_PASSWORD` in `.env`, used server-side only by Praescriptor for FIT enrichment. Token is short-lived and held only in memory during enrichment. Never exposed via web UI or MCP tools.
 - **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
 - **OAuth redirect URI**: Validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, localhost). Do not add arbitrary URIs.
 - **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.

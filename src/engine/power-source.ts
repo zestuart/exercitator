@@ -19,14 +19,14 @@ function isRun(type: string): boolean {
 }
 
 /** Stryd CIQ developer fields present (Garmin Connect IQ plugin). */
-function hasStrydStreams(activity: ActivitySummary): boolean {
+export function hasStrydStreams(activity: ActivitySummary): boolean {
 	if (!activity.stream_types) return false;
 	return STRYD_STREAM_MARKERS.some((marker) => activity.stream_types?.includes(marker));
 }
 
 /** Stryd app recording on a non-Garmin device (e.g. Apple Watch via HealthFit).
  *  The power field is lowercase "power" but the power IS from Stryd — no correction needed. */
-function isStrydNativeRecording(activity: ActivitySummary): boolean {
+export function isStrydNativeRecording(activity: ActivitySummary): boolean {
 	return (activity.external_id?.includes("Stryd") ?? false) && isNonGarminDevice(activity);
 }
 

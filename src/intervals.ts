@@ -73,4 +73,33 @@ export class IntervalsClient {
 	delete(path: string): Promise<unknown> {
 		return this.request("DELETE", path);
 	}
+
+	/** Upload a binary file via multipart/form-data (e.g. FIT file upload). */
+	async uploadFile(path: string, fileBuffer: Buffer, filename: string): Promise<unknown> {
+		const url = new URL(`${BASE_URL}${path}`);
+
+		// Copy auth header but omit Content-Type — let fetch set the multipart boundary
+		const headers = new Headers();
+		headers.set("Authorization", this.headers.get("Authorization") ?? "");
+
+		const formData = new FormData();
+		formData.append("file", new Blob([fileBuffer]), filename);
+
+		const res = await fetch(url, {
+			method: "POST",
+			headers,
+			body: formData,
+		});
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			throw new Error(`intervals.icu POST ${path}: ${res.status} ${res.statusText} ${text}`);
+		}
+
+		const contentType = res.headers.get("content-type") ?? "";
+		if (contentType.includes("application/json")) {
+			return res.json();
+		}
+		return res.text();
+	}
 }

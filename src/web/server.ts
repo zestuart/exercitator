@@ -7,6 +7,7 @@
 
 import { createServer } from "node:http";
 import { IntervalsClient } from "../intervals.js";
+import { StrydClient } from "../stryd/client.js";
 import { handleRoutes } from "./routes.js";
 
 const PORT = Number.parseInt(process.env.PRAESCRIPTOR_PORT ?? "3847", 10);
@@ -19,8 +20,19 @@ if (!API_KEY) {
 
 const client = new IntervalsClient({ apiKey: API_KEY });
 
+const STRYD_EMAIL = process.env.STRYD_EMAIL;
+const STRYD_PASSWORD = process.env.STRYD_PASSWORD;
+const strydClient =
+	STRYD_EMAIL && STRYD_PASSWORD
+		? new StrydClient({ email: STRYD_EMAIL, password: STRYD_PASSWORD })
+		: null;
+
+if (!strydClient) {
+	console.error("STRYD_EMAIL/STRYD_PASSWORD not set — Stryd FIT enrichment disabled");
+}
+
 const server = createServer((req, res) => {
-	handleRoutes(req, res, client).catch((err) => {
+	handleRoutes(req, res, client, strydClient).catch((err) => {
 		console.error("Unhandled route error:", err);
 		if (!res.headersSent) {
 			res.writeHead(500);

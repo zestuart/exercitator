@@ -5,6 +5,7 @@
 
 import type { WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type { Invocations } from "./invocations.js";
+import type { DataSource } from "./prescriptions.js";
 
 export interface RenderData {
 	run: WorkoutSuggestion;
@@ -14,6 +15,7 @@ export interface RenderData {
 	/** HR zone ceilings from intervals.icu (index 0 = Z1 ceiling, etc.) */
 	runHrZones: number[] | null;
 	swimHrZones: number[] | null;
+	dataSource: DataSource;
 	generatedAt: string;
 }
 
@@ -171,12 +173,46 @@ function renderCard(
 	</div>`;
 }
 
+function renderDataSource(ds: DataSource, generatedAt: string): string {
+	const time = generatedAt.slice(11, 16);
+
+	const deviceParts = Object.entries(ds.activityDevices)
+		.sort((a, b) => b[1] - a[1])
+		.map(([name, count]) => `${escapeHtml(name)} (${count})`)
+		.join(", ");
+
+	const actRange = ds.activityRange
+		? `${ds.activityRange[0]} \u2013 ${ds.activityRange[1]}`
+		: "none";
+	const wellRange = ds.wellnessRange
+		? `${ds.wellnessRange[0]} \u2013 ${ds.wellnessRange[1]}`
+		: "none";
+
+	const strydNote =
+		ds.strydEnriched > 0
+			? `<span class="ds-enriched">${ds.strydEnriched} enriched via Stryd</span>`
+			: "";
+
+	return `
+	<div class="data-source">
+		<span class="ds-item"><span class="ds-label">Activities</span> ${ds.activityCount} (${actRange})</span>
+		<span class="ds-sep">&middot;</span>
+		<span class="ds-item"><span class="ds-label">Devices</span> ${deviceParts}</span>
+		<span class="ds-sep">&middot;</span>
+		<span class="ds-item"><span class="ds-label">Wellness</span> ${ds.wellnessCount}d (${wellRange})</span>
+		${strydNote ? `<span class="ds-sep">&middot;</span>${strydNote}` : ""}
+		<span class="ds-sep">&middot;</span>
+		<span class="ds-item"><span class="ds-label">Generated</span> ${time}</span>
+	</div>`;
+}
+
 export function renderPage(data: RenderData): string {
 	const dateStr = data.generatedAt.slice(0, 10);
 	const day = dayName(data.generatedAt);
 	const runAccent = "#2d8a4e";
 	const swimAccent = "#2d6e8a";
 
+	const dataSourceBlock = renderDataSource(data.dataSource, data.generatedAt);
 	const runCard = renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones);
 	const swimCard = renderCard(
 		data.swim,
@@ -200,8 +236,13 @@ export function renderPage(data: RenderData): string {
 <body>
 	<header class="page-header">
 		<h1>PR\u00C6SCRIPTOR</h1>
-		<span class="header-date">${dateStr} &middot; ${day}</span>
+		<div class="header-row">
+			<span class="header-date">${dateStr} &middot; ${day}</span>
+			<button class="refresh-btn" id="refresh-btn" title="Regenerate prescriptions">&#x21bb;</button>
+		</div>
 	</header>
+
+	${dataSourceBlock}
 
 	<main class="cards">
 		${runCard}
@@ -266,11 +307,74 @@ body {
 	color: var(--gold);
 }
 
+.header-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.6rem;
+}
+
 .header-date {
 	font-size: 0.85rem;
 	color: var(--text-dim);
 	letter-spacing: 0.05em;
 }
+
+.refresh-btn {
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text-dim);
+	font-size: 1rem;
+	cursor: pointer;
+	padding: 0.15rem 0.4rem;
+	line-height: 1;
+	transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+	border-color: var(--gold-dim);
+	color: var(--gold);
+}
+
+.refresh-btn:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+.refresh-btn.spinning {
+	animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+.data-source {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: baseline;
+	gap: 0.3rem 0.5rem;
+	max-width: 1400px;
+	margin: 0.8rem auto 0;
+	padding: 0 1.5rem;
+	font-size: 0.72rem;
+	color: var(--text-dim);
+}
+
+.ds-label {
+	color: var(--silver);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-size: 0.65rem;
+	margin-right: 0.25rem;
+}
+
+.ds-sep { color: var(--border); }
+
+.ds-enriched { color: var(--gold-dim); }
 
 .cards {
 	display: grid;
@@ -511,6 +615,23 @@ body {
 // ---------------------------------------------------------------------------
 
 const CLIENT_JS = `
+document.getElementById('refresh-btn')?.addEventListener('click', async function() {
+	this.disabled = true;
+	this.classList.add('spinning');
+	try {
+		const res = await fetch('/api/refresh', { method: 'POST' });
+		if (res.ok) {
+			window.location.reload();
+			return;
+		}
+		this.classList.remove('spinning');
+		this.disabled = false;
+	} catch {
+		this.classList.remove('spinning');
+		this.disabled = false;
+	}
+});
+
 document.querySelectorAll('.send-btn').forEach(btn => {
 	btn.addEventListener('click', async function() {
 		const sport = this.dataset.sport;

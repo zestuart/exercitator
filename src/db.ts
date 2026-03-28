@@ -34,6 +34,15 @@ export function getDb(): Database.Database {
 		)
 	`);
 
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS stryd_enrichments (
+			icu_activity_id   TEXT PRIMARY KEY,
+			stryd_activity_id INTEGER NOT NULL,
+			enriched_icu_id   TEXT NOT NULL,
+			enriched_at       TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`);
+
 	return db;
 }
 
@@ -66,4 +75,29 @@ export function cacheDel(key: string): void {
 export function cachePrune(): number {
 	const result = getDb().prepare("DELETE FROM cache WHERE ts + ttl <= unixepoch()").run();
 	return result.changes;
+}
+
+// ---------------------------------------------------------------------------
+// Stryd enrichment tracking
+// ---------------------------------------------------------------------------
+
+/** Check if an intervals.icu activity has already been enriched with Stryd FIT data. */
+export function isAlreadyEnriched(icuActivityId: string): boolean {
+	const row = getDb()
+		.prepare("SELECT 1 FROM stryd_enrichments WHERE icu_activity_id = ?")
+		.get(icuActivityId);
+	return row !== undefined;
+}
+
+/** Record a successful Stryd FIT enrichment. */
+export function recordEnrichment(
+	icuActivityId: string,
+	strydActivityId: number,
+	enrichedIcuId: string,
+): void {
+	getDb()
+		.prepare(
+			"INSERT OR REPLACE INTO stryd_enrichments (icu_activity_id, stryd_activity_id, enriched_icu_id) VALUES (?, ?, ?)",
+		)
+		.run(icuActivityId, strydActivityId, enrichedIcuId);
 }

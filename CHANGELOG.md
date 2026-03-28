@@ -59,7 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - SSR HTML — no client-side framework, no external JS dependencies
   - Zone guides on every segment: watts for running (from FTP zones), HR bpm for swimming (from intervals.icu HR zones)
 - Engine refactoring: extracted `fetchTrainingData()`, `suggestWorkoutFromData()`, and `suggestWorkoutForSport()` from `src/engine/suggest.ts` to support forced sport selection without pipeline duplication
-- 94 unit and integration tests covering the full engine pipeline, web prescriptions, intervals.icu format, send dedup, and invocations
+- **Stryd FIT enrichment** (`src/stryd/`) — detects low-fidelity Apple Watch + Stryd activities (missing CIQ developer fields), downloads full FIT from Stryd PowerCenter API, uploads to intervals.icu, marks original as ignored. Tracked in SQLite to prevent re-processing. Graceful degradation: skipped if `STRYD_EMAIL`/`STRYD_PASSWORD` not set. Failures never break prescriptions (fixes #10)
+  - `src/stryd/client.ts` — Stryd API client (email/password auth, user-scoped calendar with epoch-based date filtering, two-step FIT download via signed GCS URL)
+  - `src/stryd/enricher.ts` — detection (`needsEnrichment`), matching (same calendar day + distance ±5%), enrichment orchestrator with per-activity error isolation
+  - `src/intervals.ts` — added `uploadFile()` method for multipart/form-data FIT uploads
+  - `src/db.ts` — added `stryd_enrichments` table for enrichment tracking
+- Praescriptor: refresh button (↻) in header to regenerate prescriptions from fresh data (`POST /api/refresh` invalidates day-level cache)
+- Praescriptor: data source bar showing activity count, device breakdown, wellness window, Stryd enrichment count, and generation timestamp
+- 124 unit and integration tests covering the full engine pipeline, web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 
 ### Fixed
 - Power source detection for Apple Watch + Stryd: Stryd watchOS app records `power_field: "power"` (lowercase) without CIQ stream markers, causing false Garmin correction (0.87×). Now detected via `external_id` containing "Stryd" + Apple Watch `device_name` pattern — no correction applied (fixes #8)

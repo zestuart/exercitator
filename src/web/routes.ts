@@ -4,8 +4,9 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { IntervalsClient } from "../intervals.js";
+import type { StrydClient } from "../stryd/client.js";
 import { generateInvocations } from "./invocations.js";
-import { generatePrescriptions } from "./prescriptions.js";
+import { generatePrescriptions, invalidateCache } from "./prescriptions.js";
 import { renderPage } from "./render.js";
 import { sendToIntervals } from "./send.js";
 
@@ -13,12 +14,13 @@ export async function handleRoutes(
 	req: IncomingMessage,
 	res: ServerResponse,
 	client: IntervalsClient,
+	strydClient?: StrydClient | null,
 ): Promise<void> {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
 	try {
 		if (req.method === "GET" && url.pathname === "/") {
-			const prescriptions = await generatePrescriptions(client);
+			const prescriptions = await generatePrescriptions(client, strydClient);
 
 			// Generate invocations in parallel (falls back to static on failure)
 			const [runInvocations, swimInvocations] = await Promise.all([
@@ -43,6 +45,7 @@ export async function handleRoutes(
 				swimInvocations,
 				runHrZones: prescriptions.runHrZones,
 				swimHrZones: prescriptions.swimHrZones,
+				dataSource: prescriptions.dataSource,
 				generatedAt: prescriptions.generated_at,
 			});
 			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -51,9 +54,16 @@ export async function handleRoutes(
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/prescriptions") {
-			const prescriptions = await generatePrescriptions(client);
+			const prescriptions = await generatePrescriptions(client, strydClient);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(prescriptions));
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/refresh") {
+			invalidateCache();
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ success: true }));
 			return;
 		}
 

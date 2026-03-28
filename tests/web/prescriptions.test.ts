@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { suggestWorkoutForSport } from "../../src/engine/suggest.js";
 import type { IntervalsClient } from "../../src/intervals.js";
+import { generatePrescriptions, invalidateCache } from "../../src/web/prescriptions.js";
+
+// Mock enricher to avoid SQLite access in tests
+vi.mock("../../src/stryd/enricher.js", () => ({
+	enrichLowFidelityActivities: vi
+		.fn()
+		.mockImplementation((activities) => Promise.resolve(activities)),
+}));
 
 function loadFixture(name: string): unknown {
 	const raw = readFileSync(resolve(__dirname, "../fixtures", name), "utf-8");
@@ -78,5 +86,28 @@ describe("suggestWorkoutForSport", () => {
 		await suggestWorkoutForSport(client, "Run");
 
 		expect(client.get).toHaveBeenCalledTimes(4);
+	});
+});
+
+describe("generatePrescriptions", () => {
+	afterEach(() => {
+		invalidateCache();
+	});
+
+	it("generates dual prescriptions without strydClient", async () => {
+		const client = createMockClient();
+		const result = await generatePrescriptions(client);
+
+		expect(result.run.sport).toBe("Run");
+		expect(result.swim.sport).toBe("Swim");
+		expect(result.generated_at).toBeTruthy();
+	});
+
+	it("generates dual prescriptions with null strydClient", async () => {
+		const client = createMockClient();
+		const result = await generatePrescriptions(client, null);
+
+		expect(result.run.sport).toBe("Run");
+		expect(result.swim.sport).toBe("Swim");
 	});
 });
