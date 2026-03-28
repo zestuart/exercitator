@@ -45,6 +45,13 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Added explicit handling for stale session IDs — return HTTP 404 with a JSON-RPC error body before reaching the new-session code path. This is spec-correct per the MCP streamable-http transport specification. The Claude.ai connector does not currently auto-recover from 404 (requires manual reconnection), but the error is now clear instead of cryptic.
 **Prevention**: Always check for stale session IDs between the "existing session" lookup and the "new session" creation. Never create a new transport for a request that carries a session ID not in the session map.
 
+## 2026-03-28 — Enriched Stryd uploads not recognised by power source detection
+
+**What happened**: After deploying Stryd FIT enrichment, the run prescription showed "Power field is set to Garmin native but Stryd is connected" with the 0.87 correction warning — despite the FTP being correct (279W from Stryd CP). The enriched activity had `device_name: "STRYD"` and `external_id: "stryd-6151018183557120.fit"`.
+**Root cause**: `isStrydNativeRecording()` only matched Apple Watch devices (`/^Watch\d/`) and case-sensitive "Stryd" in `external_id`. The enriched upload used `device_name: "STRYD"` (not a Watch pattern) and lowercase "stryd" in the filename. The function returned false, so `detectPowerSource()` fell through to the "Garmin active but Stryd connected" branch.
+**Fix**: Extended `isStrydNativeRecording()` to also match `device_name === "STRYD"` and made the `external_id` check case-insensitive. Also excluded power context warnings from swim prescriptions entirely.
+**Prevention**: When adding a new data path (enrichment upload), verify it's recognised by all downstream detection logic. The upload filename format (`stryd-{id}.fit`) was set by the enricher but never checked against the detection patterns. Test with the actual data the system produces, not just the original source data.
+
 ## 2026-03-28 — 66–80 readiness band hard-session downshift insufficient (tempo instead of base)
 
 **What happened**: With readiness 68 and a VO2max session yesterday (correctly detected via `icu_intensity: 90.07`), the engine prescribed threshold tempo. The 66–80 band's hard-session downshift only went from `intervals` to `tempo`, not to `base`. Additionally, the `hardSessionGuard` from the #11 fix was blocking the `highPct > 0.4 → tempo→base` rebalancing — a downward shift that would have been protective.

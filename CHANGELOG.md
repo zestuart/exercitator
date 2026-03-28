@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Stryd enrichment now deletes the original HealthFit activity instead of marking it ignored — prevents duplicate load, analysis pipeline confusion, and null `icu_intensity` on the replacement activity
 - 66–80 readiness band: hard session yesterday now gives `base` (was `tempo`) — threshold work is inappropriate after VO2max intervals regardless of readiness score
 - Hard-session rebalancing guard now only blocks upward shifts (`base→tempo`); downward shifts (`tempo→base` from high Z4+) are always allowed
+- Enriched Stryd FIT uploads (`device_name: "STRYD"`, `external_id: "stryd-*.fit"`) now recognised by power source detection — eliminates false "Garmin native but Stryd connected" warning on run prescriptions
+- Power context warnings (Stryd/Garmin detection) excluded from swim prescriptions — irrelevant for swimming
 - Zone rebalancing no longer overrides hard-session protection: if `base` was selected because of a recent hard session (daysSinceHard < 2, readiness > 50), the `lowPct > 0.7` bump to `tempo` is suppressed. Same guard prevents `highPct > 0.4` from pushing `tempo→base` when the downshift was a hard-session guard (fixes #11)
 - Extended `ActivitySummary` with `icu_intensity`, `external_id`, `source` fields from intervals.icu API
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request
