@@ -30,6 +30,9 @@ async function main() {
 	await client.login();
 	console.log("Authenticated OK");
 
+	const cp = await client.getLatestCriticalPower();
+	console.log(`Critical Power: ${cp ? `${cp.toFixed(1)}W` : "unavailable"}`);
+
 	console.log("\nListing activities (last 14 days)...");
 	const activities = await client.listActivities(14);
 	console.log(`Found ${activities.length} activities:\n`);

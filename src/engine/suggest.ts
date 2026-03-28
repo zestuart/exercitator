@@ -81,10 +81,18 @@ export function suggestWorkoutFromData(
 	sport: "Run" | "Swim",
 	now: Date = new Date(),
 	sportSelectionReason?: string,
+	strydCp?: number | null,
 ): WorkoutSuggestion {
 	const { activities, wellness, runSettings, swimSettings } = data;
 
 	const powerContext = detectPowerSource(activities);
+
+	// Override FTP with Stryd critical power when available — authoritative
+	// source directly from the foot pod, not inferred by intervals.icu.
+	if (strydCp && powerContext.source === "stryd") {
+		powerContext.ftp = Math.round(strydCp);
+		powerContext.rolling_ftp = Math.round(strydCp);
+	}
 	const readiness = computeReadiness(wellness, activities, now);
 	const staleness = computeStaleness(activities, sport, now);
 

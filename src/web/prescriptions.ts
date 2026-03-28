@@ -22,6 +22,8 @@ export interface DataSource {
 	wellnessRange: [string, string] | null;
 	/** Number of activities enriched via Stryd FIT in this generation. */
 	strydEnriched: number;
+	/** Stryd critical power in watts, if used as FTP source. */
+	strydCp: number | null;
 }
 
 export interface DualPrescription {
@@ -56,14 +58,17 @@ export async function generatePrescriptions(
 	// Count enrichments: new IDs that weren't in the pre-enrichment set
 	const strydEnriched = data.activities.filter((a) => !preEnrichIds.has(a.id)).length;
 
+	// Fetch authoritative critical power from Stryd (used as run FTP)
+	const strydCp = await fetchStrydCp(strydClient ?? null);
+
 	const now = new Date();
 
 	const [run, swim] = [
-		suggestWorkoutFromData(data, "Run", now),
+		suggestWorkoutFromData(data, "Run", now, undefined, strydCp),
 		suggestWorkoutFromData(data, "Swim", now),
 	];
 
-	const dataSource = buildDataSource(data, strydEnriched);
+	const dataSource = buildDataSource(data, strydEnriched, strydCp);
 	const prescription: DualPrescription = {
 		run,
 		swim,
@@ -81,7 +86,22 @@ export function invalidateCache(): void {
 	cached = null;
 }
 
-function buildDataSource(data: TrainingData, strydEnriched: number): DataSource {
+async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | null> {
+	if (!strydClient) return null;
+	try {
+		if (!strydClient.isAuthenticated) await strydClient.login();
+		return await strydClient.getLatestCriticalPower();
+	} catch (err) {
+		console.error("Stryd CP fetch failed:", err);
+		return null;
+	}
+}
+
+function buildDataSource(
+	data: TrainingData,
+	strydEnriched: number,
+	strydCp: number | null,
+): DataSource {
 	const { activities, wellness } = data;
 
 	// Activity date range and device breakdown
@@ -102,5 +122,6 @@ function buildDataSource(data: TrainingData, strydEnriched: number): DataSource 
 		wellnessCount: wellness.length,
 		wellnessRange: wellDates.length > 0 ? [wellDates[0], wellDates[wellDates.length - 1]] : null,
 		strydEnriched,
+		strydCp,
 	};
 }

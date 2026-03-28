@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { suggestWorkout } from "../../src/engine/suggest.js";
+import { suggestWorkout, suggestWorkoutFromData } from "../../src/engine/suggest.js";
 import type { IntervalsClient } from "../../src/intervals.js";
 
 function loadFixture(name: string): unknown {
@@ -96,5 +96,24 @@ describe("suggestWorkout integration", () => {
 		// The fixture data includes runs with Stryd streams (Power, StrydLSS, etc.)
 		expect(result.power_context.source).toBe("stryd");
 		expect(result.power_context.ftp).toBeGreaterThan(0);
+	});
+
+	it("overrides FTP with Stryd CP when provided", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+
+		// Without CP override — uses intervals.icu FTP (322 from fixtures)
+		const withoutCp = suggestWorkoutFromData(data as never, "Run");
+		expect(withoutCp.power_context.ftp).toBe(322);
+
+		// With CP override — uses Stryd CP
+		const withCp = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, 279.45);
+		expect(withCp.power_context.ftp).toBe(279);
+		expect(withCp.power_context.rolling_ftp).toBe(279);
+		expect(withCp.power_context.source).toBe("stryd");
 	});
 });

@@ -188,10 +188,11 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 		? `${ds.wellnessRange[0]} \u2013 ${ds.wellnessRange[1]}`
 		: "none";
 
+	const strydParts: string[] = [];
+	if (ds.strydCp) strydParts.push(`CP ${Math.round(ds.strydCp)}W`);
+	if (ds.strydEnriched > 0) strydParts.push(`${ds.strydEnriched} enriched`);
 	const strydNote =
-		ds.strydEnriched > 0
-			? `<span class="ds-enriched">${ds.strydEnriched} enriched via Stryd</span>`
-			: "";
+		strydParts.length > 0 ? `<span class="ds-enriched">Stryd: ${strydParts.join(", ")}</span>` : "";
 
 	return `
 	<div class="data-source">

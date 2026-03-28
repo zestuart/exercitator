@@ -65,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `src/intervals.ts` — added `uploadFile()` method for multipart/form-data FIT uploads
   - `src/db.ts` — added `stryd_enrichments` table for enrichment tracking
 - Praescriptor: refresh button (↻) in header to regenerate prescriptions from fresh data (`POST /api/refresh` invalidates day-level cache)
-- Praescriptor: data source bar showing activity count, device breakdown, wellness window, Stryd enrichment count, and generation timestamp
+- Praescriptor: data source bar showing activity count, device breakdown, wellness window, Stryd CP/enrichment, and generation timestamp
+- Stryd critical power used as authoritative FTP for running prescriptions — sourced directly from the foot pod via Stryd PowerCenter API (`/cp/history`), overriding intervals.icu's inferred FTP when Stryd is the detected power source
 - 124 unit and integration tests covering the full engine pipeline, web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 
 ### Fixed

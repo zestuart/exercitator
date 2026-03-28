@@ -136,4 +136,48 @@ describe("StrydClient", () => {
 			await expect(client.downloadFit(123)).rejects.toThrow("not authenticated");
 		});
 	});
+
+	describe("getLatestCriticalPower", () => {
+		it("returns the most recent CP value", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-123", id: "user-456" }));
+			const client = new StrydClient(config);
+			await client.login();
+
+			mockFetch.mockResolvedValueOnce(
+				jsonResponse([
+					{ critical_power: 265.5, created: 1774500000 },
+					{ critical_power: 279.45, created: 1774673033 }, // most recent
+					{ critical_power: 270.0, created: 1774000000 },
+				]),
+			);
+
+			const cp = await client.getLatestCriticalPower();
+			expect(cp).toBeCloseTo(279.45);
+
+			// Verify URL contains cp/history
+			const [url] = mockFetch.mock.calls[1];
+			expect(url).toContain("cp/history");
+			expect(url).toContain("startDate=");
+		});
+
+		it("returns null when no CP entries", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-123", id: "user-456" }));
+			const client = new StrydClient(config);
+			await client.login();
+
+			mockFetch.mockResolvedValueOnce(jsonResponse([]));
+			const cp = await client.getLatestCriticalPower();
+			expect(cp).toBeNull();
+		});
+
+		it("skips entries with created=0", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-123", id: "user-456" }));
+			const client = new StrydClient(config);
+			await client.login();
+
+			mockFetch.mockResolvedValueOnce(jsonResponse([{ critical_power: 269.26, created: 0 }]));
+			const cp = await client.getLatestCriticalPower();
+			expect(cp).toBeNull();
+		});
+	});
 });

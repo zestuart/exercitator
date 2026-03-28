@@ -130,6 +130,36 @@ export class StrydClient {
 		return Buffer.from(arrayBuffer);
 	}
 
+	/** Fetch the most recent critical power value (watts) from CP history.
+	 *  Returns null if no CP data is available. */
+	async getLatestCriticalPower(): Promise<number | null> {
+		if (!this.userId) throw new Error("StrydClient: not authenticated");
+
+		const end = new Date();
+		const start = new Date(end.getTime() - 90 * 86_400_000); // 90 days lookback
+		const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+		const url = `${API_BASE}/users/${this.userId}/cp/history?startDate=${fmt(start)}&endDate=${fmt(end)}`;
+		const res = await fetch(url, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(API_TIMEOUT_MS),
+		});
+
+		if (!res.ok) {
+			throw new Error(`Stryd CP history failed (HTTP ${res.status})`);
+		}
+
+		const entries = (await res.json()) as { critical_power: number; created: number }[];
+		if (!Array.isArray(entries) || entries.length === 0) return null;
+
+		// Find the most recent entry with a non-zero created timestamp
+		const valid = entries.filter((e) => e.created > 0);
+		if (valid.length === 0) return null;
+
+		const latest = valid.reduce((a, b) => (b.created > a.created ? b : a));
+		return latest.critical_power;
+	}
+
 	get isAuthenticated(): boolean {
 		return this.token !== null;
 	}
