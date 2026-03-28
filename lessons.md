@@ -52,6 +52,13 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Added a `hardSessionGuard` flag (`readinessScore > 50 && daysSinceHard < 2`). When active, `lowPct > 0.7` cannot bump `base→tempo`, and `highPct > 0.4` cannot push `tempo→base` (protects the 66–80 band). The guard only prevents *upward* rebalancing; downward rebalancing (reducing intensity) still applies.
 **Prevention**: When a multi-stage pipeline makes a decision (e.g. "select base because hard session"), downstream stages must know the *reason* for the decision, not just the result. A boolean flag is the simplest mechanism. Test the full pipeline path, not just the individual stage.
 
+## 2026-03-28 — Stryd enrichment duplicate caused null icu_intensity and persistent wrong prescription
+
+**What happened**: After Stryd FIT enrichment deployed, both the original HealthFit activity and the new Stryd activity existed in intervals.icu. The enriched activity had `icu_intensity: null` (not yet analysed by intervals.icu), causing `isHardSession()` to miss it. The engine prescribed tempo instead of base despite the #11 hard-session guard fix being deployed.
+**Root cause**: The original enrichment used `icu_ignore_time: true` to mark the HealthFit activity, but this left a duplicate visible to intervals.icu's analysis pipeline. Two activities for the same run confused metric computation, delaying or preventing `icu_intensity` calculation on the replacement. The hard-session detection chain (intensity → HR zones → load) was intact, but the input data was incomplete.
+**Fix**: Changed enrichment from `PUT /activity/{id}` with `icu_ignore_time: true` to `DELETE /activity/{id}`. The enriched FIT is strictly superior (93KB → 165KB, all developer fields). The SQLite `stryd_enrichments` table preserves the audit trail. Delete failure is caught and logged but doesn't fail the enrichment.
+**Prevention**: When replacing one entity with another in an external system, prefer deletion over soft-ignore. Soft-ignore leaves ambiguity that downstream systems may not handle. Always verify the external system has fully processed the replacement before relying on computed fields like `icu_intensity`.
+
 ## 2026-03-28 — Apple Watch + Stryd misdetected as Garmin native power (#8)
 
 **What happened**: When recording a run with the Stryd watchOS app on Apple Watch (synced via HealthFit), `detectPowerSource()` incorrectly identified the power field as Garmin native and applied the 0.87 correction factor. FTP was reported as 280 instead of 322, producing artificially low zone targets.

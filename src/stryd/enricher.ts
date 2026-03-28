@@ -73,8 +73,14 @@ async function enrichActivity(
 		`stryd-${strydActivity.id}.fit`,
 	)) as { id: string };
 
-	// Mark the original HealthFit activity as ignored (excluded from load calculations)
-	await intervalsClient.put(`/activity/${icuActivity.id}`, { icu_ignore_time: true });
+	// Delete the original HealthFit activity — the enriched FIT is strictly superior.
+	// Leaving both causes duplicate load and can delay intervals.icu metric computation
+	// on the replacement (icu_intensity left null), breaking hard-session detection.
+	try {
+		await intervalsClient.delete(`/activity/${icuActivity.id}`);
+	} catch (err) {
+		console.error(`Stryd enrichment: failed to delete original ${icuActivity.id}:`, err);
+	}
 
 	// Record enrichment to prevent re-processing
 	recordEnrichment(icuActivity.id, strydActivity.id, result.id);

@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Power source detection for Apple Watch + Stryd: Stryd watchOS app records `power_field: "power"` (lowercase) without CIQ stream markers, causing false Garmin correction (0.87×). Now detected via `external_id` containing "Stryd" + Apple Watch `device_name` pattern — no correction applied (fixes #8)
 - `getActivityLoad()` now uses `power_load` for Stryd native recordings (Apple Watch), not just CIQ recordings (Garmin) — fixes cascading underreported load
 - Hard session detection too narrow: `isHardSession()` now checks `icu_intensity > 85` and HR Z4+ > 25% of session time, in addition to RPE and load. Prevents back-to-back intense prescriptions when RPE is missing and load threshold is inflated (fixes #9)
+- Stryd enrichment now deletes the original HealthFit activity instead of marking it ignored — prevents duplicate load, analysis pipeline confusion, and null `icu_intensity` on the replacement activity
 - Zone rebalancing no longer overrides hard-session protection: if `base` was selected because of a recent hard session (daysSinceHard < 2, readiness > 50), the `lowPct > 0.7` bump to `tempo` is suppressed. Same guard prevents `highPct > 0.4` from pushing `tempo→base` when the downshift was a hard-session guard (fixes #11)
 - Extended `ActivitySummary` with `icu_intensity`, `external_id`, `source` fields from intervals.icu API
 - Streamable-http crash on second request — McpServer.connect() called once per session, not per request

@@ -193,4 +193,23 @@ describe("selectWorkoutCategory", () => {
 		// Readiness 71 (66–80 band): should be tempo (hard yesterday), NOT intervals
 		expect(selectWorkoutCategory(71, activities, "Run", NOW)).toBe("tempo");
 	});
+
+	it("uses enriched activity icu_intensity when original is deleted", () => {
+		// Post-enrichment state: only the Stryd FIT activity exists with full metrics
+		const enrichedStrydRun = makeActivity(
+			"Run",
+			1,
+			49,
+			null,
+			[1096, 212, 158, 170, 130, 264, 171],
+			{ icu_intensity: 90.07 },
+		);
+		const olderEasyRun = makeActivity("Run", 4, 30);
+		const longRun = { ...makeActivity("Run", 6, 50), moving_time: 6000 };
+
+		// Readiness 64 + hard session yesterday (via intensity) → base, not tempo
+		expect(selectWorkoutCategory(64, [enrichedStrydRun, olderEasyRun, longRun], "Run", NOW)).toBe(
+			"base",
+		);
+	});
 });

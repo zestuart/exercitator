@@ -216,7 +216,7 @@ describe("enrichLowFidelityActivities", () => {
 		const mockIntervals = {
 			athleteId: "0",
 			uploadFile: vi.fn().mockResolvedValue({ id: "new-icu-id" }),
-			put: vi.fn().mockResolvedValue({}),
+			delete: vi.fn().mockResolvedValue({}),
 			get: vi.fn().mockResolvedValue(enrichedActivities),
 		};
 
@@ -229,9 +229,7 @@ describe("enrichLowFidelityActivities", () => {
 		expect(mockStryd.login).toHaveBeenCalled();
 		expect(mockStryd.downloadFit).toHaveBeenCalledWith(6151018183557120);
 		expect(mockIntervals.uploadFile).toHaveBeenCalled();
-		expect(mockIntervals.put).toHaveBeenCalledWith(`/activity/${candidate.id}`, {
-			icu_ignore_time: true,
-		});
+		expect(mockIntervals.delete).toHaveBeenCalledWith(`/activity/${candidate.id}`);
 		expect(vi.mocked(recordEnrichment)).toHaveBeenCalledWith(
 			candidate.id,
 			6151018183557120,
