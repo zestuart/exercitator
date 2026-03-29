@@ -38,13 +38,17 @@ const MIN_BASELINE_ACTIVITIES = 5;
  * @param sport - Sport type (e.g. "Run")
  * @param referenceDate - Date to compute baselines relative to (default: today)
  */
-export function runVigilPipeline(sport: string, referenceDate?: Date): VigilResult {
+export function runVigilPipeline(
+	athleteId: string,
+	sport: string,
+	referenceDate?: Date,
+): VigilResult {
 	const ref = referenceDate ?? new Date();
 	const newest = ref.toISOString().slice(0, 10);
 	const oldest30d = new Date(ref.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
 	const oldest7d = new Date(ref.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
 
-	const count30d = countVigilMetrics(sport, oldest30d, newest);
+	const count30d = countVigilMetrics(athleteId, sport, oldest30d, newest);
 
 	if (count30d === 0) {
 		return {
@@ -69,8 +73,8 @@ export function runVigilPipeline(sport: string, referenceDate?: Date): VigilResu
 		};
 	}
 
-	const count7d = countVigilMetrics(sport, oldest7d, newest);
-	const baselines = computeBaselines(sport, ref);
+	const count7d = countVigilMetrics(athleteId, sport, oldest7d, newest);
+	const baselines = computeBaselines(athleteId, sport, ref);
 	const alert = scoreDeviations(baselines);
 
 	return {

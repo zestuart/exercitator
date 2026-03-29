@@ -63,6 +63,7 @@ async function enrichActivity(
 	intervalsClient: IntervalsClient,
 	icuActivity: ActivitySummary,
 	strydActivity: StrydActivity,
+	athleteId: string,
 ): Promise<EnrichmentResult> {
 	// Download full FIT from Stryd PowerCenter
 	const fitBuffer = await strydClient.downloadFit(strydActivity.id);
@@ -81,6 +82,7 @@ async function enrichActivity(
 			strydActivity.feel ?? null,
 			strydActivity.surface_type ?? null,
 			icuActivity.id,
+			athleteId,
 		);
 		if (metrics) {
 			saveVigilMetrics(metrics);
@@ -125,6 +127,7 @@ export async function enrichLowFidelityActivities(
 	activities: ActivitySummary[],
 	strydClient: StrydClient | null,
 	intervalsClient: IntervalsClient,
+	athleteId = "0",
 ): Promise<ActivitySummary[]> {
 	if (!strydClient) return activities;
 
@@ -148,7 +151,13 @@ export async function enrichLowFidelityActivities(
 					continue;
 				}
 
-				const result = await enrichActivity(strydClient, intervalsClient, candidate, match);
+				const result = await enrichActivity(
+					strydClient,
+					intervalsClient,
+					candidate,
+					match,
+					athleteId,
+				);
 				console.error(`Stryd enrichment: ${result.reason}`);
 				enrichedCount++;
 			} catch (err) {

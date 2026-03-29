@@ -1,14 +1,15 @@
 /**
  * Pushes a workout prescription to intervals.icu as a planned calendar event.
- * Server-side dedup prevents duplicate events per sport per day.
+ * Server-side dedup prevents duplicate events per user per sport per day.
  */
 
 import type { ServerResponse } from "node:http";
 import type { IntervalsClient } from "../intervals.js";
 import { buildIntervalsDescription } from "./intervals-format.js";
 import { generatePrescriptions } from "./prescriptions.js";
+import type { UserProfile } from "./users.js";
 
-// Dedup: track sends per date+sport → event ID
+// Dedup: track sends per userId+date+sport → event ID
 const sentToday = new Map<string, string>();
 
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
@@ -18,13 +19,14 @@ function jsonResponse(res: ServerResponse, status: number, body: unknown): void 
 
 export async function sendToIntervals(
 	client: IntervalsClient,
+	profile: UserProfile,
 	sport: "run" | "swim",
 	res: ServerResponse,
 	force = false,
 ): Promise<void> {
 	try {
 		const today = new Date().toISOString().slice(0, 10);
-		const dedupKey = `${today}-${sport}`;
+		const dedupKey = `${profile.id}-${today}-${sport}`;
 
 		if (!force && sentToday.has(dedupKey)) {
 			jsonResponse(res, 409, {
@@ -36,8 +38,16 @@ export async function sendToIntervals(
 			return;
 		}
 
-		const prescriptions = await generatePrescriptions(client);
+		const prescriptions = await generatePrescriptions(client, profile);
 		const suggestion = sport === "run" ? prescriptions.run : prescriptions.swim;
+
+		if (!suggestion) {
+			jsonResponse(res, 400, {
+				success: false,
+				error: `No ${sport} prescription available for ${profile.displayName}`,
+			});
+			return;
+		}
 
 		const event = {
 			category: "WORKOUT",
@@ -55,7 +65,7 @@ export async function sendToIntervals(
 
 		// Clean stale entries
 		for (const key of sentToday.keys()) {
-			if (!key.startsWith(today)) sentToday.delete(key);
+			if (!key.includes(today)) sentToday.delete(key);
 		}
 
 		jsonResponse(res, 200, { success: true, event_id: result.id });

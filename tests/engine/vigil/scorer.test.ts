@@ -4,6 +4,7 @@ import type { VigilBaseline } from "../../../src/engine/vigil/types.js";
 
 function makeBaseline(overrides: Partial<VigilBaseline> = {}): VigilBaseline {
 	return {
+		athleteId: "0",
 		sport: "Run",
 		metric: "avg_gct_ms",
 		computedAt: "2026-03-28T12:00:00Z",

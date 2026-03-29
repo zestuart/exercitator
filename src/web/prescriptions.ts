@@ -1,6 +1,6 @@
 /**
- * Generates dual prescriptions (Run + Swim) using the DSW engine.
- * Caches results per day to avoid redundant API calls on /api/send.
+ * Generates prescriptions using the DSW engine.
+ * Caches results per user per day to avoid redundant API calls on /api/send.
  */
 
 import { hasAnyVigilMetrics } from "../db.js";
@@ -10,6 +10,7 @@ import { runBackfill } from "../engine/vigil/backfill.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
+import type { UserProfile } from "./users.js";
 
 export interface DataSource {
 	/** Number of activities in the 14-day window. */
@@ -30,9 +31,9 @@ export interface DataSource {
 	vigil: VigilSummary | null;
 }
 
-export interface DualPrescription {
-	run: WorkoutSuggestion;
-	swim: WorkoutSuggestion;
+export interface Prescription {
+	run: WorkoutSuggestion | null;
+	swim: WorkoutSuggestion | null;
 	/** HR zone ceilings from intervals.icu run sport settings. */
 	runHrZones: number[] | null;
 	/** HR zone ceilings from intervals.icu swim sport settings. */
@@ -41,13 +42,15 @@ export interface DualPrescription {
 	generated_at: string;
 }
 
-let cached: { date: string; prescription: DualPrescription } | null = null;
+const cache = new Map<string, { date: string; prescription: Prescription }>();
 
 export async function generatePrescriptions(
 	client: IntervalsClient,
+	profile: UserProfile,
 	strydClient?: StrydClient | null,
-): Promise<DualPrescription> {
+): Promise<Prescription> {
 	const today = new Date().toISOString().slice(0, 10);
+	const cached = cache.get(profile.id);
 	if (cached && cached.date === today) {
 		return cached.prescription;
 	}
@@ -55,43 +58,54 @@ export async function generatePrescriptions(
 	const data = await fetchTrainingData(client);
 	const preEnrichIds = new Set(data.activities.map((a) => a.id));
 
-	// Enrich low-fidelity Apple Watch + Stryd activities with full Stryd FIT data.
-	// Failures are caught internally — prescriptions always proceed.
-	data.activities = await enrichLowFidelityActivities(data.activities, strydClient ?? null, client);
+	// Stryd enrichment only for users with stryd: true
+	if (profile.stryd) {
+		data.activities = await enrichLowFidelityActivities(
+			data.activities,
+			strydClient ?? null,
+			client,
+			profile.id,
+		);
+	}
 
-	// Count enrichments: new IDs that weren't in the pre-enrichment set
 	const strydEnriched = data.activities.filter((a) => !preEnrichIds.has(a.id)).length;
 
-	// Vigil: one-off 90-day backfill if vigil_metrics is empty and Stryd is available.
-	// Runs once, then incremental processing handles new activities.
-	await runVigilBackfillIfNeeded(strydClient ?? null);
+	// Vigil: one-off 90-day backfill if vigil_metrics is empty for this athlete.
+	if (profile.stryd) {
+		await runVigilBackfillIfNeeded(strydClient ?? null, profile.id);
+	}
 
 	// Fetch authoritative critical power from Stryd (used as run FTP)
-	const strydCp = await fetchStrydCp(strydClient ?? null);
+	const strydCp = profile.stryd ? await fetchStrydCp(strydClient ?? null) : null;
 
 	const now = new Date();
+	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);
 
-	const [run, swim] = [
-		suggestWorkoutFromData(data, "Run", now, undefined, strydCp),
-		suggestWorkoutFromData(data, "Swim", now),
-	];
+	const run = hasSport("Run")
+		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id)
+		: null;
+	const swim = hasSport("Swim") ? suggestWorkoutFromData(data, "Swim", now) : null;
 
-	const dataSource = buildDataSource(data, strydEnriched, strydCp, run.vigil ?? null);
-	const prescription: DualPrescription = {
+	const dataSource = buildDataSource(data, strydEnriched, strydCp, run?.vigil ?? null);
+	const prescription: Prescription = {
 		run,
 		swim,
-		runHrZones: data.runSettings.hr_zones,
-		swimHrZones: data.swimSettings.hr_zones,
+		runHrZones: hasSport("Run") ? data.runSettings.hr_zones : null,
+		swimHrZones: hasSport("Swim") ? data.swimSettings.hr_zones : null,
 		dataSource,
 		generated_at: now.toISOString(),
 	};
 
-	cached = { date: today, prescription };
+	cache.set(profile.id, { date: today, prescription });
 	return prescription;
 }
 
-export function invalidateCache(): void {
-	cached = null;
+export function invalidateCache(userId?: string): void {
+	if (userId) {
+		cache.delete(userId);
+	} else {
+		cache.clear();
+	}
 }
 
 async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | null> {
@@ -105,13 +119,16 @@ async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | n
 	}
 }
 
-async function runVigilBackfillIfNeeded(strydClient: StrydClient | null): Promise<void> {
+async function runVigilBackfillIfNeeded(
+	strydClient: StrydClient | null,
+	athleteId: string,
+): Promise<void> {
 	if (!strydClient) return;
-	if (hasAnyVigilMetrics()) return;
+	if (hasAnyVigilMetrics(athleteId)) return;
 
 	try {
 		console.error("Vigil: no metrics found — running 90-day backfill from Stryd");
-		const count = await runBackfill(strydClient);
+		const count = await runBackfill(strydClient, athleteId);
 		console.error(`Vigil: backfill complete — ${count} activities processed`);
 	} catch (err) {
 		console.error("Vigil backfill failed:", err);
@@ -126,7 +143,6 @@ function buildDataSource(
 ): DataSource {
 	const { activities, wellness } = data;
 
-	// Activity date range and device breakdown
 	const actDates = activities.map((a) => a.start_date_local.slice(0, 10)).sort();
 	const activityDevices: Record<string, number> = {};
 	for (const a of activities) {
@@ -134,8 +150,7 @@ function buildDataSource(
 		activityDevices[device] = (activityDevices[device] ?? 0) + 1;
 	}
 
-	// Wellness date range
-	const wellDates = wellness.map((w) => w.id).sort(); // wellness.id is YYYY-MM-DD
+	const wellDates = wellness.map((w) => w.id).sort();
 
 	return {
 		activityCount: activities.length,

@@ -4,6 +4,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { suggestWorkoutForSport } from "../../src/engine/suggest.js";
 import type { IntervalsClient } from "../../src/intervals.js";
 import { generatePrescriptions, invalidateCache } from "../../src/web/prescriptions.js";
+import type { UserProfile } from "../../src/web/users.js";
+
+const ZE_PROFILE: UserProfile = {
+	id: "ze",
+	displayName: "Ze",
+	sports: ["Run", "Swim"],
+	deities: true,
+	stryd: true,
+	apiKeyEnv: "INTERVALS_ICU_API_KEY",
+	strydEmailEnv: "STRYD_EMAIL",
+	strydPasswordEnv: "STRYD_PASSWORD",
+};
 
 // Mock enricher to avoid SQLite access in tests
 vi.mock("../../src/stryd/enricher.js", () => ({
@@ -96,18 +108,18 @@ describe("generatePrescriptions", () => {
 
 	it("generates dual prescriptions without strydClient", async () => {
 		const client = createMockClient();
-		const result = await generatePrescriptions(client);
+		const result = await generatePrescriptions(client, ZE_PROFILE);
 
-		expect(result.run.sport).toBe("Run");
-		expect(result.swim.sport).toBe("Swim");
+		expect(result.run?.sport).toBe("Run");
+		expect(result.swim?.sport).toBe("Swim");
 		expect(result.generated_at).toBeTruthy();
 	});
 
 	it("generates dual prescriptions with null strydClient", async () => {
 		const client = createMockClient();
-		const result = await generatePrescriptions(client, null);
+		const result = await generatePrescriptions(client, ZE_PROFILE, null);
 
-		expect(result.run.sport).toBe("Run");
-		expect(result.swim.sport).toBe("Swim");
+		expect(result.run?.sport).toBe("Run");
+		expect(result.swim?.sport).toBe("Swim");
 	});
 });

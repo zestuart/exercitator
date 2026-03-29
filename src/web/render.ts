@@ -6,12 +6,14 @@
 import type { VigilSummary, WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type { Invocations } from "./invocations.js";
 import type { DataSource } from "./prescriptions.js";
+import type { UserProfile } from "./users.js";
 
 export interface RenderData {
-	run: WorkoutSuggestion;
-	swim: WorkoutSuggestion;
-	runInvocations: Invocations;
-	swimInvocations: Invocations;
+	profile: UserProfile;
+	run: WorkoutSuggestion | null;
+	swim: WorkoutSuggestion | null;
+	runInvocations: Invocations | null;
+	swimInvocations: Invocations | null;
 	/** HR zone ceilings from intervals.icu (index 0 = Z1 ceiling, etc.) */
 	runHrZones: number[] | null;
 	swimHrZones: number[] | null;
@@ -265,23 +267,28 @@ export function renderPage(data: RenderData): string {
 	const day = dayName(data.generatedAt);
 	const runAccent = "#2d8a4e";
 	const swimAccent = "#2d6e8a";
+	const { profile } = data;
+	const singleCard = (data.run ? 1 : 0) + (data.swim ? 1 : 0) === 1;
 
 	const dataSourceBlock = renderDataSource(data.dataSource, data.generatedAt);
-	const runCard = renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones);
-	const swimCard = renderCard(
-		data.swim,
-		data.swimInvocations,
-		"card-swim",
-		swimAccent,
-		data.swimHrZones,
-	);
+	const runCard =
+		data.run && data.runInvocations
+			? renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones)
+			: "";
+	const swimCard =
+		data.swim && data.swimInvocations
+			? renderCard(data.swim, data.swimInvocations, "card-swim", swimAccent, data.swimHrZones)
+			: "";
+
+	const titleSuffix = profile.id === "ze" ? "" : ` &middot; ${escapeHtml(profile.displayName)}`;
+	const cardsClass = singleCard ? "cards cards-single" : "cards";
 
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Praescriptor &middot; ${dateStr}</title>
+	<title>Praescriptor${titleSuffix ? ` \u00b7 ${profile.displayName}` : ""} &middot; ${dateStr}</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -289,7 +296,7 @@ export function renderPage(data: RenderData): string {
 </head>
 <body>
 	<header class="page-header">
-		<h1>PR\u00C6SCRIPTOR</h1>
+		<h1>PR\u00C6SCRIPTOR${titleSuffix}</h1>
 		<div class="header-row">
 			<span class="header-date">${dateStr} &middot; ${day}</span>
 			<button class="refresh-btn" id="refresh-btn" title="Regenerate prescriptions">&#x21bb;</button>
@@ -298,7 +305,7 @@ export function renderPage(data: RenderData): string {
 
 	${dataSourceBlock}
 
-	<main class="cards">
+	<main class="${cardsClass}">
 		${runCard}
 		${swimCard}
 	</main>
@@ -307,7 +314,7 @@ export function renderPage(data: RenderData): string {
 		<span class="diamond">&loz;</span>
 	</footer>
 
-	<script>${CLIENT_JS}</script>
+	<script>${clientJs(profile.id)}</script>
 </body>
 </html>`;
 }
@@ -440,6 +447,11 @@ body {
 	max-width: 1400px;
 	margin: 2rem auto;
 	padding: 0 1.5rem;
+}
+
+.cards-single {
+	grid-template-columns: 1fr;
+	max-width: 700px;
 }
 
 .card {
@@ -713,15 +725,17 @@ body {
 `;
 
 // ---------------------------------------------------------------------------
-// Inlined client JS for send button
+// Inlined client JS for send button (user-prefixed API paths)
 // ---------------------------------------------------------------------------
 
-const CLIENT_JS = `
+function clientJs(userId: string): string {
+	const prefix = `/${userId}`;
+	return `
 document.getElementById('refresh-btn')?.addEventListener('click', async function() {
 	this.disabled = true;
 	this.classList.add('spinning');
 	try {
-		const res = await fetch('/api/refresh', { method: 'POST' });
+		const res = await fetch('${prefix}/api/refresh', { method: 'POST' });
 		if (res.ok) {
 			window.location.reload();
 			return;
@@ -748,13 +762,13 @@ document.querySelectorAll('.send-btn').forEach(btn => {
 
 		try {
 			const forceParam = isSent ? '?force=true' : '';
-			const res = await fetch('/api/send/' + sport + forceParam, { method: 'POST' });
+			const res = await fetch('${prefix}/api/send/' + sport + forceParam, { method: 'POST' });
 			const data = await res.json();
 
 			if (data.duplicate) {
 				this.disabled = false;
 				if (confirm(data.message)) {
-					const retry = await fetch('/api/send/' + sport + '?force=true', { method: 'POST' });
+					const retry = await fetch('${prefix}/api/send/' + sport + '?force=true', { method: 'POST' });
 					const retryData = await retry.json();
 					if (retryData.success) {
 						this.textContent = '\\u2713 Sent to calendar';
@@ -792,3 +806,4 @@ document.querySelectorAll('.send-btn').forEach(btn => {
 	});
 });
 `;
+}

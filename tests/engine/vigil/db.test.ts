@@ -15,6 +15,7 @@ const TEST_DB_PATH = ":memory:";
 
 function makeMetrics(overrides: Partial<VigilMetrics> = {}): VigilMetrics {
 	return {
+		athleteId: "0",
 		activityId: "stryd-100",
 		icuActivityId: "icu-200",
 		activityDate: "2026-03-20",
@@ -71,7 +72,7 @@ describe("Vigil DB helpers", () => {
 		expect(hasVigilMetrics("stryd-100")).toBe(true);
 		expect(hasVigilMetrics("stryd-999")).toBe(false);
 
-		const results = getVigilMetrics("Run", "2026-03-01", "2026-03-31");
+		const results = getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31");
 		expect(results.length).toBe(1);
 		expect(results[0].activityId).toBe("stryd-100");
 		expect(results[0].avgGctMs).toBeCloseTo(235, 0);
@@ -86,22 +87,23 @@ describe("Vigil DB helpers", () => {
 		saveVigilMetrics(makeMetrics({ activityId: "s-2", activityDate: "2026-03-20" }));
 		saveVigilMetrics(makeMetrics({ activityId: "s-3", activityDate: "2026-03-25" }));
 
-		expect(countVigilMetrics("Run", "2026-03-01", "2026-03-31")).toBe(3);
-		expect(countVigilMetrics("Run", "2026-03-18", "2026-03-22")).toBe(1);
-		expect(countVigilMetrics("Swim", "2026-03-01", "2026-03-31")).toBe(0);
+		expect(countVigilMetrics("0", "Run", "2026-03-01", "2026-03-31")).toBe(3);
+		expect(countVigilMetrics("0", "Run", "2026-03-18", "2026-03-22")).toBe(1);
+		expect(countVigilMetrics("0", "Swim", "2026-03-01", "2026-03-31")).toBe(0);
 	});
 
 	it("upserts metrics on conflict", () => {
 		saveVigilMetrics(makeMetrics({ avgGctMs: 230 }));
 		saveVigilMetrics(makeMetrics({ avgGctMs: 240 }));
 
-		const results = getVigilMetrics("Run", "2026-03-01", "2026-03-31");
+		const results = getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31");
 		expect(results.length).toBe(1);
 		expect(results[0].avgGctMs).toBeCloseTo(240, 0);
 	});
 
 	it("saves and retrieves baselines", () => {
 		const baseline: VigilBaseline = {
+			athleteId: "0",
 			sport: "Run",
 			metric: "avg_gct_ms",
 			computedAt: new Date().toISOString(),
@@ -114,7 +116,7 @@ describe("Vigil DB helpers", () => {
 
 		saveVigilBaseline(baseline);
 
-		const baselines = getVigilBaselines("Run");
+		const baselines = getVigilBaselines("0", "Run");
 		expect(baselines.length).toBe(1);
 		expect(baselines[0].metric).toBe("avg_gct_ms");
 		expect(baselines[0].mean30d).toBeCloseTo(235, 0);
@@ -126,6 +128,7 @@ describe("Vigil DB helpers", () => {
 
 	it("upserts baselines on conflict", () => {
 		const b1: VigilBaseline = {
+			athleteId: "0",
 			sport: "Run",
 			metric: "avg_gct_ms",
 			computedAt: new Date().toISOString(),
@@ -146,7 +149,7 @@ describe("Vigil DB helpers", () => {
 		saveVigilBaseline(b1);
 		saveVigilBaseline(b2);
 
-		const baselines = getVigilBaselines("Run");
+		const baselines = getVigilBaselines("0", "Run");
 		expect(baselines.length).toBe(1);
 		expect(baselines[0].mean30d).toBeCloseTo(237, 0);
 		expect(baselines[0].sampleCount30d).toBe(15);

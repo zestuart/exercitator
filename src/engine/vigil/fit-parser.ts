@@ -187,6 +187,7 @@ export function extractMetrics(
 	strydFeel: string | null = null,
 	surfaceType: string | null = null,
 	icuActivityId: string | null = null,
+	athleteId = "0",
 ): VigilMetrics | null {
 	if (!hasStrydDeveloperFields(records)) return null;
 	if (records.length < MIN_RECORDS) return null;
@@ -255,6 +256,7 @@ export function extractMetrics(
 	}
 
 	return {
+		athleteId,
 		activityId,
 		icuActivityId,
 		activityDate,

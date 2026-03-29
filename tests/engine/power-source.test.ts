@@ -207,7 +207,7 @@ describe("detectPowerSource", () => {
 		expect(result.warnings).toHaveLength(0);
 	});
 
-	it("does not treat non-Stryd Apple Watch recording as Stryd", () => {
+	it("Apple Watch native (no Stryd pod, no Stryd history) returns none", () => {
 		const appleWatchNative = makeRunActivity({
 			id: "aw2",
 			start_date_local: "2026-03-27T08:00:00",
@@ -220,9 +220,68 @@ describe("detectPowerSource", () => {
 
 		const result = detectPowerSource([appleWatchNative]);
 
-		// No Stryd streams in history, no Stryd in external_id → Garmin-only
-		expect(result.source).toBe("garmin");
+		// Apple Watch native power is unreliable — no Stryd baseline → none
+		expect(result.source).toBe("none");
+		expect(result.ftp).toBe(0);
+		expect(result.warnings[0]).toContain("Apple Watch native power");
+		expect(result.warnings[0]).toContain("no Stryd baseline");
+	});
+
+	it("Apple Watch forgot Stryd pod — falls back to previous Stryd run", () => {
+		const awNoPod = makeRunActivity({
+			id: "aw-nopod",
+			start_date_local: "2026-03-27T08:00:00",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "cadence"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-080000-Running.fit",
+			source: "OAUTH_CLIENT",
+			icu_rolling_ftp: 290,
+		});
+		const previousStryd = makeRunActivity({
+			id: "stryd-prev",
+			start_date_local: "2026-03-24T07:00:00",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "StrydStepLength"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-24-Outdoor Running-Stryd.fit",
+			source: "OAUTH_CLIENT",
+			icu_rolling_ftp: 310,
+			icu_ftp: 300,
+		});
+
+		const result = detectPowerSource([awNoPod, previousStryd]);
+
+		// Should look past the podless run and use previous Stryd context
+		expect(result.source).toBe("stryd");
 		expect(result.correction_factor).toBe(1.0);
+		expect(result.confidence).toBe("low");
+		expect(result.ftp).toBe(310); // from the previous Stryd run
+		expect(result.warnings[0]).toContain("Stryd pod not detected");
+	});
+
+	it("Apple Watch forgot Stryd pod — falls back to older Garmin+Stryd CIQ run", () => {
+		const awNoPod = makeRunActivity({
+			id: "aw-nopod",
+			start_date_local: "2026-03-27T08:00:00",
+			power_field: "power",
+			stream_types: ["heartrate", "watts"],
+			device_name: "Watch7,12",
+			external_id: "2026-03-27-Running.fit",
+			source: "OAUTH_CLIENT",
+		});
+		const garminStryd = makeRunActivity({
+			id: "g-stryd",
+			start_date_local: "2026-03-22T07:00:00",
+			// Default: power_field "Power", has StrydLSS/StrydFormPower/StrydILR
+		});
+
+		const result = detectPowerSource([awNoPod, garminStryd]);
+
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.ftp).toBe(322); // from the Garmin+Stryd run
+		expect(result.warnings[0]).toContain("Stryd pod not detected");
 	});
 
 	it("mixed history: Apple Watch + Stryd most recent, Garmin older", () => {

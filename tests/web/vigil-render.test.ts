@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { VigilSummary, WorkoutSuggestion } from "../../src/engine/types.js";
 import { type RenderData, renderPage } from "../../src/web/render.js";
+import type { UserProfile } from "../../src/web/users.js";
+
+const ZE_PROFILE: UserProfile = {
+	id: "ze",
+	displayName: "Ze",
+	sports: ["Run", "Swim"],
+	deities: true,
+	stryd: true,
+	apiKeyEnv: "INTERVALS_ICU_API_KEY",
+	strydEmailEnv: "STRYD_EMAIL",
+	strydPasswordEnv: "STRYD_PASSWORD",
+};
 
 function makeMinimalSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSuggestion {
 	return {
@@ -37,6 +49,7 @@ function makeMinimalSuggestion(overrides: Partial<WorkoutSuggestion> = {}): Work
 
 function makeRenderData(overrides: Partial<RenderData> = {}): RenderData {
 	return {
+		profile: ZE_PROFILE,
 		run: makeMinimalSuggestion(),
 		swim: makeMinimalSuggestion({ sport: "Swim" }),
 		runInvocations: {

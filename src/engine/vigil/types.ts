@@ -7,6 +7,8 @@
 
 /** Per-activity metric summary computed from Stryd FIT developer fields. */
 export interface VigilMetrics {
+	/** intervals.icu athlete ID — isolates metrics per user in multi-user setups. */
+	athleteId: string;
 	activityId: string;
 	icuActivityId: string | null;
 	activityDate: string;
@@ -67,6 +69,8 @@ export interface VigilAlert {
 
 /** Stored baseline for a single metric. */
 export interface VigilBaseline {
+	/** intervals.icu athlete ID — isolates baselines per user. */
+	athleteId: string;
 	sport: string;
 	metric: string;
 	computedAt: string;

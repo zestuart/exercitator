@@ -84,6 +84,7 @@ export function suggestWorkoutFromData(
 	now: Date = new Date(),
 	sportSelectionReason?: string,
 	strydCp?: number | null,
+	athleteId = "0",
 ): WorkoutSuggestion {
 	const { activities, wellness, runSettings, swimSettings } = data;
 
@@ -91,9 +92,21 @@ export function suggestWorkoutFromData(
 
 	// Override FTP with Stryd critical power when available — authoritative
 	// source directly from the foot pod, not inferred by intervals.icu.
-	if (strydCp && powerContext.source === "stryd") {
+	// If the athlete has a valid CP but no recent Stryd run data (e.g. ran
+	// with just Apple Watch), upgrade the source to "stryd" — the CP API
+	// only returns a value if the athlete IS a Stryd user.
+	if (strydCp != null) {
 		powerContext.ftp = Math.round(strydCp);
 		powerContext.rolling_ftp = Math.round(strydCp);
+		if (powerContext.source === "none") {
+			powerContext.source = "stryd";
+			powerContext.confidence = "low";
+			if (!powerContext.warnings.some((w) => w.includes("Stryd"))) {
+				powerContext.warnings.push(
+					"FTP set from Stryd critical power API \u2014 no recent Stryd run data",
+				);
+			}
+		}
 	}
 	const readiness = computeReadiness(wellness, activities, now);
 	const staleness = computeStaleness(activities, sport, now);
@@ -102,7 +115,7 @@ export function suggestWorkoutFromData(
 	// Stryd stores all activities as sport="Run" regardless of intervals.icu classification,
 	// so always query with "Run" for the Vigil pipeline.
 	const isRunSport = ["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport);
-	const vigilResult = isRunSport ? runVigilPipeline("Run", now) : null;
+	const vigilResult = isRunSport ? runVigilPipeline(athleteId, "Run", now) : null;
 
 	const readinessCategory = selectWorkoutCategory(
 		readiness.score,

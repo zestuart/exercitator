@@ -114,6 +114,45 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 		};
 	}
 
+	// Apple Watch native power (no Stryd pod worn).
+	// Apple Watch reports power_field "power" (lowercase) just like Garmin, but the
+	// power comes from a wrist accelerometer estimate — not Stryd, not Garmin.
+	// Look past this run to find the athlete's actual Stryd power context.
+	if (
+		activePowerField === GARMIN_POWER_FIELD &&
+		isNonGarminDevice(mostRecentRun) &&
+		!isStrydNativeRecording(mostRecentRun)
+	) {
+		const strydRun = recentRuns.find((r) => hasStrydStreams(r) || isStrydNativeRecording(r));
+		if (strydRun) {
+			const strydFtp = strydRun.icu_rolling_ftp ?? strydRun.icu_ftp;
+			warnings.push(
+				"Most recent run used Apple Watch native power (Stryd pod not detected) " +
+					"\u2014 power context from previous Stryd run",
+			);
+			return {
+				source: "stryd",
+				ftp: strydFtp ?? 0,
+				rolling_ftp: strydRun.icu_rolling_ftp,
+				correction_factor: 1.0,
+				confidence: "low",
+				warnings,
+			};
+		}
+		// No Stryd history — Apple Watch power is unreliable for zone targets
+		warnings.push(
+			"Apple Watch native power detected \u2014 no Stryd baseline available, using HR-only prescription",
+		);
+		return {
+			source: "none",
+			ftp: 0,
+			rolling_ftp: null,
+			correction_factor: 1.0,
+			confidence: "low",
+			warnings,
+		};
+	}
+
 	// Garmin is active but athlete has Stryd (forgot to switch)
 	if (activePowerField === GARMIN_POWER_FIELD && athleteHasStryd) {
 		const garminFtp = rawFtp ?? 0;

@@ -344,7 +344,7 @@ export function createOAuthHandler(serverUrl: string) {
 			readBody(req).then((body) => {
 				const form = new URLSearchParams(body);
 				const grantType = form.get("grant_type");
-				console.error(`token: grant_type=${grantType}`);
+				console.error(`token: grant_type=${JSON.stringify(grantType)}`);
 
 				if (grantType === "client_credentials") {
 					if (form.get("client_secret") !== CLIENT_SECRET) {

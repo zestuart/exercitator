@@ -9,6 +9,7 @@ import type { VigilMetrics } from "../../../src/engine/vigil/types.js";
 
 function makeVigilMetrics(overrides: Partial<VigilMetrics> = {}): VigilMetrics {
 	return {
+		athleteId: "0",
 		activityId: "1",
 		icuActivityId: null,
 		activityDate: "2026-03-20",

@@ -40,6 +40,7 @@ function computeMetricBaseline(
 	metric: string,
 	activities30d: VigilMetrics[],
 	activities7d: VigilMetrics[],
+	athleteId: string,
 	sport: string,
 ): VigilBaseline | null {
 	// Extract non-null values for this metric
@@ -64,6 +65,7 @@ function computeMetricBaseline(
 	const mean7d = values7d.length >= MIN_ACUTE_ACTIVITIES ? mean(values7d) : null;
 
 	return {
+		athleteId,
 		sport,
 		metric,
 		computedAt: new Date().toISOString(),
@@ -84,19 +86,23 @@ function computeMetricBaseline(
  * @param sport - Sport type (e.g. "Run", "TrailRun")
  * @param referenceDate - Date to compute baselines relative to (default: today)
  */
-export function computeBaselines(sport: string, referenceDate?: Date): VigilBaseline[] {
+export function computeBaselines(
+	athleteId: string,
+	sport: string,
+	referenceDate?: Date,
+): VigilBaseline[] {
 	const ref = referenceDate ?? new Date();
 	const oldest30d = isoDate(30, new Date(ref.getTime()));
 	const oldest7d = isoDate(7, new Date(ref.getTime()));
 	const newest = ref.toISOString().slice(0, 10);
 
-	const activities30d = getVigilMetrics(sport, oldest30d, newest);
+	const activities30d = getVigilMetrics(athleteId, sport, oldest30d, newest);
 	const activities7d = activities30d.filter((a) => a.activityDate >= oldest7d);
 
 	const baselines: VigilBaseline[] = [];
 
 	for (const metric of SCOREABLE_METRICS) {
-		const baseline = computeMetricBaseline(metric, activities30d, activities7d, sport);
+		const baseline = computeMetricBaseline(metric, activities30d, activities7d, athleteId, sport);
 		if (baseline) {
 			saveVigilBaseline(baseline);
 			baselines.push(baseline);
@@ -112,6 +118,7 @@ export function computeBaselines(sport: string, referenceDate?: Date): VigilBase
  * Used for testing and scenarios where activities are already loaded.
  */
 export function computeBaselinesFromData(
+	athleteId: string,
 	sport: string,
 	activities30d: VigilMetrics[],
 	activities7d: VigilMetrics[],
@@ -119,7 +126,7 @@ export function computeBaselinesFromData(
 	const baselines: VigilBaseline[] = [];
 
 	for (const metric of SCOREABLE_METRICS) {
-		const baseline = computeMetricBaseline(metric, activities30d, activities7d, sport);
+		const baseline = computeMetricBaseline(metric, activities30d, activities7d, athleteId, sport);
 		if (baseline) {
 			baselines.push(baseline);
 		}

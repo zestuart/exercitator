@@ -34,6 +34,7 @@ function sleep(ms: number): Promise<void> {
 export async function processStrydActivity(
 	strydClient: StrydClient,
 	activity: StrydActivity,
+	athleteId: string,
 	sport = "Run",
 	icuActivityId: string | null = null,
 ): Promise<boolean> {
@@ -54,6 +55,7 @@ export async function processStrydActivity(
 			activity.feel ?? null,
 			activity.surface_type ?? null,
 			icuActivityId,
+			athleteId,
 		);
 
 		if (metrics) {
@@ -75,7 +77,11 @@ export async function processStrydActivity(
  *
  * @returns Number of activities successfully processed
  */
-export async function runBackfill(strydClient: StrydClient, days = BACKFILL_DAYS): Promise<number> {
+export async function runBackfill(
+	strydClient: StrydClient,
+	athleteId: string,
+	days = BACKFILL_DAYS,
+): Promise<number> {
 	if (!strydClient.isAuthenticated) {
 		await strydClient.login();
 	}
@@ -86,7 +92,7 @@ export async function runBackfill(strydClient: StrydClient, days = BACKFILL_DAYS
 	let processed = 0;
 
 	for (const activity of activities) {
-		const success = await processStrydActivity(strydClient, activity);
+		const success = await processStrydActivity(strydClient, activity, athleteId);
 		if (success) {
 			processed++;
 			console.error(

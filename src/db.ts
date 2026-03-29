@@ -45,9 +45,21 @@ export function getDb(): Database.Database {
 		)
 	`);
 
+	// Vigil metrics: per-activity biomechanical summaries, scoped by athlete_id.
+	// Migration: if old schema exists (no athlete_id), drop and recreate.
+	// Data is rebuilt from Stryd backfill on next prescription generation.
+	const hasAthleteCol = db
+		.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vigil_metrics'")
+		.get() as { sql: string } | undefined;
+	if (hasAthleteCol && !hasAthleteCol.sql.includes("athlete_id")) {
+		db.exec("DROP TABLE IF EXISTS vigil_metrics");
+		db.exec("DROP TABLE IF EXISTS vigil_baselines");
+	}
+
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS vigil_metrics (
 			activity_id       TEXT PRIMARY KEY,
+			athlete_id        TEXT NOT NULL DEFAULT '0',
 			icu_activity_id   TEXT,
 			computed_at       TEXT NOT NULL,
 			activity_date     TEXT NOT NULL,
@@ -81,6 +93,7 @@ export function getDb(): Database.Database {
 
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS vigil_baselines (
+			athlete_id       TEXT NOT NULL DEFAULT '0',
 			sport            TEXT NOT NULL,
 			metric           TEXT NOT NULL,
 			computed_at      TEXT NOT NULL,
@@ -89,7 +102,7 @@ export function getDb(): Database.Database {
 			mean_7d          REAL,
 			sample_count_30d INTEGER NOT NULL,
 			sample_count_7d  INTEGER,
-			PRIMARY KEY (sport, metric)
+			PRIMARY KEY (athlete_id, sport, metric)
 		)
 	`);
 
@@ -167,9 +180,11 @@ export function recordEnrichment(
 
 import type { VigilBaseline, VigilMetrics } from "./engine/vigil/types.js";
 
-/** Check if any Vigil metrics exist at all (for triggering initial backfill). */
-export function hasAnyVigilMetrics(): boolean {
-	const row = getDb().prepare("SELECT 1 FROM vigil_metrics LIMIT 1").get();
+/** Check if any Vigil metrics exist for a given athlete (for triggering initial backfill). */
+export function hasAnyVigilMetrics(athleteId: string): boolean {
+	const row = getDb()
+		.prepare("SELECT 1 FROM vigil_metrics WHERE athlete_id = ? LIMIT 1")
+		.get(athleteId);
 	return row !== undefined;
 }
 
@@ -184,14 +199,14 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 	getDb()
 		.prepare(
 			`INSERT OR REPLACE INTO vigil_metrics (
-				activity_id, icu_activity_id, computed_at, activity_date, sport, surface_type,
+				activity_id, athlete_id, icu_activity_id, computed_at, activity_date, sport, surface_type,
 				avg_gct_ms, avg_lss, avg_form_power, avg_ilr, avg_vo_cm, avg_cadence,
 				form_power_ratio, gct_drift_pct, power_hr_drift, stryd_rpe, stryd_feel,
 				l_avg_gct_ms, r_avg_gct_ms, l_avg_lss, r_avg_lss,
 				l_avg_vo_cm, r_avg_vo_cm, l_avg_ilr, r_avg_ilr,
 				gct_asymmetry_pct, lss_asymmetry_pct, vo_asymmetry_pct, ilr_asymmetry_pct
 			) VALUES (
-				?, ?, datetime('now'), ?, ?, ?,
+				?, ?, ?, datetime('now'), ?, ?, ?,
 				?, ?, ?, ?, ?, ?,
 				?, ?, ?, ?, ?,
 				?, ?, ?, ?,
@@ -201,6 +216,7 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 		)
 		.run(
 			m.activityId,
+			m.athleteId,
 			m.icuActivityId,
 			m.activityDate,
 			m.sport,
@@ -233,6 +249,7 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 
 /** Fetch Vigil metrics for a date range, ordered by date descending. */
 export function getVigilMetrics(
+	athleteId: string,
 	sport: string,
 	oldestDate: string,
 	newestDate: string,
@@ -240,27 +257,33 @@ export function getVigilMetrics(
 	const rows = getDb()
 		.prepare(
 			`SELECT * FROM vigil_metrics
-			 WHERE sport = ? AND activity_date >= ? AND activity_date <= ?
+			 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?
 			 ORDER BY activity_date DESC`,
 		)
-		.all(sport, oldestDate, newestDate) as Record<string, unknown>[];
+		.all(athleteId, sport, oldestDate, newestDate) as Record<string, unknown>[];
 
 	return rows.map(rowToVigilMetrics);
 }
 
 /** Count Vigil metrics for a sport in a date range. */
-export function countVigilMetrics(sport: string, oldestDate: string, newestDate: string): number {
+export function countVigilMetrics(
+	athleteId: string,
+	sport: string,
+	oldestDate: string,
+	newestDate: string,
+): number {
 	const row = getDb()
 		.prepare(
 			`SELECT COUNT(*) as cnt FROM vigil_metrics
-			 WHERE sport = ? AND activity_date >= ? AND activity_date <= ?`,
+			 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?`,
 		)
-		.get(sport, oldestDate, newestDate) as { cnt: number };
+		.get(athleteId, sport, oldestDate, newestDate) as { cnt: number };
 	return row.cnt;
 }
 
 function rowToVigilMetrics(r: Record<string, unknown>): VigilMetrics {
 	return {
+		athleteId: r.athlete_id as string,
 		activityId: r.activity_id as string,
 		icuActivityId: r.icu_activity_id as string | null,
 		activityDate: r.activity_date as string,
@@ -301,20 +324,30 @@ export function saveVigilBaseline(b: VigilBaseline): void {
 	getDb()
 		.prepare(
 			`INSERT OR REPLACE INTO vigil_baselines (
-				sport, metric, computed_at, mean_30d, stddev_30d,
+				athlete_id, sport, metric, computed_at, mean_30d, stddev_30d,
 				mean_7d, sample_count_30d, sample_count_7d
-			) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
 		)
-		.run(b.sport, b.metric, b.mean30d, b.stddev30d, b.mean7d, b.sampleCount30d, b.sampleCount7d);
+		.run(
+			b.athleteId,
+			b.sport,
+			b.metric,
+			b.mean30d,
+			b.stddev30d,
+			b.mean7d,
+			b.sampleCount30d,
+			b.sampleCount7d,
+		);
 }
 
-/** Fetch all baselines for a sport. */
-export function getVigilBaselines(sport: string): VigilBaseline[] {
+/** Fetch all baselines for a sport, scoped to an athlete. */
+export function getVigilBaselines(athleteId: string, sport: string): VigilBaseline[] {
 	const rows = getDb()
-		.prepare("SELECT * FROM vigil_baselines WHERE sport = ?")
-		.all(sport) as Record<string, unknown>[];
+		.prepare("SELECT * FROM vigil_baselines WHERE athlete_id = ? AND sport = ?")
+		.all(athleteId, sport) as Record<string, unknown>[];
 
 	return rows.map((r) => ({
+		athleteId: r.athlete_id as string,
 		sport: r.sport as string,
 		metric: r.metric as string,
 		computedAt: r.computed_at as string,

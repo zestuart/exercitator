@@ -62,12 +62,13 @@ src/
       index.ts          — pipeline orchestrator: check data → baselines → score → alert
       backfill.ts       — 90-day Stryd FIT backfill + incremental per-activity processing
   web/
-    server.ts           — Praescriptor HTTP entrypoint (port 3847)
-    routes.ts           — route handler (/, /api/prescriptions, /api/send/:sport, /health)
-    prescriptions.ts    — dual Run+Swim prescription generator with day-level cache
-    send.ts             — push workout to intervals.icu calendar with dedup
+    server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
+    routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
+    users.ts            — UserProfile type + static registry (ze, pam)
+    prescriptions.ts    — per-user prescription generator with day-level cache
+    send.ts             — push workout to intervals.icu calendar with per-user dedup
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
-    invocations.ts      — deity invocations via Anthropic API with static fallbacks
+    invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
     render.ts           — SSR HTML renderer (inlined CSS + JS, no framework)
 ```
 
@@ -86,7 +87,7 @@ src/
 - **Vigil** (`src/engine/vigil/`): Biomechanical injury warning system. Detects abnormal deviations in Stryd running metrics from the athlete's personal 30-day baseline using z-score deviation scoring. Data sourced directly from Stryd FIT files (not intervals.icu streams API) — avoids rate limits and provides access to all developer fields. 90-day deep backfill on first run, then incremental per-activity extraction. Metric weights reflect shoe-mounted IMU reliability: GCT/LSS 1.0, Form Power Ratio 0.8, ILR 0.5 (noisier from foot mount), drift metrics 0.8–1.0. Composite-only alerting: severity 0–3 requiring 2+ metrics to deviate simultaneously. Severity ≥ 2 triggers protective downshift in workout-selector; severity ≥ 2 writes to intervals.icu wellness `injury` field (2=Niggle, 3=Poor, never 4=Injured automatically). Runs for all running sport types (Run, TrailRun, VirtualRun, Treadmill) — normalises to "Run" for Stryd queries since Stryd stores all activities as "Run" regardless of intervals.icu classification. `StrydActivity` extended with `rpe`, `feel`, `surface_type` from post-run reports. **Stryd Duo**: bilateral data arrives as balance percentages (left foot share, 50% = symmetric), not separate L/R streams. Fields: `Leg Spring Stiffness Balance`, `Vertical Oscillation Balance`, `Impact Loading Rate Balance`, `stance_time_balance`. Asymmetry = `|balance - 50| × 2`. Mixed-pod handling: bilateral baselines computed from Duo activities only (min 5); unilateral baselines from all activities. Stored in SQLite: `vigil_metrics` (per-activity summaries with bilateral columns) + `vigil_baselines` (rolling 30d + 7d acute windows). Full spec: `phase2/injury-warning-spec.md`.
 - **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
 - **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile), Stryd enrichment tracking, and Vigil biomechanical metrics/baselines. WAL mode for concurrent reads. DB path configurable via `EXERCITATOR_DB_PATH` env var (supports `:memory:` for tests).
-- **Praescriptor** (`src/web/`): Separate container, same codebase. Serves daily Run + Swim prescriptions as SSR HTML via Tailscale `serve` (tailnet-only, no funnel). Imports the DSW engine directly — no network calls between containers. Deity invocations generated via Anthropic API with static fallbacks. "Send to intervals.icu" with server-side dedup. Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges.
+- **Praescriptor** (`src/web/`): Separate container, same codebase. Multi-user via URL-based routing: `/:userId/` (e.g. `/ze/`, `/pam/`). User profiles (`src/web/users.ts`) define per-user sports, deity invocations, Stryd enrichment, and API key env var. Per-user `IntervalsClient`, prescription cache, and send dedup. Users without a configured API key get 503. `GET /` redirects to default user (`/ze/`). Imports the DSW engine directly — no network calls between containers. Deity invocations generated via Anthropic API with static fallbacks (or plain text for non-deity users). "Send to intervals.icu" with server-side dedup. Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges. Single-card layout when a user has only one sport.
 
 ## Philosophy
 
@@ -228,15 +229,18 @@ IS committed and kept in sync with `.env`.
 ```bash
 # .env.example — commit this, not .env
 GEMINI_API_KEY=your-gemini-api-key-here          # Required for SAST scans
-INTERVALS_ICU_API_KEY=your-intervals-icu-api-key  # Required for intervals.icu access
+INTERVALS_ICU_API_KEY=your-intervals-icu-api-key  # Required for intervals.icu access (Ze)
+INTERVALS_ICU_API_KEY_PAM=pam-api-key-here       # Optional: Pam's intervals.icu access
 TAILSCALE_AUTH_KEY=your-tailscale-auth-key         # Required for Docker deployment
 MCP_OAUTH_CLIENT_ID=exercitator                   # OAuth client ID
 MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth token signing secret
 MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
 MCP_TOKEN_VERSION=1                               # Increment to revoke all tokens
 ANTHROPIC_API_KEY=<your-anthropic-api-key>         # Optional: deity invocations in Praescriptor
-STRYD_EMAIL=<your-stryd-email>                    # Optional: Stryd FIT enrichment
-STRYD_PASSWORD=<your-stryd-password>              # Optional: Stryd FIT enrichment
+STRYD_EMAIL=<your-stryd-email>                    # Optional: Ze's Stryd FIT enrichment
+STRYD_PASSWORD=<your-stryd-password>              # Optional: Ze's Stryd FIT enrichment
+STRYD_EMAIL_PAM=<pam-stryd-email>                 # Optional: Pam's Stryd FIT enrichment
+STRYD_PASSWORD_PAM=<pam-stryd-password>           # Optional: Pam's Stryd FIT enrichment
 QNAP_PASSWORD=<arca-ingens-password>              # SSH to Arca Ingens (dominus@192.168.4.180:2022)
 ```
 

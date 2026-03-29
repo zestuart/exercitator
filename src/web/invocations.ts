@@ -52,6 +52,16 @@ function staticFallback(sport: "Run" | "Swim"): Invocations {
 	};
 }
 
+/** Non-deity invocations for users who don't use the Roman liturgical style. */
+export function plainInvocations(sport: "Run" | "Swim"): Invocations {
+	const sportName = sport === "Run" ? "running" : "swimming";
+	return {
+		opening: `Today\u2019s ${sportName} prescription, built from your recent training data and current readiness.`,
+		rationale_header: "Rationale",
+		closing: "Trust the process. The work is prescribed; the execution is yours.",
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Anthropic API generation
 // ---------------------------------------------------------------------------
