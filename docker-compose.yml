@@ -50,10 +50,13 @@ services:
       - exercitator-data:/app/data
     environment:
       - INTERVALS_ICU_API_KEY=${INTERVALS_ICU_API_KEY:?required}
+      - INTERVALS_ICU_API_KEY_PAM=${INTERVALS_ICU_API_KEY_PAM:-}
       - PRAESCRIPTOR_PORT=3847
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - STRYD_EMAIL=${STRYD_EMAIL:-}
       - STRYD_PASSWORD=${STRYD_PASSWORD:-}
+      - STRYD_EMAIL_PAM=${STRYD_EMAIL_PAM:-}
+      - STRYD_PASSWORD_PAM=${STRYD_PASSWORD_PAM:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
       interval: 60s
