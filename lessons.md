@@ -135,3 +135,24 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Root cause**: The Tailscale sidecar's `hostname: praescriptor` registered `praescriptor` in Tailscale's MagicDNS, which took priority over Docker's internal DNS. When the sidecar resolved `praescriptor`, it got the Tailscale IP (172.29.28.5 — itself) instead of the Docker container IP (172.29.28.4). Connection refused because the sidecar isn't listening on port 3847.
 **Fix**: Renamed the web container from `praescriptor` to `praescriptor-web` (via `container_name: praescriptor-web`). Updated the serve config to proxy to `http://praescriptor-web:3847`. The Tailscale hostname stays `praescriptor` (for the public-facing URL) while the Docker container name is distinct.
 **Prevention**: When a Tailscale sidecar uses `hostname: X`, never name the proxied container `X`. Use a different `container_name` (e.g. `X-web`, `X-app`) so Docker DNS and Tailscale MagicDNS don't collide. The existing exercitator setup already did this correctly: `hostname: exercitator` + `container_name: exercitator-mcp`.
+
+## 2026-03-29 — IntervalsClient.athleteId "0" is an alias, not a unique identifier
+
+**What happened**: Per-user Vigil isolation (athlete_id column in vigil_metrics/baselines) was ineffective — both Ze and Pam resolved to `client.athleteId = "0"`, so Ze's Vigil data blocked Pam's 90-day backfill.
+**Root cause**: intervals.icu treats athlete ID `"0"` as a convenience alias meaning "the athlete owning this API key". Two different API keys both resolve to `"0"` locally, even though they represent different athletes server-side. Using `client.athleteId` as a DB partition key created a collision.
+**Fix**: Use `profile.id` ("ze", "pam") as the Vigil athlete_id instead of `client.athleteId`. The profile ID is stable, unique, and doesn't depend on intervals.icu API semantics.
+**Prevention**: When partitioning local data by user, never use an external API's convenience aliases as partition keys. Use the application's own unique identifiers (profile IDs, slugs, UUIDs) that are guaranteed distinct.
+
+## 2026-03-29 — Apple Watch native power misclassified as Garmin with Stryd correction
+
+**What happened**: When an athlete ran with just an Apple Watch (no Stryd pod), the power source was classified as "Garmin native with Stryd connected", applying a meaningless 0.87 correction factor to Apple's wrist-accelerometer power estimate.
+**Root cause**: Apple Watch and Garmin both report `power_field: "power"` (lowercase). The detection logic only distinguished them by checking for Stryd CIQ streams (`StrydLSS`, etc.) in the history, not by checking the device type of the most recent run. An Apple Watch run with `athleteHasStryd = true` (from older runs) hit the Garmin+Stryd correction branch.
+**Fix**: Added an Apple Watch native detection check before the Garmin+Stryd branch. When `isNonGarminDevice(mostRecentRun)` is true and it's not a Stryd native recording, look past it to find the most recent Stryd-powered run. If none exists, return `source: "none"`.
+**Prevention**: When classifying device ecosystems, check the specific device of the activity in question, not just the athlete's historical data. Different devices from the same athlete can produce fundamentally different data.
+
+## 2026-03-29 — Stryd has an undocumented workout API
+
+**What happened**: Research suggested Stryd had no public API for pushing workouts. A HAR capture of the PowerCenter web UI revealed a full REST API for creating, scheduling, and deleting structured workouts.
+**Root cause**: Stryd's API is not publicly documented. The only way to discover it was traffic analysis.
+**Fix**: Reverse-engineered three endpoints: `POST /workouts` (create), `POST /users/{id}/workouts?id=&timestamp=` (schedule on calendar), `DELETE /users/{id}/workouts/{calendarId}` (remove). Power targets use CP% — maps directly to our zone model. Auth is the same Bearer token from the existing login endpoint.
+**Prevention**: When a vendor's public documentation says "no API", check the web UI's network traffic. Modern SPAs almost always have a REST/GraphQL API behind them. HAR captures are the fastest way to map undocumented APIs.

@@ -11,6 +11,7 @@ import type { StrydClient } from "../stryd/client.js";
 import { generateInvocations, plainInvocations } from "./invocations.js";
 import { generatePrescriptions, invalidateCache } from "./prescriptions.js";
 import { renderPage } from "./render.js";
+import { sendToStryd } from "./send-stryd.js";
 import { sendToIntervals } from "./send.js";
 import { DEFAULT_USER, type UserProfile, getUserProfile } from "./users.js";
 
@@ -108,6 +109,23 @@ export async function handleRoutes(
 			}
 			const force = url.searchParams.get("force") === "true";
 			await sendToIntervals(client, profile, sport, res, force);
+			return;
+		}
+
+		if (req.method === "POST" && subPath.startsWith("/api/stryd/")) {
+			const sport = subPath.split("/").pop();
+			if (sport !== "run") {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "Stryd push only supports running workouts" }));
+				return;
+			}
+			if (!profile.stryd || !userStryd) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "Stryd not configured for this user" }));
+				return;
+			}
+			const force = url.searchParams.get("force") === "true";
+			await sendToStryd(client, profile, userStryd, res, force);
 			return;
 		}
 

@@ -153,6 +153,7 @@ function renderCard(
 	sportClass: string,
 	accent: string,
 	hrZones: number[] | null,
+	showStryd = false,
 ): string {
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
@@ -204,9 +205,12 @@ function renderCard(
 			<p>${escapeHtml(invocations.closing)}</p>
 		</blockquote>
 
-		<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
-			&#x2197; Send to intervals.icu
-		</button>
+		<div class="send-buttons">
+			<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
+				&#x2197; Send to intervals.icu
+			</button>
+			${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #6b4ce6">&#x2197; Send to Stryd</button>` : ""}
+		</div>
 	</div>`;
 }
 
@@ -271,9 +275,10 @@ export function renderPage(data: RenderData): string {
 	const singleCard = (data.run ? 1 : 0) + (data.swim ? 1 : 0) === 1;
 
 	const dataSourceBlock = renderDataSource(data.dataSource, data.generatedAt);
+	const showStryd = profile.stryd;
 	const runCard =
 		data.run && data.runInvocations
-			? renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones)
+			? renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones, showStryd)
 			: "";
 	const swimCard =
 		data.swim && data.swimInvocations
@@ -670,10 +675,15 @@ body {
 
 .sport-reason { font-style: italic; }
 
+.send-buttons {
+	display: flex;
+	gap: 0.6rem;
+	margin-top: 1.2rem;
+}
+
 .send-btn {
 	display: block;
-	width: 100%;
-	margin-top: 1.2rem;
+	flex: 1;
 	padding: 0.7rem;
 	background: transparent;
 	border: 1px solid var(--border);
@@ -748,7 +758,7 @@ document.getElementById('refresh-btn')?.addEventListener('click', async function
 	}
 });
 
-document.querySelectorAll('.send-btn').forEach(btn => {
+document.querySelectorAll('.send-btn:not(.stryd-btn)').forEach(btn => {
 	btn.addEventListener('click', async function() {
 		const sport = this.dataset.sport;
 		const isSent = this.classList.contains('sent');
@@ -798,6 +808,64 @@ document.querySelectorAll('.send-btn').forEach(btn => {
 			this.classList.remove('sent');
 			setTimeout(() => {
 				this.textContent = '\\u2197 Send to intervals.icu';
+				this.classList.remove('error');
+			}, 5000);
+		}
+
+		this.disabled = false;
+	});
+});
+
+document.querySelectorAll('.stryd-btn').forEach(btn => {
+	btn.addEventListener('click', async function() {
+		const sport = this.dataset.sport;
+		const isSent = this.classList.contains('sent');
+
+		if (isSent) {
+			if (!confirm('Already sent to Stryd today \\u2014 send again?')) return;
+		}
+
+		this.disabled = true;
+		this.textContent = 'Sending\\u2026';
+
+		try {
+			const forceParam = isSent ? '?force=true' : '';
+			const res = await fetch('${prefix}/api/stryd/' + sport + forceParam, { method: 'POST' });
+			const data = await res.json();
+
+			if (data.duplicate) {
+				this.disabled = false;
+				if (confirm(data.message)) {
+					const retry = await fetch('${prefix}/api/stryd/' + sport + '?force=true', { method: 'POST' });
+					const retryData = await retry.json();
+					if (retryData.success) {
+						this.textContent = '\\u2713 Sent to Stryd';
+						this.classList.add('sent');
+						this.classList.remove('error');
+					} else {
+						throw new Error(retryData.error);
+					}
+				} else {
+					this.textContent = '\\u2713 Sent to Stryd';
+					this.classList.add('sent');
+				}
+				this.disabled = false;
+				return;
+			}
+
+			if (data.success) {
+				this.textContent = '\\u2713 Sent to Stryd';
+				this.classList.add('sent');
+				this.classList.remove('error');
+			} else {
+				throw new Error(data.error);
+			}
+		} catch (err) {
+			this.textContent = '\\u2717 Failed \\u2014 try again';
+			this.classList.add('error');
+			this.classList.remove('sent');
+			setTimeout(() => {
+				this.textContent = '\\u2197 Send to Stryd';
 				this.classList.remove('error');
 			}, 5000);
 		}

@@ -103,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Stryd critical power used as authoritative FTP for running prescriptions — sourced directly from the foot pod via Stryd PowerCenter API (`/cp/history`), overriding intervals.icu's inferred FTP when Stryd is the detected power source
 - 212 unit and integration tests covering the full engine pipeline, Vigil (FIT parsing, Duo bilateral, DB, metrics, baselines, scoring, integration, rendering), web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 - Praescriptor multi-user support: URL-based routing (`/ze/`, `/pam/`) with per-user intervals.icu API keys, sport selections, and feature flags (deity invocations, Stryd enrichment). Per-user prescription cache, send dedup, and graceful 503 when a user's API key is not configured. Single-card layout for users with one sport.
+- Praescriptor "Send to Stryd" button: pushes running workout to the athlete's Stryd calendar via `POST /b/api/v1/workouts` (create) + `POST /b/api/v1/users/{id}/workouts` (schedule). Power targets expressed as CP% matching our zone model. Interval blocks use Stryd's repeat model with work+rest segment pairs. Server-side dedup with force-resend (deletes previous calendar entry). Visible only on run cards for users with `stryd: true`.
 
 ### Fixed
 - Vigil pipeline now runs for all running sport types (TrailRun, VirtualRun, Treadmill), not just "Run" — normalises to "Run" for Stryd data queries since Stryd stores all activities as "Run" regardless of intervals.icu classification

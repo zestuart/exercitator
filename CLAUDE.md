@@ -35,7 +35,7 @@ src/
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
   db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines (better-sqlite3, WAL mode)
   stryd/
-    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT, post-run report fields)
+    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT, post-run report fields, create/schedule/delete workouts)
     enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
   tools/
     athlete.ts          — get_athlete_profile, get_sport_settings
@@ -67,6 +67,8 @@ src/
     users.ts            — UserProfile type + static registry (ze, pam)
     prescriptions.ts    — per-user prescription generator with day-level cache
     send.ts             — push workout to intervals.icu calendar with per-user dedup
+    send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup)
+    stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets)
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
     render.ts           — SSR HTML renderer (inlined CSS + JS, no framework)

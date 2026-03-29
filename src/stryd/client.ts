@@ -33,6 +33,46 @@ export interface StrydConfig {
 	password: string;
 }
 
+export interface StrydWorkoutSegment {
+	desc: string;
+	desc_no_cp: string;
+	duration_type: "time" | "distance";
+	duration_time: { hour: number; minute: number; second: number };
+	intensity_class: "warmup" | "work" | "rest" | "cooldown";
+	intensity_type: "percentage";
+	intensity_percent: { min: number; max: number; value: number };
+	flexible: boolean;
+	incline: number;
+	grade: number;
+	distance_unit_selected: string;
+	duration_distance: number;
+	pdc_target: number;
+	rpe_selected: number;
+	zone_selected: number;
+	uuid: string;
+}
+
+export interface StrydWorkoutBlock {
+	repeat: number;
+	segments: StrydWorkoutSegment[];
+	uuid: string;
+}
+
+export interface StrydWorkoutPayload {
+	type: string;
+	title: string;
+	desc: string;
+	blocks: StrydWorkoutBlock[];
+}
+
+export interface StrydCalendarEntry {
+	id: number;
+	date: string;
+	stress: number;
+	duration: number;
+	distance: number;
+}
+
 export interface StrydActivity {
 	id: number;
 	timestamp: number;
@@ -181,6 +221,67 @@ export class StrydClient {
 
 		const latest = valid.reduce((a, b) => (b.created > a.created ? b : a));
 		return latest.critical_power;
+	}
+
+	/** Create a structured workout in the user's Stryd library.
+	 *  Returns the workout ID for subsequent scheduling. */
+	async createWorkout(workout: StrydWorkoutPayload): Promise<number> {
+		const res = await fetch(`${API_BASE}/workouts`, {
+			method: "POST",
+			headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+			body: JSON.stringify(workout),
+			signal: AbortSignal.timeout(API_TIMEOUT_MS),
+		});
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			throw new Error(`Stryd createWorkout failed (HTTP ${res.status}): ${text}`);
+		}
+
+		const data = (await res.json()) as { id: number };
+		return data.id;
+	}
+
+	/** Schedule a workout on the user's Stryd calendar for a given date.
+	 *  The workout then appears in the Stryd app for fetching to the watch. */
+	async scheduleWorkout(workoutId: number, date: Date): Promise<StrydCalendarEntry> {
+		if (!this.userId) throw new Error("StrydClient: not authenticated");
+
+		const d = new Date(date);
+		d.setHours(0, 0, 0, 0);
+		const timestamp = Math.floor(d.getTime() / 1000);
+
+		const res = await fetch(
+			`${API_BASE}/users/${this.userId}/workouts?id=${workoutId}&timestamp=${timestamp}`,
+			{
+				method: "POST",
+				headers: this.authHeaders(),
+				signal: AbortSignal.timeout(API_TIMEOUT_MS),
+			},
+		);
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			throw new Error(`Stryd scheduleWorkout failed (HTTP ${res.status}): ${text}`);
+		}
+
+		return (await res.json()) as StrydCalendarEntry;
+	}
+
+	/** Delete a workout from the user's Stryd calendar. */
+	async deleteCalendarEntry(calendarId: number): Promise<void> {
+		if (!this.userId) throw new Error("StrydClient: not authenticated");
+
+		const res = await fetch(`${API_BASE}/users/${this.userId}/workouts/${calendarId}`, {
+			method: "DELETE",
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(API_TIMEOUT_MS),
+		});
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			throw new Error(`Stryd deleteCalendarEntry failed (HTTP ${res.status}): ${text}`);
+		}
 	}
 
 	get isAuthenticated(): boolean {
