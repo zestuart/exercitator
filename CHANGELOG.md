@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 21 new tests (scorer thresholds, ILR weight dampening, bilateral boost, downshift integration, guard coexistence)
 - **Vigil Phase 4** — surface layer (Praescriptor UI + MCP response)
   - Vigil section on run prescription cards: severity 1 amber advisory, severity 2 amber warning with downshift detail, severity 3 red alert; weighted z-score display with ILR annotation
-  - Data source bar: Vigil status (active/building/inactive, flag count, severity)
+  - Data source bar: Vigil status (active/building/inactive, flag count, severity, baseline run count)
   - `DataSource.vigil` field for rendering pipeline
   - CSS: `.vigil-section`, `.vigil-caution`, `.vigil-alert` with amber/red palette variants
   - 12 new tests (severity levels, weight annotations, swim exclusion, data source bar variants)
@@ -99,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Bilateral severity boost already wired in Phase 3 scorer
   - 8 new Duo-specific tests (asymmetry extraction, L/R derivation, symmetric balance, developing asymmetry, mixed-pod baselines)
 - Praescriptor: refresh button (↻) in header to regenerate prescriptions from fresh data (`POST /api/refresh` invalidates day-level cache)
-- Praescriptor: data source bar showing activity count, device breakdown, wellness window, Stryd CP/enrichment, and generation timestamp
+- Praescriptor: data source bar showing activity count, wellness window, Stryd CP/enrichment, Vigil status with run count, and generation timestamp
 - Stryd critical power used as authoritative FTP for running prescriptions — sourced directly from the foot pod via Stryd PowerCenter API (`/cp/history`), overriding intervals.icu's inferred FTP when Stryd is the detected power source
 - 212 unit and integration tests covering the full engine pipeline, Vigil (FIT parsing, Duo bilateral, DB, metrics, baselines, scoring, integration, rendering), web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 

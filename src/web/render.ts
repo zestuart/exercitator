@@ -219,21 +219,19 @@ function renderVigilDataSource(vigil: VigilSummary | null): string {
 	if (vigil.status === "building") {
 		return `<span class="${cssClass}">${escapeHtml(vigil.summary)}</span>`;
 	}
+	const actMatch = vigil.baselineWindow.match(/\((\d+)/);
+	const runCount = actMatch ? `, ${actMatch[1]} runs` : "";
+
 	if (vigil.severity === 0) {
-		return `<span class="${cssClass}">Vigil: clear</span>`;
+		return `<span class="${cssClass}">Vigil: clear${runCount}</span>`;
 	}
 
 	const flagCount = vigil.flags.length;
-	return `<span class="${cssClass}">Vigil: ${flagCount} flag${flagCount !== 1 ? "s" : ""} (sev ${vigil.severity})</span>`;
+	return `<span class="${cssClass}">Vigil: ${flagCount} flag${flagCount !== 1 ? "s" : ""} (sev ${vigil.severity})${runCount}</span>`;
 }
 
 function renderDataSource(ds: DataSource, generatedAt: string): string {
 	const time = generatedAt.slice(11, 16);
-
-	const deviceParts = Object.entries(ds.activityDevices)
-		.sort((a, b) => b[1] - a[1])
-		.map(([name, count]) => `${escapeHtml(name)} (${count})`)
-		.join(", ");
 
 	const actRange = ds.activityRange
 		? `${ds.activityRange[0]} \u2013 ${ds.activityRange[1]}`
@@ -253,8 +251,6 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 	return `
 	<div class="data-source">
 		<span class="ds-item"><span class="ds-label">Activities</span> ${ds.activityCount} (${actRange})</span>
-		<span class="ds-sep">&middot;</span>
-		<span class="ds-item"><span class="ds-label">Devices</span> ${deviceParts}</span>
 		<span class="ds-sep">&middot;</span>
 		<span class="ds-item"><span class="ds-label">Wellness</span> ${ds.wellnessCount}d (${wellRange})</span>
 		${strydNote ? `<span class="ds-sep">&middot;</span>${strydNote}` : ""}

@@ -217,7 +217,7 @@ describe("Vigil in data source bar", () => {
 			},
 		});
 		const html = renderPage(data);
-		expect(html).toContain("Vigil: clear");
+		expect(html).toContain("Vigil: clear, 12 runs");
 	});
 
 	it("shows flag count and severity when active with flags", () => {
@@ -228,7 +228,7 @@ describe("Vigil in data source bar", () => {
 			},
 		});
 		const html = renderPage(data);
-		expect(html).toContain("Vigil: 2 flags (sev 2)");
+		expect(html).toContain("Vigil: 2 flags (sev 2), 12 runs");
 	});
 
 	it("shows baseline building status", () => {
