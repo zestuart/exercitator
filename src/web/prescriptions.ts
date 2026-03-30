@@ -86,6 +86,14 @@ export async function generatePrescriptions(
 		: null;
 	const swim = hasSport("Swim") ? suggestWorkoutFromData(data, "Swim", now) : null;
 
+	// Vigil wellness write: update injury field when severity ≥ 2 (run prescription only).
+	// Severity 2 → Niggle (2), Severity 3 → Poor (3). Never write 4 (Injured) automatically.
+	if (run?.vigil && (run.vigil.severity === 2 || run.vigil.severity === 3)) {
+		writeVigilInjury(client, run.vigil.severity).catch((err) =>
+			console.error("Vigil wellness write failed:", err),
+		);
+	}
+
 	const dataSource = buildDataSource(data, strydEnriched, strydCp, run?.vigil ?? null);
 	const prescription: Prescription = {
 		run,
@@ -133,6 +141,13 @@ async function runVigilBackfillIfNeeded(
 	} catch (err) {
 		console.error("Vigil backfill failed:", err);
 	}
+}
+
+async function writeVigilInjury(client: IntervalsClient, severity: 2 | 3): Promise<void> {
+	const today = new Date().toISOString().slice(0, 10);
+	// intervals.icu injury field: 2 = Niggle, 3 = Poor, 4 = Injured (never automatic)
+	const injury = severity === 3 ? 3 : 2;
+	await client.put(`/athlete/${client.athleteId}/wellness/${today}`, { injury });
 }
 
 function buildDataSource(

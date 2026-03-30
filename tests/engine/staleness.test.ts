@@ -35,6 +35,8 @@ function makeActivity(
 		icu_intensity: null,
 		external_id: null,
 		source: null,
+		session_rpe: null,
+		kg_lifted: null,
 		...overrides,
 	};
 }

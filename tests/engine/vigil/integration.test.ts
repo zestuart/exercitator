@@ -30,6 +30,8 @@ function makeActivity(overrides: Partial<ActivitySummary> = {}): ActivitySummary
 		icu_intensity: 72,
 		external_id: null,
 		source: null,
+		session_rpe: null,
+		kg_lifted: null,
 		...overrides,
 	};
 }

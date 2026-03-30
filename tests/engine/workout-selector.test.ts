@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CrossTrainingStrain } from "../../src/engine/cross-training-strain.js";
 import type { ActivitySummary } from "../../src/engine/types.js";
 import { selectWorkoutCategory } from "../../src/engine/workout-selector.js";
 
@@ -39,6 +40,8 @@ function makeActivity(
 		icu_intensity: null,
 		external_id: null,
 		source: null,
+		session_rpe: null,
+		kg_lifted: null,
 		...overrides,
 	};
 }
@@ -209,6 +212,128 @@ describe("selectWorkoutCategory", () => {
 
 		// Readiness 64 + hard session yesterday (via intensity) → base, not tempo
 		expect(selectWorkoutCategory(64, [enrichedStrydRun, olderEasyRun, longRun], "Run", NOW)).toBe(
+			"base",
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Cross-training guard (#20) and same-day cap (#21)
+// ---------------------------------------------------------------------------
+
+function makeStrain(
+	activityId: string,
+	level: "light" | "moderate" | "hard" | "unknown",
+): CrossTrainingStrain {
+	return {
+		activityId,
+		activityType: "WeightTraining",
+		level,
+		source: level === "unknown" ? "awaiting_input" : "session_rpe",
+		summary: `Test strain: ${level}`,
+	};
+}
+
+describe("cross-training hard-session guard (#20)", () => {
+	it("hard weight session yesterday prevents intervals", () => {
+		const wtYesterday = makeActivity("WeightTraining", 1, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const longRun = { ...makeActivity("Run", 5, 60), moving_time: 6000 }; // prevent long trigger
+		const activities = [wtYesterday, easyRun, longRun];
+		const strains = new Map([[wtYesterday.id, makeStrain(wtYesterday.id, "hard")]]);
+
+		// Readiness 75 would normally give intervals
+		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"base",
+		);
+	});
+
+	it("moderate weight session yesterday prevents intervals", () => {
+		const wtYesterday = makeActivity("WeightTraining", 1, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const longRun = { ...makeActivity("Run", 5, 60), moving_time: 6000 };
+		const activities = [wtYesterday, easyRun, longRun];
+		const strains = new Map([[wtYesterday.id, makeStrain(wtYesterday.id, "moderate")]]);
+
+		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"base",
+		);
+	});
+
+	it("light weight session yesterday does not prevent intervals", () => {
+		const wtYesterday = makeActivity("WeightTraining", 1, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const longRun = { ...makeActivity("Run", 5, 60), moving_time: 6000 };
+		const activities = [wtYesterday, easyRun, longRun];
+		const strains = new Map([[wtYesterday.id, makeStrain(wtYesterday.id, "light")]]);
+
+		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"intervals",
+		);
+	});
+
+	it("hard weight session 3 days ago does not prevent intervals", () => {
+		const wt3DaysAgo = makeActivity("WeightTraining", 3, 20);
+		const easyRun = makeActivity("Run", 5, 20);
+		const activities = [wt3DaysAgo, easyRun];
+		const strains = new Map([[wt3DaysAgo.id, makeStrain(wt3DaysAgo.id, "hard")]]);
+
+		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"intervals",
+		);
+	});
+
+	it("backward compat: no crossTrainingStrains param works", () => {
+		const activities = [makeActivity("Run", 4, 20)];
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+	});
+});
+
+describe("same-day cross-training cap (#21)", () => {
+	it("hard strain today caps at recovery", () => {
+		const wtToday = makeActivity("WeightTraining", 0, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const activities = [wtToday, easyRun];
+		const strains = new Map([[wtToday.id, makeStrain(wtToday.id, "hard")]]);
+
+		// Readiness 85 would normally give intervals
+		expect(selectWorkoutCategory(85, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"recovery",
+		);
+	});
+
+	it("moderate strain today caps at base", () => {
+		const wtToday = makeActivity("WeightTraining", 0, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const activities = [wtToday, easyRun];
+		const strains = new Map([[wtToday.id, makeStrain(wtToday.id, "moderate")]]);
+
+		expect(selectWorkoutCategory(85, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"base",
+		);
+	});
+
+	it("light strain today does not cap", () => {
+		const wtToday = makeActivity("WeightTraining", 0, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const activities = [wtToday, easyRun];
+		const strains = new Map([[wtToday.id, makeStrain(wtToday.id, "light")]]);
+
+		expect(selectWorkoutCategory(85, activities, "Run", NOW, undefined, undefined, strains)).toBe(
+			"intervals",
+		);
+	});
+
+	it("no weight session today means no cap", () => {
+		const wtYesterday = makeActivity("WeightTraining", 1, 20);
+		const easyRun = makeActivity("Run", 4, 20);
+		const longRun = { ...makeActivity("Run", 5, 60), moving_time: 6000 }; // prevent long trigger
+		const activities = [wtYesterday, easyRun, longRun];
+		const strains = new Map([[wtYesterday.id, makeStrain(wtYesterday.id, "hard")]]);
+
+		// Hard yesterday + guard blocks intervals, but no same-day cap
+		// With readiness 75, daysSinceHard < 2 → base (from guard)
+		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
 			"base",
 		);
 	});

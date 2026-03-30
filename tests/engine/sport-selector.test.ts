@@ -32,6 +32,8 @@ function makeActivity(type: string, daysAgo: number, load = 50): ActivitySummary
 		icu_intensity: null,
 		external_id: null,
 		source: null,
+		session_rpe: null,
+		kg_lifted: null,
 	};
 }
 

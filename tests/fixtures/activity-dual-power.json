@@ -35,5 +35,7 @@
 	"source": "GARMIN_CONNECT",
 	"_comment_garmin_avg_watts": 229,
 	"_comment_stryd_avg_watts": 203,
-	"_comment_ratio": 0.886
+	"_comment_ratio": 0.886,
+	"session_rpe": null,
+	"kg_lifted": null
 }

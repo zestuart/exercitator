@@ -101,12 +101,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Praescriptor: refresh button (↻) in header to regenerate prescriptions from fresh data (`POST /api/refresh` invalidates day-level cache)
 - Praescriptor: data source bar showing activity count, wellness window, Stryd CP/enrichment, Vigil status with run count, and generation timestamp
 - Stryd critical power used as authoritative FTP for running prescriptions — sourced directly from the foot pod via Stryd PowerCenter API (`/cp/history`), overriding intervals.icu's inferred FTP when Stryd is the detected power source
-- 212 unit and integration tests covering the full engine pipeline, Vigil (FIT parsing, Duo bilateral, DB, metrics, baselines, scoring, integration, rendering), web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
+- **Cross-training strain assessment** (`src/engine/cross-training-strain.ts`) — three-tier cascade for weight training and climbing activities (issues #17–23)
+  - Activity classification: `CROSS_TRAINING_TYPES` (WeightTraining, RockClimbing, IndoorClimbing) with `isCrossTraining()` and `findTodayCrossTraining()` helpers
+  - Tier 1: In-session HRV strain from R-R intervals — `flattenHrvStream()`, `computeRmssd()`, RMSSD vs rolling baseline (lower = harder)
+  - Tier 2: `session_rpe` strain (duration × RPE) vs rolling 10-activity baseline with absolute fallback thresholds (>200 moderate, >400 hard)
+  - Tier 3: Unknown strain → prescription blocked until user provides RPE via MCP tool
+  - `CrossTrainingStrain` result type with source tracking (hrv/session_rpe/awaiting_input)
+- Extended `ActivitySummary` with `session_rpe` and `kg_lifted` fields (Garmin-computed, for weight training)
+- Extended `WorkoutSuggestion` with `status` ('ready'/'awaiting_input') and `awaitingInput` metadata for cross-training gating
+- Cross-training hard-session guard in `selectWorkoutCategory()`: moderate/hard weight sessions prevent back-to-back endurance intensity (issue #20)
+- Same-day cross-training cap: hard → recovery, moderate → base, light → no cap (issue #21)
+- Prescription gating: blocks endurance prescription when same-day cross-training has unknown strain, returns `awaiting_input` status (issue #22)
+- `submit_cross_training_rpe` MCP tool: accepts RPE (1–10) for a cross-training activity, writes to intervals.icu, enables re-running suggest_workout
+- Vigil wellness injury write: `PUT /athlete/{id}/wellness/{date}` with `injury` field — severity 2 → Niggle (2), severity 3 → Poor (3), never 4 (Injured) automatically
+- Stryd RPE as hard-session signal: Vigil metrics' `strydRpe` ≥ 7 augments `perceived_exertion` on running activities, feeding into `isHardSession()` detection
+- 256 unit and integration tests covering the full engine pipeline, Vigil (FIT parsing, Duo bilateral, DB, metrics, baselines, scoring, integration, rendering), cross-training strain (classification, HRV, session_rpe, cascade), workout-selector (guard, cap), web prescriptions, Stryd client, enricher, intervals.icu format, send dedup, and invocations
 - Praescriptor multi-user support: URL-based routing (`/ze/`, `/pam/`) with per-user intervals.icu API keys, sport selections, and feature flags (deity invocations, Stryd enrichment). Per-user prescription cache, send dedup, and graceful 503 when a user's API key is not configured. Single-card layout for users with one sport.
 - Praescriptor "Send to Stryd" button: pushes running workout to the athlete's Stryd calendar via `POST /b/api/v1/workouts` (create) + `POST /b/api/v1/users/{id}/workouts` (schedule). Power targets expressed as CP% matching our zone model. Interval blocks use Stryd's repeat model with work+rest segment pairs. Server-side dedup with force-resend (deletes previous calendar entry). Visible only on run cards for users with `stryd: true`.
 
 ### Changed
 - Praescriptor colour palette: dark theme replaced with "Andalucían" Mediterranean light theme — warm off-white background, sandstone cards, saffron/olive/terracotta accents
+- Praescriptor UX overhaul: cards with white surface + soft shadow + coloured accent stripe, sport tag as filled pill, readiness score top-right, metadata as pill badges, segments with sport-coloured left border + hover highlight, send buttons fill on hover, stacked on mobile
 - OAuth passphrase input: added `autocomplete="off"` to prevent password manager autofill overriding user input
 
 ### Fixed

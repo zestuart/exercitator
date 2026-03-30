@@ -23,5 +23,7 @@
 	"total_elevation_gain": 35,
 	"icu_intensity": 90.07,
 	"external_id": "2026-03-27-111107-Outdoor Running-Stryd.fit",
-	"source": "OAUTH_CLIENT"
+	"source": "OAUTH_CLIENT",
+	"session_rpe": null,
+	"kg_lifted": null
 }

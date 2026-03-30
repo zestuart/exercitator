@@ -7,7 +7,14 @@
  *   suggestWorkout()               — auto-selects sport, then runs pipeline
  */
 
+import { getVigilMetrics } from "../db.js";
 import type { IntervalsClient } from "../intervals.js";
+import {
+	type CrossTrainingStrain,
+	assessCrossTrainingStrain,
+	findTodayCrossTraining,
+	isCrossTraining,
+} from "./cross-training-strain.js";
 import { detectPowerSource } from "./power-source.js";
 import { computeReadiness } from "./readiness.js";
 import { selectSport } from "./sport-selector.js";
@@ -24,6 +31,9 @@ import type {
 import { runVigilPipeline } from "./vigil/index.js";
 import { buildWorkout } from "./workout-builder.js";
 import { selectWorkoutCategory } from "./workout-selector.js";
+
+// Re-export for Praescriptor consumption
+export type { VigilResult } from "./vigil/index.js";
 
 function dateStr(d: Date): string {
 	return d.toISOString().slice(0, 10);
@@ -75,6 +85,44 @@ export async function fetchTrainingData(client: IntervalsClient): Promise<Traini
 }
 
 // ---------------------------------------------------------------------------
+// Stryd RPE augmentation
+// ---------------------------------------------------------------------------
+
+/**
+ * Augment activities with Stryd RPE from vigil_metrics.
+ * If an activity has no perceived_exertion but has a Stryd RPE ≥ 7,
+ * set perceived_exertion to the Stryd RPE so isHardSession() detects it.
+ */
+function augmentStrydRpe(activities: ActivitySummary[], athleteId: string, now: Date): void {
+	const d14Ago = new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
+	const newest = now.toISOString().slice(0, 10);
+
+	let metrics: ReturnType<typeof getVigilMetrics>;
+	try {
+		metrics = getVigilMetrics(athleteId, "Run", d14Ago, newest);
+	} catch {
+		return; // DB not available (e.g. in tests without DB)
+	}
+
+	// Build a map from activity date → Stryd RPE for quick lookup
+	const rpeByDate = new Map<string, number>();
+	for (const m of metrics) {
+		if (m.strydRpe != null && m.strydRpe >= 7) {
+			rpeByDate.set(m.activityDate, m.strydRpe);
+		}
+	}
+
+	for (const a of activities) {
+		if (a.perceived_exertion != null) continue;
+		const date = a.start_date_local.slice(0, 10);
+		const strydRpe = rpeByDate.get(date);
+		if (strydRpe != null) {
+			a.perceived_exertion = strydRpe;
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Pipeline for a fixed sport
 // ---------------------------------------------------------------------------
 
@@ -117,6 +165,54 @@ export function suggestWorkoutFromData(
 	const isRunSport = ["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport);
 	const vigilResult = isRunSport ? runVigilPipeline(athleteId, "Run", now) : null;
 
+	// Stryd RPE as hard-session signal: augment perceived_exertion from Vigil metrics.
+	// Only for running sports where we have Stryd data in the DB.
+	if (isRunSport && athleteId !== "0") {
+		augmentStrydRpe(activities, athleteId, now);
+	}
+
+	// Cross-training strain assessment: assess today's weight/climbing activities.
+	// Build strain map for all recent cross-training (for hard-session guard).
+	const crossTrainingStrains = new Map<string, CrossTrainingStrain>();
+	const crossTrainingActivities = activities.filter((a) => isCrossTraining(a.type));
+	for (const ct of crossTrainingActivities) {
+		// HRV stream would require an API call — skip tier 1 in the sync pipeline.
+		// Tier 1 (HRV) is available via the async Praescriptor path.
+		const strain = assessCrossTrainingStrain(ct, activities);
+		crossTrainingStrains.set(ct.id, strain);
+	}
+
+	// Prescription gating: if any same-day cross-training has unknown strain, block.
+	const todayCrossTraining = findTodayCrossTraining(activities, now);
+	for (const ct of todayCrossTraining) {
+		const strain = crossTrainingStrains.get(ct.id);
+		if (strain && strain.level === "unknown") {
+			return {
+				sport,
+				category: "base",
+				title: "Awaiting cross-training RPE",
+				rationale: strain.summary,
+				total_duration_secs: 0,
+				estimated_load: 0,
+				segments: [],
+				readiness_score: readiness.score,
+				sport_selection_reason: sportSelectionReason ?? `Forced: ${sport}`,
+				terrain: "any",
+				terrain_rationale: "Pending cross-training strain assessment",
+				power_context: powerContext,
+				warnings: [`Cross-training strain unknown: ${ct.type} (${ct.id})`],
+				status: "awaiting_input",
+				awaitingInput: {
+					reason: "cross_training_rpe",
+					activityId: ct.id,
+					activityName: `${ct.type} ${ct.start_date_local.slice(0, 10)}`,
+					activityType: ct.type,
+					prompt: `Rate your ${ct.type.replace(/([A-Z])/g, " $1").trim()} session (1–10 RPE):`,
+				},
+			};
+		}
+	}
+
 	const readinessCategory = selectWorkoutCategory(
 		readiness.score,
 		activities,
@@ -124,6 +220,7 @@ export function suggestWorkoutFromData(
 		now,
 		powerContext,
 		vigilResult?.alert,
+		crossTrainingStrains,
 	);
 	const category = applyStaleness(readinessCategory, staleness.tier);
 

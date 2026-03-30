@@ -28,6 +28,10 @@ export interface ActivitySummary {
 	external_id: string | null;
 	/** Upload source (e.g. "GARMIN_CONNECT", "OAUTH_CLIENT", "FILE_UPLOAD") */
 	source: string | null;
+	/** Duration (seconds) × RPE (1–10). Garmin-computed for weight training. */
+	session_rpe: number | null;
+	/** Total kilograms lifted in the session. Garmin-computed. */
+	kg_lifted: number | null;
 }
 
 /** Wellness record for a single day */
@@ -108,6 +112,15 @@ export interface VigilSummary {
 	status: "active" | "building" | "inactive";
 }
 
+/** Awaiting-input metadata when prescription is blocked. */
+export interface AwaitingInput {
+	reason: "cross_training_rpe";
+	activityId: string;
+	activityName: string;
+	activityType: string;
+	prompt: string;
+}
+
 /** Complete workout suggestion returned by the engine */
 export interface WorkoutSuggestion {
 	sport: "Run" | "Swim";
@@ -124,4 +137,8 @@ export interface WorkoutSuggestion {
 	power_context: PowerContext;
 	warnings: string[];
 	vigil?: VigilSummary;
+	/** 'ready' (default) or 'awaiting_input' when cross-training strain is unknown. */
+	status?: "ready" | "awaiting_input";
+	/** Present when status is 'awaiting_input'. */
+	awaitingInput?: AwaitingInput;
 }

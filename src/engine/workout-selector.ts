@@ -2,6 +2,7 @@
  * Maps readiness score + training context to a WorkoutCategory.
  */
 
+import type { CrossTrainingStrain } from "./cross-training-strain.js";
 import { getActivityLoad } from "./power-source.js";
 import type { ActivitySummary, PowerContext, WorkoutCategory } from "./types.js";
 import type { VigilAlert } from "./vigil/types.js";
@@ -97,6 +98,47 @@ function hasLongSession(activities: ActivitySummary[], thresholdSecs: number, no
 	);
 }
 
+/** Count days since a moderate or hard cross-training session. */
+function daysSinceHardCrossTraining(
+	crossTrainingStrains: Map<string, CrossTrainingStrain>,
+	now: Date,
+	activities: ActivitySummary[],
+): number {
+	let minDays = 999;
+	for (const [activityId, strain] of crossTrainingStrains) {
+		if (strain.level !== "moderate" && strain.level !== "hard") continue;
+		const activity = activities.find((a) => a.id === activityId);
+		if (!activity) continue;
+		const days = daysAgo(activity.start_date_local, now);
+		if (days < minDays) minDays = days;
+	}
+	return minDays;
+}
+
+/** Get same-day cross-training cap. Returns null if no cap applies. */
+function sameDayCrossTrainingCap(
+	crossTrainingStrains: Map<string, CrossTrainingStrain>,
+	activities: ActivitySummary[],
+	now: Date,
+): WorkoutCategory | null {
+	const today = now.toISOString().slice(0, 10);
+	let worstLevel: "light" | "moderate" | "hard" | "unknown" = "light";
+
+	for (const [activityId, strain] of crossTrainingStrains) {
+		const activity = activities.find((a) => a.id === activityId);
+		if (!activity) continue;
+		if (activity.start_date_local.slice(0, 10) !== today) continue;
+		// Track worst strain seen today
+		if (strain.level === "hard") worstLevel = "hard";
+		else if (strain.level === "moderate" && worstLevel !== "hard") worstLevel = "moderate";
+		// unknown is handled upstream in suggest.ts (prescription gating)
+	}
+
+	if (worstLevel === "hard") return "recovery";
+	if (worstLevel === "moderate") return "base";
+	return null; // light or no same-day activity → no cap
+}
+
 /** Estimate sport-specific CTL from 14-day activity window. */
 function estimateSportCtl(
 	activities: ActivitySummary[],
@@ -117,6 +159,7 @@ export function selectWorkoutCategory(
 	now: Date = new Date(),
 	powerContext?: PowerContext,
 	vigilAlert?: VigilAlert,
+	crossTrainingStrains?: Map<string, CrossTrainingStrain>,
 ): WorkoutCategory {
 	// Default power context if not provided (backward compatibility)
 	const ctx: PowerContext = powerContext ?? {
@@ -131,7 +174,13 @@ export function selectWorkoutCategory(
 	// Base category from readiness
 	let category: WorkoutCategory;
 	const sportCtl = estimateSportCtl(activities, sport, ctx);
-	const daysSinceHard = daysSinceHardSession(activities, sport, sportCtl, now, ctx);
+	let daysSinceHard = daysSinceHardSession(activities, sport, sportCtl, now, ctx);
+
+	// Cross-training hard-session guard: moderate/hard weights count as a hard session (#20)
+	if (crossTrainingStrains && crossTrainingStrains.size > 0) {
+		const daysSinceHardCT = daysSinceHardCrossTraining(crossTrainingStrains, now, activities);
+		daysSinceHard = Math.min(daysSinceHard, daysSinceHardCT);
+	}
 
 	if (readinessScore <= 20) {
 		return "rest";
@@ -169,6 +218,26 @@ export function selectWorkoutCategory(
 		const longThreshold = sport === "Swim" ? 3600 : 5400; // 60min swim, 90min run
 		if (!hasLongSession(activities, longThreshold, now)) {
 			category = "long";
+		}
+	}
+
+	// Same-day cross-training cap (#21): limit category after weights today
+	if (crossTrainingStrains && crossTrainingStrains.size > 0) {
+		const cap = sameDayCrossTrainingCap(crossTrainingStrains, activities, now);
+		if (cap) {
+			const capOrder: WorkoutCategory[] = [
+				"rest",
+				"recovery",
+				"base",
+				"tempo",
+				"intervals",
+				"long",
+			];
+			const catIdx = capOrder.indexOf(category);
+			const capIdx = capOrder.indexOf(cap);
+			if (catIdx > capIdx) {
+				category = cap;
+			}
 		}
 	}
 
