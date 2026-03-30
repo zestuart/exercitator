@@ -209,7 +209,7 @@ function renderCard(
 			<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
 				&#x2197; Send to intervals.icu
 			</button>
-			${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #6b4ce6">&#x2197; Send to Stryd</button>` : ""}
+			${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #5a3eb8">&#x2197; Send to Stryd</button>` : ""}
 		</div>
 	</div>`;
 }
@@ -269,8 +269,8 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 export function renderPage(data: RenderData): string {
 	const dateStr = data.generatedAt.slice(0, 10);
 	const day = dayName(data.generatedAt);
-	const runAccent = "#2d8a4e";
-	const swimAccent = "#2d6e8a";
+	const runAccent = "#3a7a4a";
+	const swimAccent = "#1e5a7e";
 	const { profile } = data;
 	const singleCard = (data.run ? 1 : 0) + (data.swim ? 1 : 0) === 1;
 
@@ -330,20 +330,20 @@ export function renderPage(data: RenderData): string {
 
 const CSS = `
 :root {
-	--bg: #0a0a0c;
-	--surface: #111114;
-	--border: #1e1e24;
-	--gold: #c9a84c;
-	--gold-dim: #8a7234;
-	--gold-glow: rgba(201, 168, 76, 0.12);
-	--silver: #a8a8b0;
-	--text: #d4d4d8;
-	--text-dim: #71717a;
-	--z2: #2d8a4e;
-	--z2-glow: rgba(45, 138, 78, 0.15);
-	--swim: #2d6e8a;
-	--swim-glow: rgba(45, 110, 138, 0.15);
-	--warn: #b45309;
+	--bg: #f4efe6;
+	--surface: #e8e0d0;
+	--border: #cfc4ae;
+	--gold: #c48c28;
+	--gold-dim: #9a6e20;
+	--gold-glow: rgba(196, 140, 40, 0.12);
+	--silver: #7e8680;
+	--text: #302820;
+	--text-dim: #7a6e5e;
+	--z2: #3a7a4a;
+	--z2-glow: rgba(58, 122, 74, 0.15);
+	--swim: #1e5a7e;
+	--swim-glow: rgba(30, 90, 126, 0.15);
+	--warn: #c44e22;
 	--font-display: 'Cormorant Garamond', serif;
 	--font-mono: 'JetBrains Mono', monospace;
 }
@@ -529,8 +529,8 @@ body {
 }
 
 .warnings {
-	background: rgba(180, 83, 9, 0.1);
-	border: 1px solid rgba(180, 83, 9, 0.3);
+	background: rgba(196, 78, 34, 0.08);
+	border: 1px solid rgba(196, 78, 34, 0.25);
 	border-radius: 4px;
 	padding: 0.6rem 1rem;
 	margin: 0.8rem 0;
@@ -555,13 +555,13 @@ body {
 }
 
 .vigil-caution {
-	background: rgba(180, 83, 9, 0.1);
-	border: 1px solid rgba(180, 83, 9, 0.3);
+	background: rgba(196, 78, 34, 0.08);
+	border: 1px solid rgba(196, 78, 34, 0.25);
 }
 
 .vigil-alert {
-	background: rgba(180, 40, 40, 0.12);
-	border: 1px solid rgba(180, 40, 40, 0.4);
+	background: rgba(168, 48, 48, 0.1);
+	border: 1px solid rgba(168, 48, 48, 0.3);
 }
 
 .vigil-header {
@@ -571,7 +571,7 @@ body {
 }
 
 .vigil-caution .vigil-header { color: var(--warn); }
-.vigil-alert .vigil-header { color: #c04040; }
+.vigil-alert .vigil-header { color: #a83030; }
 
 .vigil-flags {
 	font-size: 0.75rem;
@@ -601,7 +601,7 @@ body {
 }
 
 .segment {
-	background: rgba(255, 255, 255, 0.02);
+	background: rgba(255, 255, 255, 0.45);
 	border: 1px solid var(--border);
 	border-radius: 4px;
 	padding: 0.6rem 0.8rem;

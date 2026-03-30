@@ -211,7 +211,7 @@ input[type=password]{width:100%;padding:.5rem;margin:.5rem 0}button{padding:.5re
 <body><h1>Exercitator</h1><p>Enter your passphrase to authorise this client.</p>
 ${error ? `<p class="error">${error}</p>` : ""}
 <form method="POST" action="/oauth/authorize?${qs}">
-<input type="password" name="passphrase" required autofocus>
+<input type="password" name="passphrase" required autofocus autocomplete="off">
 <button type="submit">Authorise</button></form></body></html>`;
 }
 

@@ -136,6 +136,13 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Fix**: Renamed the web container from `praescriptor` to `praescriptor-web` (via `container_name: praescriptor-web`). Updated the serve config to proxy to `http://praescriptor-web:3847`. The Tailscale hostname stays `praescriptor` (for the public-facing URL) while the Docker container name is distinct.
 **Prevention**: When a Tailscale sidecar uses `hostname: X`, never name the proxied container `X`. Use a different `container_name` (e.g. `X-web`, `X-app`) so Docker DNS and Tailscale MagicDNS don't collide. The existing exercitator setup already did this correctly: `hostname: exercitator` + `container_name: exercitator-mcp`.
 
+## 2026-03-29 — OAuth "wrong password" caused by browser password manager autofill
+
+**What happened**: User reported "wrong password" when authenticating at the OAuth passphrase gate. The passphrase was confirmed correct (copy-paste verified in plain text). curl POST from the command line succeeded (HTTP 302).
+**Root cause**: The browser's password manager had `Hotcrumpet3579` (14 chars) saved for `exercitator.tail7ab379.ts.net` and was silently overwriting the clipboard paste with the saved credential. The server expected `praescriptor-fortis` (19 chars). Diagnostic hex logging of the POST body confirmed the mismatch — the browser was sending a value the user never typed.
+**Fix**: Changed the passphrase to `Hotcrumpet3579` to match the password manager entry. Added `autocomplete="off"` to the password input to reduce future autofill interference (though browsers may ignore this).
+**Prevention**: When debugging "wrong password" issues where the user insists the input is correct, add server-side diagnostic logging to see what was actually received. Password manager autofill on `<input type="password">` fields is invisible to the user and can override clipboard paste. The `autocomplete="off"` attribute is a best-effort mitigation — not all browsers respect it.
+
 ## 2026-03-29 — IntervalsClient.athleteId "0" is an alias, not a unique identifier
 
 **What happened**: Per-user Vigil isolation (athlete_id column in vigil_metrics/baselines) was ineffective — both Ze and Pam resolved to `client.athleteId = "0"`, so Ze's Vigil data blocked Pam's 90-day backfill.

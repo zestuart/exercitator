@@ -105,6 +105,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Praescriptor multi-user support: URL-based routing (`/ze/`, `/pam/`) with per-user intervals.icu API keys, sport selections, and feature flags (deity invocations, Stryd enrichment). Per-user prescription cache, send dedup, and graceful 503 when a user's API key is not configured. Single-card layout for users with one sport.
 - Praescriptor "Send to Stryd" button: pushes running workout to the athlete's Stryd calendar via `POST /b/api/v1/workouts` (create) + `POST /b/api/v1/users/{id}/workouts` (schedule). Power targets expressed as CP% matching our zone model. Interval blocks use Stryd's repeat model with work+rest segment pairs. Server-side dedup with force-resend (deletes previous calendar entry). Visible only on run cards for users with `stryd: true`.
 
+### Changed
+- Praescriptor colour palette: dark theme replaced with "Andalucían" Mediterranean light theme — warm off-white background, sandstone cards, saffron/olive/terracotta accents
+- OAuth passphrase input: added `autocomplete="off"` to prevent password manager autofill overriding user input
+
 ### Fixed
 - Vigil pipeline now runs for all running sport types (TrailRun, VirtualRun, Treadmill), not just "Run" — normalises to "Run" for Stryd data queries since Stryd stores all activities as "Run" regardless of intervals.icu classification
 - Power source detection for Apple Watch + Stryd: Stryd watchOS app records `power_field: "power"` (lowercase) without CIQ stream markers, causing false Garmin correction (0.87×). Now detected via `external_id` containing "Stryd" + Apple Watch `device_name` pattern — no correction applied (fixes #8)
