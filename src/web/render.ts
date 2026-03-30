@@ -102,7 +102,7 @@ function renderSegment(
 		<div class="segment">
 			<div class="segment-header">
 				<span class="segment-name">${escapeHtml(seg.name)}</span>
-				<span class="segment-duration" style="color: ${accent}">${dur}</span>
+				<span class="segment-duration">${dur}</span>
 			</div>
 			<div class="segment-target">${repeatInfo}${escapeHtml(seg.target_description)}${guide ? ` <span class="zone-guide">${guide}</span>` : ""}</div>
 		</div>`;
@@ -165,51 +165,59 @@ function renderCard(
 	const sportEndpoint = suggestion.sport.toLowerCase();
 
 	return `
-	<div class="card ${sportClass}">
-		<div class="card-header">
-			<span class="sport-tag" style="border-color: ${accent}; color: ${accent}">${sportTag}</span>
-			<h2 class="card-title">${escapeHtml(suggestion.title)}</h2>
-			<p class="card-subtitle">${escapeHtml(suggestion.category)} &middot; ${formatDuration(suggestion.total_duration_secs)} &middot; ~${suggestion.estimated_load} load</p>
-		</div>
+	<div class="card ${sportClass}" style="--card-accent: ${accent}">
+		<div class="card-accent"></div>
+		<div class="card-body">
+			<div class="card-header">
+				<div class="card-header-top">
+					<span class="sport-tag">${sportTag}</span>
+					<div class="readiness-block">
+						<div class="readiness-score">${suggestion.readiness_score}</div>
+						<div class="readiness-label">readiness</div>
+					</div>
+				</div>
+				<h2 class="card-title">${escapeHtml(suggestion.title)}</h2>
+				<div class="card-meta">
+					<span class="meta-pill">${escapeHtml(suggestion.category)}</span>
+					<span class="meta-pill">${formatDuration(suggestion.total_duration_secs)}</span>
+					<span class="meta-pill">~${suggestion.estimated_load} load</span>
+				</div>
+			</div>
 
-		<blockquote class="invocation" style="border-left-color: ${accent}">
-			<p>${escapeHtml(invocations.opening)}</p>
-		</blockquote>
+			<blockquote class="invocation" style="border-left-color: ${accent}">
+				<p>${escapeHtml(invocations.opening)}</p>
+			</blockquote>
 
-		<div class="readiness-block">
-			<div class="readiness-score" style="color: ${accent}">${suggestion.readiness_score}</div>
-			<div class="readiness-label">readiness</div>
-		</div>
+			${renderWarnings(suggestion.warnings)}
 
-		${renderWarnings(suggestion.warnings)}
+			${renderVigilSection(suggestion.vigil)}
 
-		${renderVigilSection(suggestion.vigil)}
+			<div class="segments">
+				${segments}
+			</div>
 
-		<div class="segments">
-			${segments}
-		</div>
+			<div class="terrain-block">
+				<span class="terrain-label">Terrain</span>
+				<span class="terrain-value">${escapeHtml(suggestion.terrain)}</span>
+				<span class="terrain-rationale">${escapeHtml(suggestion.terrain_rationale)}</span>
+			</div>
 
-		<div class="terrain-block">
-			<span class="terrain-label">Terrain:</span>
-			<span class="terrain-value">${escapeHtml(suggestion.terrain)}</span>
-			<span class="terrain-rationale">${escapeHtml(suggestion.terrain_rationale)}</span>
-		</div>
+			<div class="rationale-section">
+				<h3 class="rationale-header">${escapeHtml(invocations.rationale_header)}</h3>
+				<p class="rationale-text">${escapeHtml(suggestion.rationale)}</p>
+				<p class="rationale-text sport-reason">${escapeHtml(suggestion.sport_selection_reason)}</p>
+			</div>
 
-		<div class="rationale-section">
-			<h3 class="rationale-header">${escapeHtml(invocations.rationale_header)}</h3>
-			<p class="rationale-text">${escapeHtml(suggestion.rationale)}</p>
-			<p class="rationale-text sport-reason">${escapeHtml(suggestion.sport_selection_reason)}</p>
-		</div>
+			<blockquote class="closing" style="border-left-color: ${accent}">
+				<p>${escapeHtml(invocations.closing)}</p>
+			</blockquote>
 
-		<blockquote class="closing" style="border-left-color: ${accent}">
-			<p>${escapeHtml(invocations.closing)}</p>
-		</blockquote>
-
-		<div class="send-buttons">
-			<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
-				&#x2197; Send to intervals.icu
-			</button>
-			${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #5a3eb8">&#x2197; Send to Stryd</button>` : ""}
+			<div class="send-buttons">
+				<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
+					&#x2197; Send to intervals.icu
+				</button>
+				${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #5a3eb8">&#x2197; Send to Stryd</button>` : ""}
+			</div>
 		</div>
 	</div>`;
 }
@@ -331,11 +339,11 @@ export function renderPage(data: RenderData): string {
 const CSS = `
 :root {
 	--bg: #f4efe6;
-	--surface: #e8e0d0;
-	--border: #cfc4ae;
+	--surface: #fffcf7;
+	--border: #ddd5c5;
 	--gold: #c48c28;
 	--gold-dim: #9a6e20;
-	--gold-glow: rgba(196, 140, 40, 0.12);
+	--gold-glow: rgba(196, 140, 40, 0.08);
 	--silver: #7e8680;
 	--text: #302820;
 	--text-dim: #7a6e5e;
@@ -346,6 +354,9 @@ const CSS = `
 	--warn: #c44e22;
 	--font-display: 'Cormorant Garamond', serif;
 	--font-mono: 'JetBrains Mono', monospace;
+	--shadow-sm: 0 1px 3px rgba(48, 40, 32, 0.06);
+	--shadow-md: 0 4px 12px rgba(48, 40, 32, 0.08);
+	--radius: 10px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -354,22 +365,24 @@ body {
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--font-mono);
-	font-size: 14px;
-	line-height: 1.6;
+	font-size: 13px;
+	line-height: 1.65;
 	min-height: 100vh;
+	-webkit-font-smoothing: antialiased;
 }
+
+/* --- Header --- */
 
 .page-header {
 	text-align: center;
-	padding: 2rem 1rem 1rem;
-	border-bottom: 1px solid var(--border);
+	padding: 2.5rem 1rem 1.2rem;
 }
 
 .page-header h1 {
 	font-family: var(--font-display);
 	font-weight: 600;
-	font-size: 1.8rem;
-	letter-spacing: 0.2em;
+	font-size: 2rem;
+	letter-spacing: 0.25em;
 	color: var(--gold);
 }
 
@@ -378,34 +391,36 @@ body {
 	align-items: center;
 	justify-content: center;
 	gap: 0.6rem;
+	margin-top: 0.3rem;
 }
 
 .header-date {
-	font-size: 0.85rem;
+	font-size: 0.82rem;
 	color: var(--text-dim);
-	letter-spacing: 0.05em;
+	letter-spacing: 0.04em;
 }
 
 .refresh-btn {
 	background: transparent;
 	border: 1px solid var(--border);
-	border-radius: 4px;
+	border-radius: 6px;
 	color: var(--text-dim);
 	font-size: 1rem;
 	cursor: pointer;
-	padding: 0.15rem 0.4rem;
+	padding: 0.2rem 0.45rem;
 	line-height: 1;
-	transition: all 0.2s;
+	transition: all 0.25s ease;
 }
 
 .refresh-btn:hover {
 	border-color: var(--gold-dim);
 	color: var(--gold);
+	box-shadow: var(--shadow-sm);
 }
 
 .refresh-btn:disabled {
 	cursor: not-allowed;
-	opacity: 0.6;
+	opacity: 0.5;
 }
 
 .refresh-btn.spinning {
@@ -417,25 +432,28 @@ body {
 	to { transform: rotate(360deg); }
 }
 
+/* --- Data source bar --- */
+
 .data-source {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
 	align-items: baseline;
-	gap: 0.3rem 0.5rem;
+	gap: 0.25rem 0.5rem;
 	max-width: 1400px;
-	margin: 0.8rem auto 0;
-	padding: 0 1.5rem;
-	font-size: 0.72rem;
+	margin: 0 auto;
+	padding: 0.6rem 1.5rem;
+	font-size: 0.7rem;
 	color: var(--text-dim);
+	border-bottom: 1px solid var(--border);
 }
 
 .ds-label {
 	color: var(--silver);
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	font-size: 0.65rem;
-	margin-right: 0.25rem;
+	letter-spacing: 0.06em;
+	font-size: 0.62rem;
+	margin-right: 0.2rem;
 }
 
 .ds-sep { color: var(--border); }
@@ -445,101 +463,146 @@ body {
 .ds-vigil { color: var(--text-dim); }
 .ds-vigil-warn { color: var(--warn); }
 
+/* --- Card grid --- */
+
 .cards {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: 1.5rem;
+	gap: 1.8rem;
 	max-width: 1400px;
-	margin: 2rem auto;
+	margin: 2.5rem auto;
 	padding: 0 1.5rem;
+	align-items: start;
 }
 
 .cards-single {
 	grid-template-columns: 1fr;
-	max-width: 700px;
+	max-width: 680px;
 }
+
+/* --- Card --- */
 
 .card {
 	background: var(--surface);
 	border: 1px solid var(--border);
-	border-radius: 8px;
-	padding: 1.5rem;
+	border-radius: var(--radius);
+	overflow: hidden;
+	box-shadow: var(--shadow-md);
+	transition: box-shadow 0.3s ease;
 }
 
-.card-run { border-top: 2px solid var(--z2); }
-.card-swim { border-top: 2px solid var(--swim); }
+.card:hover {
+	box-shadow: 0 6px 20px rgba(48, 40, 32, 0.1);
+}
 
-.card-header { margin-bottom: 1.2rem; }
+.card-accent {
+	height: 4px;
+	background: var(--card-accent);
+}
+
+.card-body {
+	padding: 1.6rem 1.5rem 1.4rem;
+}
+
+.card-header { margin-bottom: 1.4rem; }
+
+.card-header-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+}
 
 .sport-tag {
 	font-family: var(--font-display);
-	font-size: 0.75rem;
+	font-size: 0.7rem;
 	font-weight: 600;
 	letter-spacing: 0.15em;
 	text-transform: uppercase;
-	border: 1px solid;
-	padding: 2px 8px;
-	border-radius: 3px;
+	color: var(--surface);
+	background: var(--card-accent);
+	padding: 3px 10px;
+	border-radius: 4px;
 }
 
 .card-title {
 	font-family: var(--font-display);
 	font-weight: 600;
-	font-size: 1.4rem;
+	font-size: 1.5rem;
 	color: var(--text);
-	margin-top: 0.5rem;
+	margin-top: 0.7rem;
+	line-height: 1.25;
 }
 
-.card-subtitle {
-	font-size: 0.8rem;
+.card-meta {
+	display: flex;
+	gap: 0.4rem;
+	margin-top: 0.6rem;
+	flex-wrap: wrap;
+}
+
+.meta-pill {
+	font-size: 0.72rem;
 	color: var(--text-dim);
+	background: var(--bg);
+	padding: 2px 8px;
+	border-radius: 12px;
 	text-transform: capitalize;
+	border: 1px solid var(--border);
 }
 
-.invocation, .closing {
-	font-family: var(--font-display);
-	font-style: italic;
-	font-size: 0.95rem;
-	color: var(--gold);
-	border-left: 3px solid;
-	padding: 0.8rem 1rem;
-	margin: 1rem 0;
-	background: var(--gold-glow);
-	border-radius: 0 4px 4px 0;
-}
+/* --- Readiness --- */
 
 .readiness-block {
 	display: flex;
-	align-items: baseline;
-	gap: 0.5rem;
-	margin: 1rem 0;
+	flex-direction: column;
+	align-items: flex-end;
 }
 
 .readiness-score {
 	font-family: var(--font-display);
-	font-size: 2.2rem;
+	font-size: 2.4rem;
 	font-weight: 600;
+	line-height: 1;
+	color: var(--card-accent);
 }
 
 .readiness-label {
-	font-size: 0.75rem;
+	font-size: 0.65rem;
 	color: var(--text-dim);
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
+	margin-top: 0.15rem;
 }
 
+/* --- Invocations --- */
+
+.invocation, .closing {
+	font-family: var(--font-display);
+	font-style: italic;
+	font-size: 1rem;
+	color: var(--gold);
+	border-left: 3px solid;
+	padding: 0.7rem 1rem;
+	margin: 1.2rem 0;
+	background: var(--gold-glow);
+	border-radius: 0 6px 6px 0;
+	line-height: 1.5;
+}
+
+/* --- Warnings --- */
+
 .warnings {
-	background: rgba(196, 78, 34, 0.08);
-	border: 1px solid rgba(196, 78, 34, 0.25);
-	border-radius: 4px;
+	background: rgba(196, 78, 34, 0.06);
+	border: 1px solid rgba(196, 78, 34, 0.2);
+	border-radius: 6px;
 	padding: 0.6rem 1rem;
-	margin: 0.8rem 0;
+	margin: 1rem 0;
 }
 
 .warnings ul { list-style: none; }
 
 .warnings li {
-	font-size: 0.8rem;
+	font-size: 0.78rem;
 	color: var(--warn);
 	padding: 0.15rem 0;
 }
@@ -548,20 +611,22 @@ body {
 	content: "\\26A0  ";
 }
 
+/* --- Vigil --- */
+
 .vigil-section {
-	border-radius: 4px;
+	border-radius: 6px;
 	padding: 0.6rem 1rem;
-	margin: 0.8rem 0;
+	margin: 1rem 0;
 }
 
 .vigil-caution {
-	background: rgba(196, 78, 34, 0.08);
-	border: 1px solid rgba(196, 78, 34, 0.25);
+	background: rgba(196, 78, 34, 0.06);
+	border: 1px solid rgba(196, 78, 34, 0.2);
 }
 
 .vigil-alert {
-	background: rgba(168, 48, 48, 0.1);
-	border: 1px solid rgba(168, 48, 48, 0.3);
+	background: rgba(168, 48, 48, 0.08);
+	border: 1px solid rgba(168, 48, 48, 0.25);
 }
 
 .vigil-header {
@@ -593,18 +658,26 @@ body {
 	font-style: italic;
 }
 
+/* --- Segments --- */
+
 .segments {
-	margin: 1.2rem 0;
+	margin: 1.4rem 0;
 	display: flex;
 	flex-direction: column;
-	gap: 0.6rem;
+	gap: 0.5rem;
 }
 
 .segment {
-	background: rgba(255, 255, 255, 0.45);
+	background: rgba(255, 255, 255, 0.55);
 	border: 1px solid var(--border);
-	border-radius: 4px;
-	padding: 0.6rem 0.8rem;
+	border-left: 3px solid var(--card-accent);
+	border-radius: 2px 6px 6px 2px;
+	padding: 0.6rem 0.9rem;
+	transition: background 0.2s ease;
+}
+
+.segment:hover {
+	background: rgba(255, 255, 255, 0.75);
 }
 
 .segment-header {
@@ -615,48 +688,65 @@ body {
 
 .segment-name {
 	font-weight: 500;
-	font-size: 0.85rem;
+	font-size: 0.82rem;
 }
 
 .segment-duration {
-	font-size: 0.8rem;
+	font-size: 0.78rem;
 	font-weight: 500;
+	color: var(--card-accent);
 }
 
 .segment-target {
-	font-size: 0.78rem;
+	font-size: 0.75rem;
 	color: var(--text-dim);
-	margin-top: 0.2rem;
+	margin-top: 0.15rem;
 }
 
 .segment-repeats {
 	color: var(--gold-dim);
 	margin-right: 0.3rem;
+	font-weight: 500;
 }
 
 .zone-guide {
 	color: var(--gold-dim);
-	font-size: 0.75rem;
+	font-size: 0.72rem;
 	white-space: nowrap;
 }
 
+/* --- Terrain --- */
+
 .terrain-block {
-	font-size: 0.8rem;
+	font-size: 0.78rem;
 	color: var(--text-dim);
-	margin: 0.8rem 0;
-	padding: 0.5rem 0;
+	margin: 1.2rem 0 0.8rem;
+	padding: 0.6rem 0;
 	border-top: 1px solid var(--border);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem;
+}
+
+.terrain-label {
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--silver);
 }
 
 .terrain-value {
 	color: var(--text);
 	text-transform: capitalize;
-	margin: 0 0.3rem;
+	font-weight: 500;
 }
 
 .terrain-rationale { font-style: italic; }
 
-.rationale-section { margin: 1rem 0; }
+/* --- Rationale --- */
+
+.rationale-section { margin: 0.8rem 0 1rem; }
 
 .rationale-header {
 	font-family: var(--font-display);
@@ -668,69 +758,88 @@ body {
 }
 
 .rationale-text {
-	font-size: 0.82rem;
+	font-size: 0.78rem;
 	color: var(--text-dim);
 	margin-bottom: 0.3rem;
 }
 
 .sport-reason { font-style: italic; }
 
+/* --- Send buttons --- */
+
 .send-buttons {
 	display: flex;
-	gap: 0.6rem;
-	margin-top: 1.2rem;
+	gap: 0.5rem;
+	margin-top: 1.4rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--border);
 }
 
 .send-btn {
 	display: block;
 	flex: 1;
-	padding: 0.7rem;
+	padding: 0.65rem 0.8rem;
 	background: transparent;
-	border: 1px solid var(--border);
-	border-radius: 4px;
-	color: var(--text-dim);
+	border: 1.5px solid var(--btn-accent, var(--border));
+	border-radius: 6px;
+	color: var(--btn-accent, var(--text-dim));
 	font-family: var(--font-mono);
-	font-size: 0.85rem;
+	font-size: 0.78rem;
 	cursor: pointer;
-	transition: all 0.2s;
+	transition: all 0.25s ease;
 }
 
 .send-btn:hover {
-	border-color: var(--gold-dim);
-	color: var(--gold);
+	background: var(--btn-accent);
+	color: var(--surface);
+	box-shadow: var(--shadow-sm);
 }
 
 .send-btn:disabled {
 	cursor: not-allowed;
-	opacity: 0.6;
+	opacity: 0.5;
 }
 
 .send-btn.sent {
+	background: var(--btn-accent);
 	border-color: var(--btn-accent);
-	color: var(--btn-accent);
+	color: var(--surface);
 }
 
 .send-btn.error {
 	border-color: var(--warn);
 	color: var(--warn);
+	background: rgba(196, 78, 34, 0.06);
 }
+
+/* --- Footer --- */
 
 .page-footer {
 	text-align: center;
-	padding: 2rem;
-	color: var(--text-dim);
+	padding: 2.5rem;
+	color: var(--border);
 }
 
-.diamond { font-size: 1.2rem; }
+.diamond { font-size: 1rem; }
+
+/* --- Responsive --- */
 
 @media (max-width: 960px) {
-	.cards { grid-template-columns: 1fr; }
+	.cards {
+		grid-template-columns: 1fr;
+		max-width: 680px;
+		gap: 1.5rem;
+	}
 }
 
 @media (max-width: 520px) {
-	.page-header h1 { font-size: 1.3rem; }
-	.card { padding: 1rem; }
-	.card-title { font-size: 1.1rem; }
+	.page-header { padding: 1.8rem 1rem 1rem; }
+	.page-header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
+	.card-body { padding: 1.2rem 1rem 1rem; }
+	.card-title { font-size: 1.2rem; }
+	.readiness-score { font-size: 2rem; }
+	.cards { padding: 0 1rem; margin: 1.5rem auto; }
+	.send-buttons { flex-direction: column; }
 }
 `;
 
