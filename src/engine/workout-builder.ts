@@ -357,6 +357,43 @@ function swimPaceDesc(
 	return label;
 }
 
+/** 300m warm-up: 3 × 100m (free, kick, pull) — used by base, tempo, intervals. */
+function swimWarmUp300(scale: number): WorkoutSegment[] {
+	return [
+		{
+			name: "Warm-up",
+			duration_secs: scaled(120, scale),
+			target_description: "100m easy free",
+			target_hr_zone: 1,
+		},
+		{
+			name: "Warm-up",
+			duration_secs: scaled(120, scale),
+			target_description: "100m kick with board",
+			target_hr_zone: 1,
+		},
+		{
+			name: "Warm-up",
+			duration_secs: scaled(120, scale),
+			target_description: "100m pull with buoy",
+			target_hr_zone: 1,
+		},
+	];
+}
+
+/** 400m warm-up: 4 × 100m (free, kick, pull, drill/swim) — used by long. */
+function swimWarmUp400(scale: number): WorkoutSegment[] {
+	return [
+		...swimWarmUp300(scale),
+		{
+			name: "Warm-up",
+			duration_secs: scaled(120, scale),
+			target_description: "100m drill/swim choice",
+			target_hr_zone: 1,
+		},
+	];
+}
+
 function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
@@ -394,12 +431,7 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	const reps = Math.max(4, Math.round(6 * scale));
 	return [
-		{
-			name: "Warm-up",
-			duration_secs: scaled(360, scale),
-			target_description: "300m (100 free/100 kick/100 pull)",
-			target_hr_zone: 1,
-		},
+		...swimWarmUp300(scale),
 		{
 			name: "Main set",
 			duration_secs: scaled(reps * 270, scale),
@@ -421,12 +453,7 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
-		{
-			name: "Warm-up",
-			duration_secs: scaled(360, scale),
-			target_description: "300m progressive warm-up",
-			target_hr_zone: 1,
-		},
+		...swimWarmUp300(scale),
 		{
 			name: "Threshold set",
 			duration_secs: scaled(4 * 270, scale),
@@ -463,12 +490,7 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, paceBufferSecs, hrOnly } = ctx;
 	return [
-		{
-			name: "Warm-up",
-			duration_secs: scaled(360, scale),
-			target_description: "300m progressive warm-up",
-			target_hr_zone: 1,
-		},
+		...swimWarmUp300(scale),
 		{
 			name: "Main set",
 			duration_secs: scaled(8 * 105, scale),
@@ -507,12 +529,7 @@ function buildSwimLong(ctx: BuildContext): WorkoutSegment[] {
 	const mainMetres = Math.round(2500 * scale);
 	const segments400 = Math.ceil(mainMetres / 400);
 	return [
-		{
-			name: "Warm-up",
-			duration_secs: scaled(480, scale),
-			target_description: "400m progressive warm-up",
-			target_hr_zone: 1,
-		},
+		...swimWarmUp400(scale),
 		{
 			name: "Main set",
 			duration_secs: scaled(segments400 * 430, scale),
