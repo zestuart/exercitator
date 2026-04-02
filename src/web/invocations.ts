@@ -25,8 +25,7 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // In-memory cache: keyed by date + sport + category
 const invocationCache = new Map<string, Invocations>();
 
-function cacheKey(sport: "Run" | "Swim", category: WorkoutCategory): string {
-	const today = new Date().toISOString().slice(0, 10);
+function cacheKey(sport: "Run" | "Swim", category: WorkoutCategory, today: string): string {
 	return `${today}-${sport}-${category}`;
 }
 
@@ -135,15 +134,16 @@ export async function generateInvocations(
 	category: WorkoutCategory,
 	readinessScore: number,
 	warnings: string[],
+	today?: string,
 ): Promise<Invocations> {
-	const key = cacheKey(sport, category);
+	const todayStr = today ?? new Date().toISOString().slice(0, 10);
+	const key = cacheKey(sport, category, todayStr);
 	const hit = invocationCache.get(key);
 	if (hit) return hit;
 
 	// Clean stale entries (previous days)
-	const today = new Date().toISOString().slice(0, 10);
 	for (const k of invocationCache.keys()) {
-		if (!k.startsWith(today)) invocationCache.delete(k);
+		if (!k.startsWith(todayStr)) invocationCache.delete(k);
 	}
 
 	if (!ANTHROPIC_API_KEY) {

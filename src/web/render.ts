@@ -196,12 +196,6 @@ function renderCard(
 				${segments}
 			</div>
 
-			<div class="terrain-block">
-				<span class="terrain-label">Terrain</span>
-				<span class="terrain-value">${escapeHtml(suggestion.terrain)}</span>
-				<span class="terrain-rationale">${escapeHtml(suggestion.terrain_rationale)}</span>
-			</div>
-
 			<div class="rationale-section">
 				<h3 class="rationale-header">${escapeHtml(invocations.rationale_header)}</h3>
 				<p class="rationale-text">${escapeHtml(suggestion.rationale)}</p>
@@ -341,7 +335,7 @@ const CSS = `
 	--bg: #f4efe6;
 	--surface: #fffcf7;
 	--border: #ddd5c5;
-	--gold: #c48c28;
+	--gold: #7a5a1a;
 	--gold-dim: #9a6e20;
 	--gold-glow: rgba(196, 140, 40, 0.08);
 	--silver: #7e8680;
@@ -715,35 +709,6 @@ body {
 	white-space: nowrap;
 }
 
-/* --- Terrain --- */
-
-.terrain-block {
-	font-size: 0.78rem;
-	color: var(--text-dim);
-	margin: 1.2rem 0 0.8rem;
-	padding: 0.6rem 0;
-	border-top: 1px solid var(--border);
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0.3rem;
-}
-
-.terrain-label {
-	font-size: 0.65rem;
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	color: var(--silver);
-}
-
-.terrain-value {
-	color: var(--text);
-	text-transform: capitalize;
-	font-weight: 500;
-}
-
-.terrain-rationale { font-style: italic; }
-
 /* --- Rationale --- */
 
 .rationale-section { margin: 0.8rem 0 1rem; }
@@ -850,6 +815,9 @@ body {
 function clientJs(userId: string): string {
 	const prefix = `/${userId}`;
 	return `
+document.cookie = 'tz=' + Intl.DateTimeFormat().resolvedOptions().timeZone
+	+ ';path=/;max-age=31536000;SameSite=Lax';
+
 document.getElementById('refresh-btn')?.addEventListener('click', async function() {
 	this.disabled = true;
 	this.classList.add('spinning');

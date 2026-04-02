@@ -146,7 +146,7 @@ describe("buildIntervalsDescription", () => {
 		expect(headers.length).toBeGreaterThan(0);
 	});
 
-	it("formats swim suggestion without power targets", () => {
+	it("formats swim suggestion with distance-based descriptions", () => {
 		const suggestion = makeSuggestion({
 			sport: "Swim",
 			power_context: NO_POWER,
@@ -160,7 +160,7 @@ describe("buildIntervalsDescription", () => {
 				{
 					name: "Main set",
 					duration_secs: 840,
-					target_description: "100m Z4",
+					target_description: "100m Z4 1:39/100m",
 					target_hr_zone: 4,
 					repeats: 8,
 					work_duration_secs: 90,
@@ -171,7 +171,10 @@ describe("buildIntervalsDescription", () => {
 
 		const text = buildIntervalsDescription(suggestion);
 		expect(text).toContain("8x");
-		expect(text).toContain("1m30s");
+		expect(text).toContain("100m Z4");
 		expect(text).toContain("15s rest");
+		// Swim uses target_description directly, not time-based durations
+		expect(text).not.toContain("1m30s");
+		expect(text).toContain("300m progressive warm-up");
 	});
 });

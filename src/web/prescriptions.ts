@@ -4,6 +4,7 @@
  */
 
 import { hasAnyVigilMetrics } from "../db.js";
+import { localDateStr } from "../engine/date-utils.js";
 import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import { runBackfill } from "../engine/vigil/backfill.js";
@@ -48,14 +49,15 @@ export async function generatePrescriptions(
 	client: IntervalsClient,
 	profile: UserProfile,
 	strydClient?: StrydClient | null,
+	tz?: string,
 ): Promise<Prescription> {
-	const today = new Date().toISOString().slice(0, 10);
+	const today = localDateStr(new Date(), tz);
 	const cached = cache.get(profile.id);
 	if (cached && cached.date === today) {
 		return cached.prescription;
 	}
 
-	const data = await fetchTrainingData(client);
+	const data = await fetchTrainingData(client, tz);
 	const preEnrichIds = new Set(data.activities.map((a) => a.id));
 
 	// Stryd enrichment only for users with stryd: true
@@ -82,14 +84,16 @@ export async function generatePrescriptions(
 	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);
 
 	const run = hasSport("Run")
-		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id)
+		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id, tz)
 		: null;
-	const swim = hasSport("Swim") ? suggestWorkoutFromData(data, "Swim", now) : null;
+	const swim = hasSport("Swim")
+		? suggestWorkoutFromData(data, "Swim", now, undefined, undefined, "0", tz)
+		: null;
 
 	// Vigil wellness write: update injury field when severity ≥ 2 (run prescription only).
 	// Severity 2 → Niggle (2), Severity 3 → Poor (3). Never write 4 (Injured) automatically.
 	if (run?.vigil && (run.vigil.severity === 2 || run.vigil.severity === 3)) {
-		writeVigilInjury(client, run.vigil.severity).catch((err) =>
+		writeVigilInjury(client, run.vigil.severity, tz).catch((err) =>
 			console.error("Vigil wellness write failed:", err),
 		);
 	}
@@ -143,8 +147,12 @@ async function runVigilBackfillIfNeeded(
 	}
 }
 
-async function writeVigilInjury(client: IntervalsClient, severity: 2 | 3): Promise<void> {
-	const today = new Date().toISOString().slice(0, 10);
+async function writeVigilInjury(
+	client: IntervalsClient,
+	severity: 2 | 3,
+	tz?: string,
+): Promise<void> {
+	const today = localDateStr(new Date(), tz);
 	// intervals.icu injury field: 2 = Niggle, 3 = Poor, 4 = Injured (never automatic)
 	const injury = severity === 3 ? 3 : 2;
 	await client.put(`/athlete/${client.athleteId}/wellness/${today}`, { injury });

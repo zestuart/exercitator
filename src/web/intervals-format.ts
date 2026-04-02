@@ -73,24 +73,38 @@ function formatPace(secs: number): string {
 
 export function buildIntervalsDescription(suggestion: WorkoutSuggestion): string {
 	const lines: string[] = [];
+	const isSwim = suggestion.sport === "Swim";
 
 	for (const seg of suggestion.segments) {
 		// Section header
 		lines.push(seg.name);
 
-		const target = formatTarget(seg, suggestion.sport, suggestion.power_context);
-
-		if (seg.repeats && seg.repeats > 1 && seg.work_duration_secs) {
-			// Repeat set
-			lines.push(`${seg.repeats}x`);
-			const workTarget = target || "";
-			lines.push(`- ${formatDuration(seg.work_duration_secs)} ${workTarget}`.trimEnd());
-			if (seg.rest_duration_secs) {
-				lines.push(`- ${formatDuration(seg.rest_duration_secs)} rest`);
+		if (isSwim) {
+			// Swim: use target_description directly — it contains distance + pace info
+			// that is more meaningful for swimmers than time-based durations.
+			if (seg.repeats && seg.repeats > 1) {
+				lines.push(`${seg.repeats}x`);
+				lines.push(`- ${seg.target_description}`);
+				if (seg.rest_duration_secs) {
+					lines.push(`- ${formatDuration(seg.rest_duration_secs)} rest`);
+				}
+			} else {
+				lines.push(`- ${seg.target_description}`);
 			}
 		} else {
-			// Single step
-			lines.push(`- ${formatDuration(seg.duration_secs)} ${target}`.trimEnd());
+			// Run: use structured power/HR targets
+			const target = formatTarget(seg, suggestion.sport, suggestion.power_context);
+
+			if (seg.repeats && seg.repeats > 1 && seg.work_duration_secs) {
+				lines.push(`${seg.repeats}x`);
+				const workTarget = target || "";
+				lines.push(`- ${formatDuration(seg.work_duration_secs)} ${workTarget}`.trimEnd());
+				if (seg.rest_duration_secs) {
+					lines.push(`- ${formatDuration(seg.rest_duration_secs)} rest`);
+				}
+			} else {
+				lines.push(`- ${formatDuration(seg.duration_secs)} ${target}`.trimEnd());
+			}
 		}
 	}
 

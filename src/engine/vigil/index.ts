@@ -10,6 +10,7 @@
  */
 
 import { countVigilMetrics } from "../../db.js";
+import { localDateStr } from "../date-utils.js";
 import { computeBaselines } from "./baseline.js";
 import { scoreDeviations } from "./scorer.js";
 import type { VigilAlert } from "./types.js";
@@ -42,11 +43,12 @@ export function runVigilPipeline(
 	athleteId: string,
 	sport: string,
 	referenceDate?: Date,
+	tz?: string,
 ): VigilResult {
 	const ref = referenceDate ?? new Date();
-	const newest = ref.toISOString().slice(0, 10);
-	const oldest30d = new Date(ref.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
-	const oldest7d = new Date(ref.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+	const newest = localDateStr(ref, tz);
+	const oldest30d = localDateStr(new Date(ref.getTime() - 30 * 86_400_000), tz);
+	const oldest7d = localDateStr(new Date(ref.getTime() - 7 * 86_400_000), tz);
 
 	const count30d = countVigilMetrics(athleteId, sport, oldest30d, newest);
 
@@ -74,7 +76,7 @@ export function runVigilPipeline(
 	}
 
 	const count7d = countVigilMetrics(athleteId, sport, oldest7d, newest);
-	const baselines = computeBaselines(athleteId, sport, ref);
+	const baselines = computeBaselines(athleteId, sport, ref, tz);
 	const alert = scoreDeviations(baselines);
 
 	return {

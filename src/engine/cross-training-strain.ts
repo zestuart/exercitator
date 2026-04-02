@@ -11,6 +11,7 @@
  *   - Same-day cap (limits endurance prescription after weights)
  */
 
+import { localDateStr } from "./date-utils.js";
 import type { ActivitySummary } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -27,8 +28,9 @@ export function isCrossTraining(type: string): boolean {
 export function findTodayCrossTraining(
 	activities: ActivitySummary[],
 	now: Date,
+	tz?: string,
 ): ActivitySummary[] {
-	const today = now.toISOString().slice(0, 10);
+	const today = localDateStr(now, tz);
 	return activities.filter(
 		(a) => isCrossTraining(a.type) && a.start_date_local.slice(0, 10) === today,
 	);

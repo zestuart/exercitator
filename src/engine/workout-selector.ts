@@ -3,6 +3,7 @@
  */
 
 import type { CrossTrainingStrain } from "./cross-training-strain.js";
+import { localDateStr } from "./date-utils.js";
 import { getActivityLoad } from "./power-source.js";
 import type { ActivitySummary, PowerContext, WorkoutCategory } from "./types.js";
 import type { VigilAlert } from "./vigil/types.js";
@@ -120,8 +121,9 @@ function sameDayCrossTrainingCap(
 	crossTrainingStrains: Map<string, CrossTrainingStrain>,
 	activities: ActivitySummary[],
 	now: Date,
+	tz?: string,
 ): WorkoutCategory | null {
-	const today = now.toISOString().slice(0, 10);
+	const today = localDateStr(now, tz);
 	let worstLevel: "light" | "moderate" | "hard" | "unknown" = "light";
 
 	for (const [activityId, strain] of crossTrainingStrains) {
@@ -160,6 +162,7 @@ export function selectWorkoutCategory(
 	powerContext?: PowerContext,
 	vigilAlert?: VigilAlert,
 	crossTrainingStrains?: Map<string, CrossTrainingStrain>,
+	tz?: string,
 ): WorkoutCategory {
 	// Default power context if not provided (backward compatibility)
 	const ctx: PowerContext = powerContext ?? {
@@ -223,7 +226,7 @@ export function selectWorkoutCategory(
 
 	// Same-day cross-training cap (#21): limit category after weights today
 	if (crossTrainingStrains && crossTrainingStrains.size > 0) {
-		const cap = sameDayCrossTrainingCap(crossTrainingStrains, activities, now);
+		const cap = sameDayCrossTrainingCap(crossTrainingStrains, activities, now, tz);
 		if (cap) {
 			const capOrder: WorkoutCategory[] = [
 				"rest",

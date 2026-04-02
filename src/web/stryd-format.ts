@@ -5,6 +5,7 @@
  * Our zone model: Z1=0–55%, Z2=55–75%, Z3=75–90%, Z4=90–105%, Z5=105–120%.
  */
 
+import { localDateStr } from "../engine/date-utils.js";
 import type { WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type {
 	StrydWorkoutBlock,
@@ -89,11 +90,11 @@ function segmentToBlock(seg: WorkoutSegment): StrydWorkoutBlock {
 }
 
 /** Convert a Praescriptor workout suggestion to a Stryd workout payload. */
-export function toStrydWorkout(suggestion: WorkoutSuggestion): StrydWorkoutPayload {
+export function toStrydWorkout(suggestion: WorkoutSuggestion, tz?: string): StrydWorkoutPayload {
 	return {
 		type: suggestion.category,
 		title: suggestion.title,
-		desc: `Praescriptor ${new Date().toISOString().slice(0, 10)} \u2014 ${suggestion.rationale}`,
+		desc: `Praescriptor ${localDateStr(new Date(), tz)} \u2014 ${suggestion.rationale}`,
 		blocks: suggestion.segments.map(segmentToBlock),
 	};
 }

@@ -5,6 +5,7 @@
  */
 
 import type { ServerResponse } from "node:http";
+import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { generatePrescriptions } from "./prescriptions.js";
@@ -25,9 +26,10 @@ export async function sendToStryd(
 	strydClient: StrydClient,
 	res: ServerResponse,
 	force = false,
+	tz?: string,
 ): Promise<void> {
 	try {
-		const today = new Date().toISOString().slice(0, 10);
+		const today = localDateStr(new Date(), tz);
 		const dedupKey = `${profile.id}-${today}`;
 
 		if (!force && strydSentToday.has(dedupKey)) {
@@ -65,7 +67,7 @@ export async function sendToStryd(
 			return;
 		}
 
-		const strydWorkout = toStrydWorkout(suggestion);
+		const strydWorkout = toStrydWorkout(suggestion, tz);
 		const workoutId = await strydClient.createWorkout(strydWorkout);
 		const entry = await strydClient.scheduleWorkout(workoutId, new Date());
 

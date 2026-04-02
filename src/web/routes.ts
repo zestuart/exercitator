@@ -6,6 +6,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { generateInvocations, plainInvocations } from "./invocations.js";
@@ -14,6 +15,40 @@ import { renderPage } from "./render.js";
 import { sendToStryd } from "./send-stryd.js";
 import { sendToIntervals } from "./send.js";
 import { DEFAULT_USER, type UserProfile, getUserProfile } from "./users.js";
+
+/** Cache of athlete profile timezone per user (1h TTL via athlete profile cache). */
+const athleteTzCache = new Map<string, { tz: string; fetchedAt: number }>();
+const TZ_CACHE_TTL = 3_600_000; // 1 hour
+
+/**
+ * Resolve the user's IANA timezone from available sources.
+ * Fallback chain: browser cookie → intervals.icu athlete profile → UTC.
+ */
+async function resolveTimezone(req: IncomingMessage, client: IntervalsClient): Promise<string> {
+	// 1. Browser-detected TZ via cookie
+	const cookies = req.headers.cookie ?? "";
+	const tzMatch = cookies.match(/(?:^|;\s*)tz=([^;]+)/);
+	if (tzMatch) {
+		const tz = decodeURIComponent(tzMatch[1]);
+		// Basic validation: IANA timezone names contain a slash
+		if (tz.includes("/")) return tz;
+	}
+
+	// 2. intervals.icu athlete profile timezone (cached)
+	const cached = athleteTzCache.get(client.athleteId);
+	if (cached && Date.now() - cached.fetchedAt < TZ_CACHE_TTL) {
+		return cached.tz;
+	}
+
+	try {
+		const profile = await client.get<{ timezone?: string }>(`/athlete/${client.athleteId}`);
+		const tz = profile.timezone ?? "UTC";
+		athleteTzCache.set(client.athleteId, { tz, fetchedAt: Date.now() });
+		return tz;
+	} catch {
+		return "UTC";
+	}
+}
 
 // Per-user rate limiter for cache invalidation (30s cooldown)
 const refreshLastCall = new Map<string, number>();
@@ -64,13 +99,15 @@ export async function handleRoutes(
 		// User-scoped Stryd client: only if user has stryd: true and credentials configured
 		const userStryd = profile.stryd ? (strydClients.get(profile.id) ?? null) : null;
 
+		const tz = await resolveTimezone(req, client);
+
 		if (req.method === "GET" && (subPath === "/" || subPath === "")) {
-			await handleMainPage(profile, client, userStryd, res);
+			await handleMainPage(profile, client, userStryd, tz, res);
 			return;
 		}
 
 		if (req.method === "GET" && subPath === "/api/prescriptions") {
-			const prescriptions = await generatePrescriptions(client, profile, userStryd);
+			const prescriptions = await generatePrescriptions(client, profile, userStryd, tz);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(prescriptions));
 			return;
@@ -108,7 +145,7 @@ export async function handleRoutes(
 				return;
 			}
 			const force = url.searchParams.get("force") === "true";
-			await sendToIntervals(client, profile, sport, res, force);
+			await sendToIntervals(client, profile, sport, res, force, tz);
 			return;
 		}
 
@@ -125,7 +162,7 @@ export async function handleRoutes(
 				return;
 			}
 			const force = url.searchParams.get("force") === "true";
-			await sendToStryd(client, profile, userStryd, res, force);
+			await sendToStryd(client, profile, userStryd, res, force, tz);
 			return;
 		}
 
@@ -142,9 +179,11 @@ async function handleMainPage(
 	profile: UserProfile,
 	client: IntervalsClient,
 	strydClient: StrydClient | null | undefined,
+	tz: string,
 	res: ServerResponse,
 ): Promise<void> {
-	const prescriptions = await generatePrescriptions(client, profile, strydClient);
+	const prescriptions = await generatePrescriptions(client, profile, strydClient, tz);
+	const today = localDateStr(new Date(), tz);
 
 	// Generate invocations for each sport this user has
 	const runInvocations = prescriptions.run
@@ -154,6 +193,7 @@ async function handleMainPage(
 					prescriptions.run.category,
 					prescriptions.run.readiness_score,
 					prescriptions.run.warnings,
+					today,
 				)
 			: plainInvocations("Run")
 		: null;
@@ -165,6 +205,7 @@ async function handleMainPage(
 					prescriptions.swim.category,
 					prescriptions.swim.readiness_score,
 					prescriptions.swim.warnings,
+					today,
 				)
 			: plainInvocations("Swim")
 		: null;

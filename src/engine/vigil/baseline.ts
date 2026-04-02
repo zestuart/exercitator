@@ -10,6 +10,7 @@
  */
 
 import { getVigilMetrics, saveVigilBaseline } from "../../db.js";
+import { localDateStr } from "../date-utils.js";
 import { SCOREABLE_METRICS, getMetricValue } from "./metrics.js";
 import type { VigilBaseline, VigilMetrics } from "./types.js";
 
@@ -19,10 +20,9 @@ const MIN_BASELINE_ACTIVITIES = 5;
 /** Minimum activities for a valid 7-day acute window. */
 const MIN_ACUTE_ACTIVITIES = 2;
 
-function isoDate(daysAgo: number, from?: Date): string {
+function daysAgoStr(daysAgo: number, from?: Date, tz?: string): string {
 	const d = from ?? new Date();
-	d.setDate(d.getDate() - daysAgo);
-	return d.toISOString().slice(0, 10);
+	return localDateStr(new Date(d.getTime() - daysAgo * 86_400_000), tz);
 }
 
 function mean(values: number[]): number {
@@ -90,11 +90,12 @@ export function computeBaselines(
 	athleteId: string,
 	sport: string,
 	referenceDate?: Date,
+	tz?: string,
 ): VigilBaseline[] {
 	const ref = referenceDate ?? new Date();
-	const oldest30d = isoDate(30, new Date(ref.getTime()));
-	const oldest7d = isoDate(7, new Date(ref.getTime()));
-	const newest = ref.toISOString().slice(0, 10);
+	const oldest30d = daysAgoStr(30, ref, tz);
+	const oldest7d = daysAgoStr(7, ref, tz);
+	const newest = localDateStr(ref, tz);
 
 	const activities30d = getVigilMetrics(athleteId, sport, oldest30d, newest);
 	const activities7d = activities30d.filter((a) => a.activityDate >= oldest7d);

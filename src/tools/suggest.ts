@@ -1,7 +1,22 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { cacheGet } from "../db.js";
 import { suggestWorkout } from "../engine/suggest.js";
 import type { IntervalsClient } from "../intervals.js";
+
+/** Resolve the athlete's IANA timezone from the cached profile, or fetch + cache it. */
+async function getAthleteTz(client: IntervalsClient): Promise<string> {
+	const cacheKey = `athlete:${client.athleteId}:profile`;
+	const cached = cacheGet(cacheKey) as { timezone?: string } | null;
+	if (cached?.timezone) return cached.timezone;
+
+	try {
+		const profile = await client.get<{ timezone?: string }>(`/athlete/${client.athleteId}`);
+		return profile.timezone ?? "UTC";
+	} catch {
+		return "UTC";
+	}
+}
 
 export function registerSuggestTools(server: McpServer, client: IntervalsClient): void {
 	server.tool(
@@ -16,7 +31,8 @@ export function registerSuggestTools(server: McpServer, client: IntervalsClient)
 			"If status is 'awaiting_input', use submit_cross_training_rpe to provide RPE first.",
 		{},
 		async () => {
-			const suggestion = await suggestWorkout(client);
+			const tz = await getAthleteTz(client);
+			const suggestion = await suggestWorkout(client, tz);
 			return {
 				content: [{ type: "text", text: JSON.stringify(suggestion, null, 2) }],
 			};

@@ -1,6 +1,22 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { cacheGet } from "../db.js";
+import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
+
+/** Resolve athlete IANA timezone from cached profile or API. */
+async function getAthleteTz(client: IntervalsClient): Promise<string> {
+	const key = `athlete:${client.athleteId}:profile`;
+	const cached = cacheGet(key) as { timezone?: string } | null;
+	if (cached?.timezone) return cached.timezone;
+
+	try {
+		const profile = await client.get<{ timezone?: string }>(`/athlete/${client.athleteId}`);
+		return profile.timezone ?? "UTC";
+	} catch {
+		return "UTC";
+	}
+}
 
 export function registerActivityTools(server: McpServer, client: IntervalsClient): void {
 	server.tool(
@@ -12,12 +28,13 @@ export function registerActivityTools(server: McpServer, client: IntervalsClient
 			sport: z.string().optional().describe('Filter by sport type, e.g. "Ride", "Run"'),
 		},
 		async ({ oldest, newest, sport }) => {
+			const tz = await getAthleteTz(client);
 			const now = new Date();
-			const defaultOldest = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+			const defaultOldest = localDateStr(new Date(now.getTime() - 30 * 86_400_000), tz);
 
 			const query: Record<string, string> = {
 				oldest: oldest ?? defaultOldest,
-				newest: newest ?? now.toISOString().slice(0, 10),
+				newest: newest ?? localDateStr(now, tz),
 			};
 
 			const activities = await client.get<unknown[]>(

@@ -15,6 +15,7 @@ import {
 	findTodayCrossTraining,
 	isCrossTraining,
 } from "./cross-training-strain.js";
+import { localDateStr } from "./date-utils.js";
 import { detectPowerSource } from "./power-source.js";
 import { computeReadiness } from "./readiness.js";
 import { selectSport } from "./sport-selector.js";
@@ -34,10 +35,6 @@ import { selectWorkoutCategory } from "./workout-selector.js";
 
 // Re-export for Praescriptor consumption
 export type { VigilResult } from "./vigil/index.js";
-
-function dateStr(d: Date): string {
-	return d.toISOString().slice(0, 10);
-}
 
 const DEFAULT_SPORT_SETTINGS: Omit<SportSettings, "type"> = {
 	ftp: null,
@@ -59,19 +56,22 @@ export interface TrainingData {
 	swimSettings: SportSettings;
 }
 
-export async function fetchTrainingData(client: IntervalsClient): Promise<TrainingData> {
+export async function fetchTrainingData(
+	client: IntervalsClient,
+	tz?: string,
+): Promise<TrainingData> {
 	const now = new Date();
 	const d14Ago = new Date(now.getTime() - 14 * 86_400_000);
 	const d7Ago = new Date(now.getTime() - 7 * 86_400_000);
 
 	const [activities, wellness, runSettings, swimSettings] = await Promise.all([
 		client.get<ActivitySummary[]>(`/athlete/${client.athleteId}/activities`, {
-			oldest: dateStr(d14Ago),
-			newest: dateStr(now),
+			oldest: localDateStr(d14Ago, tz),
+			newest: localDateStr(now, tz),
 		}),
 		client.get<WellnessRecord[]>(`/athlete/${client.athleteId}/wellness`, {
-			oldest: dateStr(d7Ago),
-			newest: dateStr(now),
+			oldest: localDateStr(d7Ago, tz),
+			newest: localDateStr(now, tz),
 		}),
 		client
 			.get<SportSettings>(`/athlete/${client.athleteId}/sport-settings/Run`)
@@ -93,9 +93,14 @@ export async function fetchTrainingData(client: IntervalsClient): Promise<Traini
  * If an activity has no perceived_exertion but has a Stryd RPE ≥ 7,
  * set perceived_exertion to the Stryd RPE so isHardSession() detects it.
  */
-function augmentStrydRpe(activities: ActivitySummary[], athleteId: string, now: Date): void {
-	const d14Ago = new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
-	const newest = now.toISOString().slice(0, 10);
+function augmentStrydRpe(
+	activities: ActivitySummary[],
+	athleteId: string,
+	now: Date,
+	tz?: string,
+): void {
+	const d14Ago = localDateStr(new Date(now.getTime() - 14 * 86_400_000), tz);
+	const newest = localDateStr(now, tz);
 
 	let metrics: ReturnType<typeof getVigilMetrics>;
 	try {
@@ -133,6 +138,7 @@ export function suggestWorkoutFromData(
 	sportSelectionReason?: string,
 	strydCp?: number | null,
 	athleteId = "0",
+	tz?: string,
 ): WorkoutSuggestion {
 	const { activities, wellness, runSettings, swimSettings } = data;
 
@@ -163,12 +169,12 @@ export function suggestWorkoutFromData(
 	// Stryd stores all activities as sport="Run" regardless of intervals.icu classification,
 	// so always query with "Run" for the Vigil pipeline.
 	const isRunSport = ["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport);
-	const vigilResult = isRunSport ? runVigilPipeline(athleteId, "Run", now) : null;
+	const vigilResult = isRunSport ? runVigilPipeline(athleteId, "Run", now, tz) : null;
 
 	// Stryd RPE as hard-session signal: augment perceived_exertion from Vigil metrics.
 	// Only for running sports where we have Stryd data in the DB.
 	if (isRunSport && athleteId !== "0") {
-		augmentStrydRpe(activities, athleteId, now);
+		augmentStrydRpe(activities, athleteId, now, tz);
 	}
 
 	// Cross-training strain assessment: assess today's weight/climbing activities.
@@ -183,7 +189,7 @@ export function suggestWorkoutFromData(
 	}
 
 	// Prescription gating: if any same-day cross-training has unknown strain, block.
-	const todayCrossTraining = findTodayCrossTraining(activities, now);
+	const todayCrossTraining = findTodayCrossTraining(activities, now, tz);
 	for (const ct of todayCrossTraining) {
 		const strain = crossTrainingStrains.get(ct.id);
 		if (strain && strain.level === "unknown") {
@@ -221,6 +227,7 @@ export function suggestWorkoutFromData(
 		powerContext,
 		vigilResult?.alert,
 		crossTrainingStrains,
+		tz,
 	);
 	const category = applyStaleness(readinessCategory, staleness.tier);
 
@@ -295,13 +302,24 @@ export async function suggestWorkoutForSport(
 // Full auto: fetch + select sport + pipeline
 // ---------------------------------------------------------------------------
 
-export async function suggestWorkout(client: IntervalsClient): Promise<WorkoutSuggestion> {
-	const data = await fetchTrainingData(client);
+export async function suggestWorkout(
+	client: IntervalsClient,
+	tz?: string,
+): Promise<WorkoutSuggestion> {
+	const data = await fetchTrainingData(client, tz);
 	const now = new Date();
 
 	const powerContext = detectPowerSource(data.activities);
 	const readiness = computeReadiness(data.wellness, data.activities, now);
 	const sportSelection = selectSport(data.activities, readiness.score, now, powerContext);
 
-	return suggestWorkoutFromData(data, sportSelection.sport, now, sportSelection.reason);
+	return suggestWorkoutFromData(
+		data,
+		sportSelection.sport,
+		now,
+		sportSelection.reason,
+		undefined,
+		"0",
+		tz,
+	);
 }

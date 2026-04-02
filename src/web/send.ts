@@ -4,6 +4,7 @@
  */
 
 import type { ServerResponse } from "node:http";
+import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import { buildIntervalsDescription } from "./intervals-format.js";
 import { generatePrescriptions } from "./prescriptions.js";
@@ -23,9 +24,10 @@ export async function sendToIntervals(
 	sport: "run" | "swim",
 	res: ServerResponse,
 	force = false,
+	tz?: string,
 ): Promise<void> {
 	try {
-		const today = new Date().toISOString().slice(0, 10);
+		const today = localDateStr(new Date(), tz);
 		const dedupKey = `${profile.id}-${today}-${sport}`;
 
 		if (!force && sentToday.has(dedupKey)) {
