@@ -19,6 +19,8 @@ export interface RenderData {
 	swimHrZones: number[] | null;
 	dataSource: DataSource;
 	generatedAt: string;
+	/** IANA timezone for display formatting (e.g. "America/Los_Angeles"). */
+	tz?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -36,9 +38,14 @@ function formatDuration(secs: number): string {
 	return `${m}min`;
 }
 
-function dayName(dateStr: string): string {
+function dayName(dateStr: string, tz?: string): string {
 	const d = new Date(dateStr);
-	return d.toLocaleDateString("en-GB", { weekday: "long" });
+	return d.toLocaleDateString("en-GB", { weekday: "long", timeZone: tz });
+}
+
+function formatLocalTime(isoStr: string, tz?: string): string {
+	const d = new Date(isoStr);
+	return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
 }
 
 /**
@@ -154,6 +161,7 @@ function renderCard(
 	accent: string,
 	hrZones: number[] | null,
 	showStryd = false,
+	filteredWarnings?: string[],
 ): string {
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
@@ -188,7 +196,7 @@ function renderCard(
 				<p>${escapeHtml(invocations.opening)}</p>
 			</blockquote>
 
-			${renderWarnings(suggestion.warnings)}
+			${renderWarnings(filteredWarnings ?? suggestion.warnings)}
 
 			${renderVigilSection(suggestion.vigil)}
 
@@ -238,8 +246,8 @@ function renderVigilDataSource(vigil: VigilSummary | null): string {
 	return `<span class="${cssClass}">Vigil: ${flagCount} flag${flagCount !== 1 ? "s" : ""} (sev ${vigil.severity})${runCount}</span>`;
 }
 
-function renderDataSource(ds: DataSource, generatedAt: string): string {
-	const time = generatedAt.slice(11, 16);
+function renderDataSource(ds: DataSource, generatedAt: string, tz?: string): string {
+	const time = formatLocalTime(generatedAt, tz);
 
 	const actRange = ds.activityRange
 		? `${ds.activityRange[0]} \u2013 ${ds.activityRange[1]}`
@@ -269,22 +277,49 @@ function renderDataSource(ds: DataSource, generatedAt: string): string {
 }
 
 export function renderPage(data: RenderData): string {
-	const dateStr = data.generatedAt.slice(0, 10);
-	const day = dayName(data.generatedAt);
+	const { tz } = data;
+	const dateStr = new Date(data.generatedAt).toLocaleDateString("en-CA", { timeZone: tz });
+	const day = dayName(data.generatedAt, tz);
 	const runAccent = "#3a7a4a";
 	const swimAccent = "#1e5a7e";
 	const { profile } = data;
 	const singleCard = (data.run ? 1 : 0) + (data.swim ? 1 : 0) === 1;
 
-	const dataSourceBlock = renderDataSource(data.dataSource, data.generatedAt);
+	const dataSourceBlock = renderDataSource(data.dataSource, data.generatedAt, tz);
+	// Extract warnings shared between both prescriptions — render once above cards
+	const runWarnings = data.run?.warnings ?? [];
+	const swimWarnings = data.swim?.warnings ?? [];
+	const sharedWarnings =
+		data.run && data.swim ? runWarnings.filter((w) => swimWarnings.includes(w)) : [];
+	const sharedSet = new Set(sharedWarnings);
+	const runOnlyWarnings = runWarnings.filter((w) => !sharedSet.has(w));
+	const swimOnlyWarnings = swimWarnings.filter((w) => !sharedSet.has(w));
+	const sharedWarningsBlock = renderWarnings(sharedWarnings);
+
 	const showStryd = profile.stryd;
 	const runCard =
 		data.run && data.runInvocations
-			? renderCard(data.run, data.runInvocations, "card-run", runAccent, data.runHrZones, showStryd)
+			? renderCard(
+					data.run,
+					data.runInvocations,
+					"card-run",
+					runAccent,
+					data.runHrZones,
+					showStryd,
+					runOnlyWarnings,
+				)
 			: "";
 	const swimCard =
 		data.swim && data.swimInvocations
-			? renderCard(data.swim, data.swimInvocations, "card-swim", swimAccent, data.swimHrZones)
+			? renderCard(
+					data.swim,
+					data.swimInvocations,
+					"card-swim",
+					swimAccent,
+					data.swimHrZones,
+					false,
+					swimOnlyWarnings,
+				)
 			: "";
 
 	const titleSuffix = profile.id === "ze" ? "" : ` &middot; ${escapeHtml(profile.displayName)}`;
@@ -311,6 +346,8 @@ export function renderPage(data: RenderData): string {
 	</header>
 
 	${dataSourceBlock}
+
+	${sharedWarningsBlock}
 
 	<main class="${cardsClass}">
 		${runCard}
@@ -573,6 +610,7 @@ body {
 .invocation, .closing {
 	font-family: var(--font-display);
 	font-style: italic;
+	font-weight: 600;
 	font-size: 1rem;
 	color: var(--gold);
 	border-left: 3px solid;

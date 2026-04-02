@@ -145,6 +145,9 @@ export function buildIntervalsDescription(suggestion: WorkoutSuggestion): string
 				lines.push("");
 			} else {
 				lines.push(`- ${seg.name} ${formatSwimStep(seg)}`);
+				if (seg.rest_duration_secs) {
+					lines.push(`- ${formatDuration(seg.rest_duration_secs)} 50%`);
+				}
 			}
 		} else {
 			// Run: section header + structured power/HR targets

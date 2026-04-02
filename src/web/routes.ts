@@ -220,6 +220,7 @@ async function handleMainPage(
 		swimHrZones: prescriptions.swimHrZones,
 		dataSource: prescriptions.dataSource,
 		generatedAt: prescriptions.generated_at,
+		tz,
 	});
 	res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 	res.end(html);

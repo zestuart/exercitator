@@ -357,20 +357,22 @@ function swimPaceDesc(
 	return label;
 }
 
-/** 300m warm-up: 3 × 100m (free, kick, pull) — used by base, tempo, intervals. */
+/** 300m warm-up: 3 × 100m (free, kick, pull) with 10s rest between drills. */
 function swimWarmUp300(scale: number): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(120, scale),
+			duration_secs: scaled(130, scale),
 			target_description: "100m easy free",
 			target_hr_zone: 1,
+			rest_duration_secs: 10,
 		},
 		{
 			name: "Warm-up",
-			duration_secs: scaled(120, scale),
+			duration_secs: scaled(130, scale),
 			target_description: "100m kick with board",
 			target_hr_zone: 1,
+			rest_duration_secs: 10,
 		},
 		{
 			name: "Warm-up",
@@ -381,10 +383,13 @@ function swimWarmUp300(scale: number): WorkoutSegment[] {
 	];
 }
 
-/** 400m warm-up: 4 × 100m (free, kick, pull, drill/swim) — used by long. */
+/** 400m warm-up: 4 × 100m (free, kick, pull, drill/swim) with 10s rest between drills. */
 function swimWarmUp400(scale: number): WorkoutSegment[] {
+	const drills = swimWarmUp300(scale);
+	// Add rest to the last 300m drill (pull) before the 4th drill
+	drills[drills.length - 1].rest_duration_secs = 10;
 	return [
-		...swimWarmUp300(scale),
+		...drills,
 		{
 			name: "Warm-up",
 			duration_secs: scaled(120, scale),
