@@ -220,7 +220,7 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: `${reps}×${Math.round(workSecs / 60)}min ${workDesc} / 3min Z1 recovery`,
+			target_description: `${Math.round(workSecs / 60)}min ${workDesc} / 3min Z1 recovery`,
 			target_hr_zone: 3,
 			...(z3 && { target_power_low: z3.low, target_power_high: z3.high }),
 			repeats: reps,
@@ -271,7 +271,7 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: `${reps}×2.5min ${workDesc} / 2min Z1 jog`,
+			target_description: `2.5min ${workDesc} / 2min Z1 jog`,
 			target_hr_zone: 4,
 			...(z4 && { target_power_low: z4.low, target_power_high: z4.high }),
 			repeats: reps,
@@ -369,7 +369,7 @@ function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Drill set",
 			duration_secs: scaled(480, scale),
-			target_description: "4×50m drill/swim on :15 rest",
+			target_description: "50m drill/swim on :15 rest",
 			target_hr_zone: 1,
 			repeats: 4,
 			work_duration_secs: scaled(105, scale),
@@ -403,13 +403,7 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: scaled(reps * 270, scale),
-			target_description: swimPaceDesc(
-				settings,
-				10,
-				`${reps}×200m Z2 on :20 rest`,
-				paceBufferSecs,
-				hrOnly,
-			),
+			target_description: swimPaceDesc(settings, 10, "200m Z2 on :20 rest", paceBufferSecs, hrOnly),
 			target_hr_zone: 2,
 			repeats: reps,
 			work_duration_secs: scaled(250, scale),
@@ -439,7 +433,7 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 			target_description: swimPaceDesc(
 				settings,
 				0,
-				"4×200m Z3 descending on :30 rest",
+				"200m Z3 descending on :30 rest",
 				paceBufferSecs,
 				hrOnly,
 			),
@@ -451,13 +445,7 @@ function buildSwimTempo(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Speed set",
 			duration_secs: scaled(4 * 70, scale),
-			target_description: swimPaceDesc(
-				settings,
-				-6,
-				"4×50m Z4 on :20 rest",
-				paceBufferSecs,
-				hrOnly,
-			),
+			target_description: swimPaceDesc(settings, -6, "50m Z4 on :20 rest", paceBufferSecs, hrOnly),
 			target_hr_zone: 4,
 			repeats: 4,
 			work_duration_secs: scaled(50, scale),
@@ -484,13 +472,7 @@ function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Main set",
 			duration_secs: scaled(8 * 105, scale),
-			target_description: swimPaceDesc(
-				settings,
-				-6,
-				"8×100m Z4 on :15 rest",
-				paceBufferSecs,
-				hrOnly,
-			),
+			target_description: swimPaceDesc(settings, -6, "100m Z4 on :15 rest", paceBufferSecs, hrOnly),
 			target_hr_zone: 4,
 			repeats: 8,
 			work_duration_secs: scaled(90, scale),
@@ -505,7 +487,7 @@ function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Sprint set",
 			duration_secs: scaled(4 * 65, scale),
-			target_description: "4×50m sprint on :30 rest",
+			target_description: "50m sprint on :30 rest",
 			target_hr_zone: 5,
 			repeats: 4,
 			work_duration_secs: scaled(35, scale),
@@ -537,7 +519,7 @@ function buildSwimLong(ctx: BuildContext): WorkoutSegment[] {
 			target_description: swimPaceDesc(
 				settings,
 				10,
-				`${segments400}×400m Z2 continuous with :10 rest between segments`,
+				"400m Z2 continuous with :10 rest between segments",
 				paceBufferSecs,
 				hrOnly,
 			),

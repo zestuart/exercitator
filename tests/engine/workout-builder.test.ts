@@ -158,6 +158,24 @@ describe("buildWorkout", () => {
 		expect(result.total_duration_secs).toBeGreaterThanOrEqual(1800);
 	});
 
+	it("target_description does not embed repeat count", () => {
+		for (const sport of ["Run", "Swim"] as const) {
+			const settings = sport === "Run" ? runSettings : swimSettings;
+			const power = sport === "Run" ? strydCtx : undefined;
+			for (const cat of ["recovery", "base", "tempo", "intervals", "long"] as const) {
+				const result = buildWorkout(cat, sport, settings, 70, 50, power);
+				for (const seg of result.segments) {
+					if (seg.repeats && seg.repeats > 1) {
+						expect(seg.target_description).not.toMatch(
+							/^\d+[×x]/,
+							`${sport}/${cat}/${seg.name}: target_description should not start with rep count`,
+						);
+					}
+				}
+			}
+		}
+	});
+
 	it("includes dual targets on every running segment with power source", () => {
 		for (const cat of ["recovery", "base", "tempo", "intervals", "long"] as const) {
 			const result = buildWorkout(cat, "Run", runSettings, 70, 50, strydCtx);

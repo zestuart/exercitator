@@ -92,7 +92,7 @@ describe("buildIntervalsDescription", () => {
 				{
 					name: "Main set",
 					duration_secs: 1350,
-					target_description: "5x2.5min Z4",
+					target_description: "2.5min Z4",
 					target_hr_zone: 4,
 					target_power_low: 228,
 					target_power_high: 263,
@@ -160,7 +160,7 @@ describe("buildIntervalsDescription", () => {
 				{
 					name: "Main set",
 					duration_secs: 840,
-					target_description: "8x100m Z4",
+					target_description: "100m Z4",
 					target_hr_zone: 4,
 					repeats: 8,
 					work_duration_secs: 90,
