@@ -210,10 +210,6 @@ function renderCard(
 				<p class="rationale-text sport-reason">${escapeHtml(suggestion.sport_selection_reason)}</p>
 			</div>
 
-			<blockquote class="closing" style="border-left-color: ${accent}">
-				<p>${escapeHtml(invocations.closing)}</p>
-			</blockquote>
-
 			<div class="send-buttons">
 				<button class="send-btn" data-sport="${sportEndpoint}" style="--btn-accent: ${accent}">
 					&#x2197; Send to intervals.icu
@@ -322,6 +318,12 @@ export function renderPage(data: RenderData): string {
 				)
 			: "";
 
+	// Apollo's closing — rendered once at the bottom of the page
+	const closingText = data.runInvocations?.closing ?? data.swimInvocations?.closing ?? "";
+	const closingBlock = closingText
+		? `<blockquote class="closing-page"><p>${escapeHtml(closingText)}</p></blockquote>`
+		: "";
+
 	const titleSuffix = profile.id === "ze" ? "" : ` &middot; ${escapeHtml(profile.displayName)}`;
 	const cardsClass = singleCard ? "cards cards-single" : "cards";
 
@@ -353,6 +355,8 @@ export function renderPage(data: RenderData): string {
 		${runCard}
 		${swimCard}
 	</main>
+
+	${closingBlock}
 
 	<footer class="page-footer">
 		<span class="diamond">&loz;</span>
@@ -607,7 +611,7 @@ body {
 
 /* --- Invocations --- */
 
-.invocation, .closing {
+.invocation {
 	font-family: var(--font-display);
 	font-style: italic;
 	font-weight: 600;
@@ -621,6 +625,20 @@ body {
 	line-height: 1.5;
 }
 
+.closing-page {
+	font-family: var(--font-display);
+	font-style: italic;
+	font-weight: 600;
+	font-size: 1rem;
+	color: var(--gold);
+	text-align: center;
+	max-width: 720px;
+	margin: 2rem auto 1rem;
+	padding: 1rem;
+	line-height: 1.5;
+	border: none;
+}
+
 /* --- Warnings --- */
 
 .warnings {
@@ -628,7 +646,9 @@ body {
 	border: 1px solid rgba(196, 78, 34, 0.2);
 	border-radius: 6px;
 	padding: 0.6rem 1rem;
-	margin: 1rem 0;
+	margin: 1rem auto;
+	text-align: center;
+	max-width: 720px;
 }
 
 .warnings ul { list-style: none; }
