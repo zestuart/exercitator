@@ -207,7 +207,6 @@ function renderCard(
 			<div class="rationale-section">
 				<h3 class="rationale-header">${escapeHtml(invocations.rationale_header)}</h3>
 				<p class="rationale-text">${escapeHtml(suggestion.rationale)}</p>
-				<p class="rationale-text sport-reason">${escapeHtml(suggestion.sport_selection_reason)}</p>
 			</div>
 
 			<div class="send-buttons">
@@ -769,7 +768,10 @@ body {
 
 /* --- Rationale --- */
 
-.rationale-section { margin: 0.8rem 0 1rem; }
+.rationale-section {
+	margin: 0.8rem 0 1rem;
+	text-align: center;
+}
 
 .rationale-header {
 	font-family: var(--font-display);
@@ -785,8 +787,6 @@ body {
 	color: var(--text-dim);
 	margin-bottom: 0.3rem;
 }
-
-.sport-reason { font-style: italic; }
 
 /* --- Send buttons --- */
 

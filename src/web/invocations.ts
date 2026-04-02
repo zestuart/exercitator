@@ -46,7 +46,7 @@ const STATIC_CLOSING: Record<"Run" | "Swim", string> = {
 function staticFallback(sport: "Run" | "Swim"): Invocations {
 	return {
 		opening: STATIC_OPENING[sport],
-		rationale_header: "Rationale \u00b7 Under Minerva\u2019s Counsel",
+		rationale_header: "Under Minerva\u2019s Counsel",
 		closing: STATIC_CLOSING[sport],
 	};
 }
@@ -120,7 +120,7 @@ Return only valid JSON: {"opening": "...", "closing": "..."}`;
 
 	return {
 		opening: parsed.opening,
-		rationale_header: "Rationale \u00b7 Under Minerva\u2019s Counsel",
+		rationale_header: "Under Minerva\u2019s Counsel",
 		closing: parsed.closing,
 	};
 }

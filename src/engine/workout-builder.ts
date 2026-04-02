@@ -649,19 +649,19 @@ export function buildWorkout(
 	};
 }
 
-function buildRationale(category: WorkoutCategory, readiness: number, sport: string): string {
+function buildRationale(category: WorkoutCategory, _readiness: number, sport: string): string {
 	switch (category) {
 		case "rest":
-			return `Readiness is very low (${readiness}/100). Full rest is recommended to allow recovery.`;
+			return "Full rest is recommended to allow recovery.";
 		case "recovery":
-			return `Readiness is low (${readiness}/100). A gentle ${sport.toLowerCase()} session to promote blood flow without adding fatigue.`;
+			return `A gentle ${sport.toLowerCase()} session to promote blood flow without adding fatigue.`;
 		case "base":
-			return `Moderate readiness (${readiness}/100). Building aerobic base with steady-state ${sport.toLowerCase()}.`;
+			return `Building aerobic base with steady-state ${sport.toLowerCase()}.`;
 		case "tempo":
-			return `Good readiness (${readiness}/100). Threshold work to improve lactate clearance.`;
+			return "Threshold work to improve lactate clearance.";
 		case "intervals":
-			return `High readiness (${readiness}/100). High-intensity intervals to build VO2max and speed.`;
+			return "High-intensity intervals to build VO2max and speed.";
 		case "long":
-			return `Moderate-to-good readiness (${readiness}/100) and no long session this week. Extended ${sport.toLowerCase()} for endurance.`;
+			return `No long session this week. Extended ${sport.toLowerCase()} for endurance.`;
 	}
 }
