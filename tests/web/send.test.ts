@@ -43,8 +43,8 @@ describe("send to intervals.icu", () => {
 		const stepLines = lines.filter((l) => l.startsWith("- "));
 		expect(stepLines.length).toBeGreaterThan(0);
 
-		// No empty lines between sections
-		expect(description).not.toContain("\n\n");
+		// Blank lines only around repeat blocks (intervals.icu syntax requirement)
+		expect(description).not.toContain("\n\n\n");
 	});
 
 	it("generates valid intervals.icu workout text for a swim", async () => {

@@ -86,7 +86,7 @@ describe("buildIntervalsDescription", () => {
 		expect(text).toContain("30m");
 	});
 
-	it("generates repeat format for interval sets", () => {
+	it("generates repeat format with blank lines for interval sets", () => {
 		const suggestion = makeSuggestion({
 			segments: [
 				{
@@ -106,7 +106,7 @@ describe("buildIntervalsDescription", () => {
 		const text = buildIntervalsDescription(suggestion);
 		expect(text).toContain("5x");
 		expect(text).toContain("2m30s");
-		expect(text).toContain("2m rest");
+		expect(text).toContain("2m 50%");
 	});
 
 	it("generates valid output for recovery run", () => {
@@ -146,7 +146,7 @@ describe("buildIntervalsDescription", () => {
 		expect(headers.length).toBeGreaterThan(0);
 	});
 
-	it("formats swim suggestion with distance-based descriptions", () => {
+	it("formats swim with mtr units, Pace suffix, and blank-line repeats", () => {
 		const suggestion = makeSuggestion({
 			sport: "Swim",
 			power_context: NO_POWER,
@@ -166,15 +166,31 @@ describe("buildIntervalsDescription", () => {
 					work_duration_secs: 90,
 					rest_duration_secs: 15,
 				},
+				{
+					name: "Cool-down",
+					duration_secs: 240,
+					target_description: "200m easy",
+					target_hr_zone: 1,
+				},
 			],
 		});
 
 		const text = buildIntervalsDescription(suggestion);
+		// Uses mtr (not m which means minutes)
+		expect(text).toContain("300mtr");
+		expect(text).toContain("100mtr");
+		expect(text).toContain("200mtr");
+		// Pace has Pace suffix with mtr unit
+		expect(text).toContain("1:39/100mtr Pace");
+		// Repeats present
 		expect(text).toContain("8x");
-		expect(text).toContain("100m Z4");
-		expect(text).toContain("15s rest");
-		// Swim uses target_description directly, not time-based durations
+		// Rest uses intensity, not "rest" keyword
+		expect(text).toContain("15s 50%");
+		expect(text).not.toContain("rest");
+		// No time-based durations for swim steps
 		expect(text).not.toContain("1m30s");
-		expect(text).toContain("300m progressive warm-up");
+		// Blank lines around repeat block
+		const repeatIdx = text.indexOf("8x");
+		expect(text[repeatIdx - 1]).toBe("\n");
 	});
 });
