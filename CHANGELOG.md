@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Doubled repeat count in swim and run prescriptions — `target_description` embedded rep count (e.g. "4×200m") while `repeats` field also carried it, producing "4×4×200m" in UI (fixes #24)
 - Sleep trend check: `.slice(-3).filter()` could miss poor nights if recent records lacked sleep data; now `.filter().slice(-3)` ensures the 3 most recent with sleep data are checked
 
-### Added (continued, from top)
+### Added (prior)
 - Initial project setup via Armature framework
 - TypeScript MCP server with dual transport (stdio / streamable-http)
 - intervals.icu API client with Basic auth
