@@ -184,3 +184,17 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Root cause**: Five issues: (1) Oura readiness (0–100) treated as 0–10 scale, always clamping subjective component to 100. (2) Sleep warning only fired below score 60 — too lenient. (3) No multi-night sleep trend detection. (4) HRV cliff at 75% of mean — anything below scored 0, losing gradient information. (5) Long session trigger gate at readiness 45 — too low for fatigued athletes.
 **Fix**: (1) Use readiness directly as 0–100. (2) Raise sleep warning to < 70 and sleepScore < 75. (3) Add 3-night trend check. (4) Extend HRV gradient to 0.6 (score 0) through 0.75 (score 20). (5) Raise long gate to 60 + add HRV guard (component < 30 blocks long).
 **Prevention**: When integrating data from wearable APIs (Oura, Garmin), verify the scale of each field against the API documentation — don't assume all numeric fields use the same range. When designing readiness thresholds, test with real athlete data at various fatigue levels, not just synthetic fixtures. The subjective scale bug went unnoticed for weeks because tests used neutral defaults.
+
+## 2026-04-03 — Staleness cleared by a single session after 68-day break
+
+**What happened**: Athlete swam once (04-01) after a 68-day break from swimming. The staleness check saw "last swim 2 days ago" and returned normal tier. The system prescribed a distance swim (long category) — inappropriate for a return-to-sport athlete.
+**Root cause**: Staleness only checked "days since last activity in this sport", not the frequency of recent sessions. A single session after months off immediately cleared the staleness flag.
+**Fix**: Added a minimum session count (3 in the 14-day window) for "normal" tier. Fewer sessions with a recent date get "moderate" tier with a "Return to sport" warning and pace buffer. This naturally downgrades the category and prevents aggressive prescriptions.
+**Prevention**: When designing a "recency" check, consider both the date of the most recent session and the *density* of recent sessions. A single data point shouldn't override a pattern of absence.
+
+## 2026-04-03 — Sleep warnings were advisory-only, didn't influence prescriptions
+
+**What happened**: Athlete had 3+ nights of poor sleep (jet lag, London→Oakland), readiness score showed sleep warnings, but the system still prescribed tempo (threshold) running. The warnings were decorative — they informed but didn't protect.
+**Root cause**: The sleep trend detection ran in `computeReadiness` and added warning strings, but the resulting score (which incorporates sleep as only 20% weight) could still be high enough for tempo. No mechanism existed to feed the sleep debt signal back into category selection.
+**Fix**: Added `sleepDebt: boolean` to `ReadinessResult`, set when 3+ recent poor nights detected. Threaded through to `selectWorkoutCategory` where it caps category at base — overrides tempo/intervals/long regardless of readiness score.
+**Prevention**: When a system generates warnings about a dangerous condition, consider whether those warnings should also trigger protective behaviour, not just inform the user. Advisory-only warnings are insufficient when the system can act on them.

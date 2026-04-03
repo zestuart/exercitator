@@ -11,8 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Per-user timezone awareness — `localDateStr(date, tz)` utility replaces all UTC date computations; timezone resolved per request via browser cookie → intervals.icu athlete profile → UTC fallback; threaded through engine, web layer, and MCP tools
 - Swim warm-up broken into individual 100m drill sections (free, kick with board, pull with buoy) with 10s rest gaps between steps; 400m warm-up (long sessions) adds a 4th drill/swim choice step
 - Multi-night sleep trend warning — alerts when 3+ recent nights have poor sleep (< 7h or score < 75) to catch cumulative sleep debt and jet lag
+- Sleep debt category cap — when 3+ recent poor nights detected, category capped at base regardless of readiness score; makes sleep warnings actionable, not just advisory
 - HRV guard on long session trigger — HRV component < 30 blocks base→long upgrade to prevent long sessions when recovery is suppressed
-- New workout-selector tests: long session blocked below readiness 60, long session blocked when HRV suppressed
+- Staleness session count gate — requires ≥ 3 sessions in 14-day window to consider athlete "current" in a sport; one session after a long break gets moderate staleness (return-to-sport) with pace buffer and category downgrade
+- New workout-selector tests: long session blocked below readiness 60, long session blocked when HRV suppressed, sleep debt caps at base
+- New staleness tests: return-to-sport pattern (recent but too few sessions)
 
 ### Changed
 - Readiness scoring: Oura/Garmin readiness (0–100) now used directly in subjective component — was incorrectly treated as 0–10 scale, always clamping to 100
