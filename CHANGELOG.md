@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Per-user timezone awareness — `localDateStr(date, tz)` utility replaces all UTC date computations; timezone resolved per request via browser cookie → intervals.icu athlete profile → UTC fallback; threaded through engine, web layer, and MCP tools
+- Swim warm-up broken into individual 100m drill sections (free, kick with board, pull with buoy) with 10s rest gaps between steps; 400m warm-up (long sessions) adds a 4th drill/swim choice step
+- Multi-night sleep trend warning — alerts when 3+ recent nights have poor sleep (< 7h or score < 75) to catch cumulative sleep debt and jet lag
+- HRV guard on long session trigger — HRV component < 30 blocks base→long upgrade to prevent long sessions when recovery is suppressed
+- New workout-selector tests: long session blocked below readiness 60, long session blocked when HRV suppressed
+
+### Changed
+- Readiness scoring: Oura/Garmin readiness (0–100) now used directly in subjective component — was incorrectly treated as 0–10 scale, always clamping to 100
+- HRV scoring gradient smoothed: ratio < 0.75 no longer cliffs to 0; extended to gradient from 0.75 (score 20) down to 0.6 (score 0)
+- Sleep warning threshold raised from < 60 to < 70 (component score) and sleepScore threshold from < 60 to < 75
+- Long session readiness gate raised from ≥ 45 to ≥ 60
+- Swim intervals.icu workout format: uses `mtr` for metres (not `m`), `Pace` suffix, blank lines around repeat blocks, `50%` intensity for rest steps
+- Swim format uses `target_description` directly for distance-based steps instead of time-based durations with HR percentages
+- Rationale section: removed sport selection reason and readiness score from text, centred under "Under Minerva's Counsel" header (dropped "Rationale ·" prefix)
+- Shared warnings (HRV, sleep) rendered once above cards instead of duplicated per card; centred alignment
+- Apollo's closing tribute moved from per-card bottom to single centred block below cards
+- Deity invocation text: colour darkened (#c48c28 → #7a5a1a), weight increased to 600
+- Terrain block removed from Praescriptor UI (power-based training makes terrain guidance irrelevant)
+- Generated timestamp and page date use per-user timezone instead of UTC
+
+### Fixed
+- Doubled repeat count in swim and run prescriptions — `target_description` embedded rep count (e.g. "4×200m") while `repeats` field also carried it, producing "4×4×200m" in UI (fixes #24)
+- Sleep trend check: `.slice(-3).filter()` could miss poor nights if recent records lacked sleep data; now `.filter().slice(-3)` ensures the 3 most recent with sleep data are checked
+
+### Added (continued, from top)
 - Initial project setup via Armature framework
 - TypeScript MCP server with dual transport (stdio / streamable-http)
 - intervals.icu API client with Basic auth

@@ -163,3 +163,24 @@ proactively. Entries are append-only — never edit or remove past entries.
 **Root cause**: Stryd's API is not publicly documented. The only way to discover it was traffic analysis.
 **Fix**: Reverse-engineered three endpoints: `POST /workouts` (create), `POST /users/{id}/workouts?id=&timestamp=` (schedule on calendar), `DELETE /users/{id}/workouts/{calendarId}` (remove). Power targets use CP% — maps directly to our zone model. Auth is the same Bearer token from the existing login endpoint.
 **Prevention**: When a vendor's public documentation says "no API", check the web UI's network traffic. Modern SPAs almost always have a REST/GraphQL API behind them. HAR captures are the fastest way to map undocumented APIs.
+
+## 2026-04-01 — Doubled repeat count in swim prescriptions (#24)
+
+**What happened**: Swim prescriptions displayed "4×4×200m" — the repeat count appeared twice in the UI and intervals.icu workout text.
+**Root cause**: All swim builders embedded the rep count in `target_description` (e.g. "4×200m Z2") while also setting the `repeats` field. The rendering layer prepended `repeats`, producing doubled output.
+**Fix**: Stripped the `N×` prefix from `target_description` in all swim and run builders. The `repeats` field carries the count structurally.
+**Prevention**: When a segment has both a structured field (`repeats`) and a human-readable description (`target_description`), the description should describe the work interval only, not include structural data that the renderer will add.
+
+## 2026-04-01 — intervals.icu parser treats `m` as minutes, not metres
+
+**What happened**: Swim workouts sent to intervals.icu parsed incorrectly — "200m" was interpreted as "200 minutes". The downloaded workout JSON showed only 4 bare steps with no distances.
+**Root cause**: The intervals.icu workout text parser uses `m` for minutes and `mtr` for metres. Our format used `200m` (minutes), not `200mtr` (metres). Also: repeat blocks need blank lines before/after, rest needs an intensity target (not just the word "rest"), and pace needs a `Pace` suffix.
+**Fix**: Rewrote `buildIntervalsDescription` for swim: `mtr` for metres, `Pace` suffix, blank lines around repeats, `50%` for rest. Swim uses `target_description` directly for distance-based steps.
+**Prevention**: When generating text for an external parser, always verify against the parser's documentation — don't assume units match common conventions. Download and inspect the parsed result to confirm structure.
+
+## 2026-04-02 — Readiness scoring: five compounding bugs inflated scores by ~8 points
+
+**What happened**: Athlete with suppressed HRV (73% of baseline), poor sleep (5h58), and Oura readiness of 51 got a readiness score of 49 and was prescribed long sessions for both run and swim. Should have been ~42 with base sessions.
+**Root cause**: Five issues: (1) Oura readiness (0–100) treated as 0–10 scale, always clamping subjective component to 100. (2) Sleep warning only fired below score 60 — too lenient. (3) No multi-night sleep trend detection. (4) HRV cliff at 75% of mean — anything below scored 0, losing gradient information. (5) Long session trigger gate at readiness 45 — too low for fatigued athletes.
+**Fix**: (1) Use readiness directly as 0–100. (2) Raise sleep warning to < 70 and sleepScore < 75. (3) Add 3-night trend check. (4) Extend HRV gradient to 0.6 (score 0) through 0.75 (score 20). (5) Raise long gate to 60 + add HRV guard (component < 30 blocks long).
+**Prevention**: When integrating data from wearable APIs (Oura, Garmin), verify the scale of each field against the API documentation — don't assume all numeric fields use the same range. When designing readiness thresholds, test with real athlete data at various fatigue levels, not just synthetic fixtures. The subjective scale bug went unnoticed for weeks because tests used neutral defaults.
