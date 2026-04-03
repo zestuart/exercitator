@@ -165,6 +165,8 @@ export function selectWorkoutCategory(
 	tz?: string,
 	/** HRV readiness component (0–100). When < 30, blocks long session upgrade. */
 	hrvComponent?: number,
+	/** When true, caps category at base — multi-night poor sleep detected. */
+	sleepDebt?: boolean,
 ): WorkoutCategory {
 	// Default power context if not provided (backward compatibility)
 	const ctx: PowerContext = powerContext ?? {
@@ -268,6 +270,14 @@ export function selectWorkoutCategory(
 			if (category !== "rest" && category !== "recovery") {
 				category = "base";
 			}
+		}
+	}
+
+	// Sleep debt cap: 3+ consecutive poor nights → cap at base.
+	// Applied last — sleep debt overrides all upstream intensity selections.
+	if (sleepDebt && category !== "rest" && category !== "recovery") {
+		if (category === "tempo" || category === "intervals" || category === "long") {
+			category = "base";
 		}
 	}
 

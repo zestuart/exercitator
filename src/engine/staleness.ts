@@ -30,6 +30,10 @@ function isSportActivity(a: ActivitySummary, sport: "Run" | "Swim"): boolean {
 	return sport === "Run" ? RUN_TYPES.includes(a.type) : SWIM_TYPES.includes(a.type);
 }
 
+/** Minimum sessions in 14-day window to consider an athlete "current" in a sport.
+ *  One session after a long break shouldn't clear staleness — need consistent activity. */
+const MIN_SESSIONS_FOR_CURRENT = 3;
+
 export function computeStaleness(
 	activities: ActivitySummary[],
 	sport: "Run" | "Swim",
@@ -57,7 +61,13 @@ export function computeStaleness(
 	const lastDate = new Date(sorted[0].start_date_local);
 	const daysSince = (now.getTime() - lastDate.getTime()) / (1000 * 86400);
 
-	if (daysSince <= 27) {
+	// Check for return-to-sport pattern: recent activity exists but insufficient
+	// session count to consider the athlete current. A single session after a long
+	// break should not clear staleness — thresholds need recalibration.
+	const sportName = sport.toLowerCase();
+	const unit = sport === "Swim" ? "100m" : "km";
+
+	if (daysSince <= 27 && sportActivities.length >= MIN_SESSIONS_FOR_CURRENT) {
 		return {
 			tier: "normal",
 			daysSinceLast: Math.round(daysSince),
@@ -67,8 +77,18 @@ export function computeStaleness(
 		};
 	}
 
-	const sportName = sport.toLowerCase();
-	const unit = sport === "Swim" ? "100m" : "km";
+	// Return-to-sport: recent activity but too few sessions — treat as moderate
+	if (daysSince <= 27 && sportActivities.length < MIN_SESSIONS_FOR_CURRENT) {
+		return {
+			tier: "moderate",
+			daysSinceLast: Math.round(daysSince),
+			paceBufferSecs: 10,
+			hrOnly: false,
+			warnings: [
+				`Return to ${sportName}: only ${sportActivities.length} session${sportActivities.length === 1 ? "" : "s"} in 14 days — easing back in. Adding 10s/${unit} buffer.`,
+			],
+		};
+	}
 
 	if (daysSince <= 60) {
 		return {

@@ -8,6 +8,8 @@ import type { ActivitySummary, WellnessRecord } from "./types.js";
 export interface ReadinessResult {
 	score: number;
 	warnings: string[];
+	/** When true, 3+ recent nights of poor sleep detected — should cap intensity. */
+	sleepDebt: boolean;
 	components: {
 		tsb: number;
 		sleep: number;
@@ -194,6 +196,7 @@ export function computeReadiness(
 	// Only considers the last 3 wellness records that have sleep data — these are
 	// typically consecutive nights, but we don't enforce strict date adjacency since
 	// wellness records may have gaps (e.g. no device worn one night).
+	let sleepDebt = false;
 	const recentSleep = wellness.filter((w) => w.sleepSecs != null || w.sleepScore != null).slice(-3);
 	if (recentSleep.length >= 3) {
 		const poorNights = recentSleep.filter(
@@ -201,6 +204,7 @@ export function computeReadiness(
 				(w.sleepSecs != null && w.sleepSecs < 25200) || (w.sleepScore != null && w.sleepScore < 75),
 		);
 		if (poorNights.length >= 3) {
+			sleepDebt = true;
 			warnings.push("Sleep debt accumulating — 3+ recent nights of poor sleep");
 		}
 	}
@@ -213,5 +217,5 @@ export function computeReadiness(
 		warnings.push("Self-reported fatigue or soreness is elevated");
 	}
 
-	return { score, warnings, components };
+	return { score, warnings, sleepDebt, components };
 }

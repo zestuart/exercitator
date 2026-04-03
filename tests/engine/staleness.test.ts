@@ -42,18 +42,31 @@ function makeActivity(
 }
 
 describe("computeStaleness", () => {
-	it("returns normal for recent activity (<= 27 days)", () => {
+	it("returns normal for recent activity with sufficient session count", () => {
 		const activities = [
 			makeActivity("Swim", "2026-03-20T08:00:00"),
+			makeActivity("Swim", "2026-03-22T08:00:00"),
+			makeActivity("Swim", "2026-03-25T08:00:00"),
 			makeActivity("Run", "2026-03-25T07:00:00"),
 		];
 
 		const result = computeStaleness(activities, "Swim", NOW);
 		expect(result.tier).toBe("normal");
-		expect(result.daysSinceLast).toBe(6);
+		expect(result.daysSinceLast).toBe(1);
 		expect(result.paceBufferSecs).toBe(0);
 		expect(result.hrOnly).toBe(false);
 		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("returns moderate for return-to-sport (recent but too few sessions)", () => {
+		const activities = [makeActivity("Swim", "2026-03-25T08:00:00")];
+
+		const result = computeStaleness(activities, "Swim", NOW);
+		expect(result.tier).toBe("moderate");
+		expect(result.daysSinceLast).toBe(1);
+		expect(result.paceBufferSecs).toBe(10);
+		expect(result.warnings[0]).toContain("Return to swim");
+		expect(result.warnings[0]).toContain("1 session");
 	});
 
 	it("returns moderate for 28-60 day gap", () => {
@@ -105,8 +118,10 @@ describe("computeStaleness", () => {
 	});
 
 	it("computes staleness per sport independently", () => {
-		// Recent run but stale swim
+		// Recent runs (enough for normal) but stale swim
 		const activities = [
+			makeActivity("Run", "2026-03-20T07:00:00"),
+			makeActivity("Run", "2026-03-22T07:00:00"),
 			makeActivity("Run", "2026-03-25T07:00:00"),
 			makeActivity("Swim", "2026-02-10T08:00:00"), // 44 days ago
 		];

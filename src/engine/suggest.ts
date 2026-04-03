@@ -229,6 +229,7 @@ export function suggestWorkoutFromData(
 		crossTrainingStrains,
 		tz,
 		readiness.components.hrv,
+		readiness.sleepDebt,
 	);
 	const category = applyStaleness(readinessCategory, staleness.tier);
 
