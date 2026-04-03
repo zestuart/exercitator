@@ -163,6 +163,8 @@ export function selectWorkoutCategory(
 	vigilAlert?: VigilAlert,
 	crossTrainingStrains?: Map<string, CrossTrainingStrain>,
 	tz?: string,
+	/** HRV readiness component (0–100). When < 30, blocks long session upgrade. */
+	hrvComponent?: number,
 ): WorkoutCategory {
 	// Default power context if not provided (backward compatibility)
 	const ctx: PowerContext = powerContext ?? {
@@ -216,8 +218,10 @@ export function selectWorkoutCategory(
 		category = "base";
 	}
 
-	// Long session trigger: no >90min session in 7 days (60min for swim), readiness >= 45
-	if (category === "base" && readinessScore >= 45) {
+	// Long session trigger: no >90min session in 7 days (60min for swim), readiness >= 60
+	// Blocked when HRV is suppressed (component < 30) — long sessions amplify fatigue
+	const hrvOk = hrvComponent == null || hrvComponent >= 30;
+	if (category === "base" && readinessScore >= 60 && hrvOk) {
 		const longThreshold = sport === "Swim" ? 3600 : 5400; // 60min swim, 90min run
 		if (!hasLongSession(activities, longThreshold, now)) {
 			category = "long";

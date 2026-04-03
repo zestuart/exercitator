@@ -68,11 +68,12 @@ function computeHrv(wellness: WellnessRecord[]): number | null {
 	const today = hrvValues[hrvValues.length - 1];
 	const ratio = today / mean;
 
-	// ≥110% → 100, 100% → 75, 90% → 50, ≤75% → 0
+	// ≥110% → 100, 100% → 75, 90% → 50, 75% → 20, ≤60% → 0
 	if (ratio >= 1.1) return 100;
 	if (ratio >= 1.0) return lerp(ratio, 1.0, 1.1, 75, 100);
 	if (ratio >= 0.9) return lerp(ratio, 0.9, 1.0, 50, 75);
-	if (ratio >= 0.75) return lerp(ratio, 0.75, 0.9, 0, 50);
+	if (ratio >= 0.75) return lerp(ratio, 0.75, 0.9, 20, 50);
+	if (ratio >= 0.6) return lerp(ratio, 0.6, 0.75, 0, 20);
 	return 0;
 }
 
@@ -93,19 +94,24 @@ function computeRecency(activities: ActivitySummary[], now: Date): number | null
 	return 100 / (1 + Math.exp(-0.15 * (hoursSince - 24)));
 }
 
-/** Subjective component: average of inverted fatigue, inverted soreness, and readiness. */
+/** Subjective component: average of inverted fatigue, inverted soreness, and readiness.
+ *  All values are normalised to 0–100 before averaging.
+ *  - fatigue/soreness: intervals.icu 0–10 scale, inverted (10 - value) then × 10
+ *  - readiness: Oura/Garmin 0–100 scale, used directly */
 function computeSubjective(wellness: WellnessRecord[]): number | null {
 	// Use most recent record with any subjective data
 	for (let i = wellness.length - 1; i >= 0; i--) {
 		const w = wellness[i];
 		const values: number[] = [];
-		if (w.fatigue != null) values.push(10 - w.fatigue);
-		if (w.soreness != null) values.push(10 - w.soreness);
+		// fatigue/soreness are 0–10 (intervals.icu manual entry) — invert and scale to 0–100
+		if (w.fatigue != null) values.push((10 - w.fatigue) * 10);
+		if (w.soreness != null) values.push((10 - w.soreness) * 10);
+		// readiness is 0–100 (Oura/Garmin) — use directly
 		if (w.readiness != null) values.push(w.readiness);
 
 		if (values.length > 0) {
 			const avg = values.reduce((a, b) => a + b, 0) / values.length;
-			return clamp((avg / 10) * 100, 0, 100);
+			return clamp(avg, 0, 100);
 		}
 	}
 	return null;
@@ -165,7 +171,7 @@ export function computeReadiness(
 		);
 	}
 
-	if (sleep != null && sleep < 60) {
+	if (sleep != null && sleep < 70) {
 		for (let i = wellness.length - 1; i >= 0; i--) {
 			const w = wellness[i];
 			if (w.sleepSecs != null && w.sleepSecs < 25200) {
@@ -177,10 +183,22 @@ export function computeReadiness(
 				warnings.push(`Sleep below 7 hours (${h}h${m}m) — consider lighter intensity`);
 				break;
 			}
-			if (w.sleepScore != null && w.sleepScore < 60) {
+			if (w.sleepScore != null && w.sleepScore < 75) {
 				warnings.push(`Sleep score low (${w.sleepScore}) — consider lighter intensity`);
 				break;
 			}
+		}
+	}
+
+	// Multi-night sleep trend: 3+ consecutive nights under 7 hours or score < 75
+	const recentSleep = wellness.slice(-3).filter((w) => w.sleepSecs != null || w.sleepScore != null);
+	if (recentSleep.length >= 3) {
+		const poorNights = recentSleep.filter(
+			(w) =>
+				(w.sleepSecs != null && w.sleepSecs < 25200) || (w.sleepScore != null && w.sleepScore < 75),
+		);
+		if (poorNights.length >= 3) {
+			warnings.push("Sleep debt accumulating — 3+ consecutive nights of poor sleep");
 		}
 	}
 

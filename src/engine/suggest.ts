@@ -228,6 +228,7 @@ export function suggestWorkoutFromData(
 		vigilResult?.alert,
 		crossTrainingStrains,
 		tz,
+		readiness.components.hrv,
 	);
 	const category = applyStaleness(readinessCategory, staleness.tier);
 

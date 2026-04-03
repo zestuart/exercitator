@@ -117,15 +117,47 @@ describe("selectWorkoutCategory", () => {
 	});
 
 	it("triggers long session when no >90min session in 7 days", () => {
-		// All short sessions, moderate readiness
+		// All short sessions, good readiness but hard session yesterday → base
 		const activities = [
 			makeActivity("Run", 2, 40),
 			makeActivity("Run", 4, 40),
 			// Hard session yesterday to push category to base (not tempo)
 			makeActivity("Run", 1, 80, 8),
 		];
-		// Readiness 48 → base, no long session → upgrades to long
-		expect(selectWorkoutCategory(48, activities, "Run", NOW)).toBe("long");
+		// Readiness 62 → would be tempo, but daysSinceHard < 2 → base → long trigger
+		expect(selectWorkoutCategory(62, activities, "Run", NOW)).toBe("long");
+	});
+
+	it("blocks long session when readiness is below 60", () => {
+		const activities = [
+			makeActivity("Run", 2, 40),
+			makeActivity("Run", 4, 40),
+			makeActivity("Run", 1, 80, 8),
+		];
+		// Readiness 48 → base, but below long gate → stays base
+		expect(selectWorkoutCategory(48, activities, "Run", NOW)).toBe("base");
+	});
+
+	it("blocks long session when HRV is suppressed", () => {
+		const activities = [
+			makeActivity("Run", 2, 40),
+			makeActivity("Run", 4, 40),
+			makeActivity("Run", 1, 80, 8),
+		];
+		// Readiness 65 above gate, but HRV component = 15 (suppressed) → blocks long
+		expect(
+			selectWorkoutCategory(
+				65,
+				activities,
+				"Run",
+				NOW,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				15,
+			),
+		).toBe("base");
 	});
 
 	it("detects hard session via icu_intensity > 85 (no RPE)", () => {
