@@ -190,15 +190,18 @@ export function computeReadiness(
 		}
 	}
 
-	// Multi-night sleep trend: 3+ consecutive nights under 7 hours or score < 75
-	const recentSleep = wellness.slice(-3).filter((w) => w.sleepSecs != null || w.sleepScore != null);
+	// Multi-night sleep trend: 3+ recent nights of poor sleep (< 7h or score < 75).
+	// Only considers the last 3 wellness records that have sleep data — these are
+	// typically consecutive nights, but we don't enforce strict date adjacency since
+	// wellness records may have gaps (e.g. no device worn one night).
+	const recentSleep = wellness.filter((w) => w.sleepSecs != null || w.sleepScore != null).slice(-3);
 	if (recentSleep.length >= 3) {
 		const poorNights = recentSleep.filter(
 			(w) =>
 				(w.sleepSecs != null && w.sleepSecs < 25200) || (w.sleepScore != null && w.sleepScore < 75),
 		);
 		if (poorNights.length >= 3) {
-			warnings.push("Sleep debt accumulating — 3+ consecutive nights of poor sleep");
+			warnings.push("Sleep debt accumulating — 3+ recent nights of poor sleep");
 		}
 	}
 
