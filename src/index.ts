@@ -15,6 +15,7 @@ import { authEnabled, createOAuthHandler, validateBearer } from "./auth.js";
 import { IntervalsClient } from "./intervals.js";
 import { registerActivityTools } from "./tools/activities.js";
 import { registerAthleteTools } from "./tools/athlete.js";
+import { registerComplianceTools } from "./tools/compliance.js";
 import { registerEventTools } from "./tools/events.js";
 import { registerSuggestTools } from "./tools/suggest.js";
 import { registerWellnessTools } from "./tools/wellness.js";
@@ -51,6 +52,7 @@ function createMcpServer(): McpServer {
 	registerWellnessTools(server, intervalsClient);
 	registerEventTools(server, intervalsClient);
 	registerSuggestTools(server, intervalsClient);
+	registerComplianceTools(server);
 
 	return server;
 }

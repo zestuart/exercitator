@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Workout compliance tracking: persist prescriptions and send events to SQLite, compare actual activity laps against prescribed targets with binary pass/fail scoring per segment
+- Traffic light UI on Praescriptor cards: green/amber/red dots per segment showing how closely execution matched prescription; compliance summary with segment count
+- Confirmation UI for yesterday's prescriptions: "I completed this" (auto-matches activity from intervals.icu) and "I skipped this" (with optional reason) buttons
+- Compliance API routes: GET compliance by date, POST confirm/skip, GET trending, POST backfill
+- MCP tools: `get_compliance_summary` (completion rate, compliance rate, category breakdown, weekly trends) and `get_compliance_detail` (per-segment pass/fail with actuals vs targets)
+- Compliance aggregation: weekly/monthly rollups with HR overshoot and power deviation tracking for prescription self-correction
+- 6 new SQLite tables: prescriptions, prescription_segments, send_events, compliance_assessments, segment_compliance, compliance_aggregates
+
+### Changed
+- Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
+
+### Added (prior)
 - Per-user timezone awareness — `localDateStr(date, tz)` utility replaces all UTC date computations; timezone resolved per request via browser cookie → intervals.icu athlete profile → UTC fallback; threaded through engine, web layer, and MCP tools
 - Swim warm-up broken into individual 100m drill sections (free, kick with board, pull with buoy) with 10s rest gaps between steps; 400m warm-up (long sessions) adds a 4th drill/swim choice step
 - Multi-night sleep trend warning — alerts when 3+ recent nights have poor sleep (< 7h or score < 75) to catch cumulative sleep debt and jet lag

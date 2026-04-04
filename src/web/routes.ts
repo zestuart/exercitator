@@ -6,6 +6,16 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { recomputeAggregates } from "../compliance/aggregate.js";
+import { type ActivityLap, assessCompliance } from "../compliance/assess.js";
+import {
+	getComplianceAssessments,
+	getComplianceForDate,
+	getPrescription,
+	getSendEvents,
+	saveComplianceAssessment,
+} from "../compliance/persist.js";
+import type { ComplianceView } from "../compliance/types.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -149,6 +159,109 @@ export async function handleRoutes(
 			return;
 		}
 
+		// ---------------------------------------------------------------
+		// Compliance API
+		// ---------------------------------------------------------------
+
+		if (req.method === "GET" && subPath.match(/^\/api\/compliance\/(\d{4}-\d{2}-\d{2})$/)) {
+			const date = subPath.split("/").pop() ?? "";
+			const runCompliance = getComplianceForDate(profile.id, date, "Run");
+			const swimCompliance = getComplianceForDate(profile.id, date, "Swim");
+			jsonRes(res, 200, { run: runCompliance, swim: swimCompliance });
+			return;
+		}
+
+		if (req.method === "GET" && subPath === "/api/compliance/trending") {
+			const { buildComplianceTrend } = await import("../compliance/aggregate.js");
+			const days = Number(url.searchParams.get("days") ?? "30");
+			const sport = url.searchParams.get("sport") ?? undefined;
+			const trend = buildComplianceTrend(profile.id, days, sport);
+			jsonRes(res, 200, trend);
+			return;
+		}
+
+		if (req.method === "POST" && subPath === "/api/compliance/confirm") {
+			const body = await readJsonBody(req);
+			if (!body?.date || !body?.sport || !body?.activityId) {
+				jsonRes(res, 400, { error: "Required: date, sport, activityId" });
+				return;
+			}
+			const result = await runComplianceAssessment(
+				client,
+				profile.id,
+				String(body.date),
+				String(body.sport),
+				String(body.activityId),
+			);
+			jsonRes(res, result.error ? 400 : 200, result);
+			return;
+		}
+
+		if (req.method === "POST" && subPath === "/api/compliance/skip") {
+			const body = await readJsonBody(req);
+			if (!body?.date || !body?.sport) {
+				jsonRes(res, 400, { error: "Required: date, sport" });
+				return;
+			}
+			const date = String(body.date);
+			const sport = String(body.sport);
+			const reason = body.reason ? String(body.reason) : null;
+			const rx = getPrescription(profile.id, date, sport);
+			if (!rx) {
+				jsonRes(res, 404, { error: "No prescription found for that date/sport" });
+				return;
+			}
+			saveComplianceAssessment(
+				rx.id,
+				profile.id,
+				date,
+				sport,
+				null,
+				"skipped",
+				reason,
+				false,
+				rx.segments.length,
+				0,
+				[],
+			);
+			// Recompute aggregates for the affected week
+			recomputeAggregates(profile.id, date, date);
+			jsonRes(res, 200, { success: true, status: "skipped" });
+			return;
+		}
+
+		if (req.method === "POST" && subPath === "/api/compliance/backfill") {
+			const days = Number(url.searchParams.get("days") ?? "90");
+			const result = await runComplianceBackfill(client, profile.id, days, tz);
+			jsonRes(res, 200, result);
+			return;
+		}
+
+		if (req.method === "GET" && subPath === "/api/compliance/activities") {
+			// List candidate activities for a given date+sport (for manual matching)
+			const date = url.searchParams.get("date");
+			const sport = url.searchParams.get("sport");
+			if (!date || !sport) {
+				jsonRes(res, 400, { error: "Required query params: date, sport" });
+				return;
+			}
+			const activities = await client.get<Record<string, unknown>[]>(
+				`/athlete/${client.athleteId}/activities`,
+				{ oldest: date, newest: date },
+			);
+			const filtered = activities.filter((a) => a.type === sport);
+			const summary = filtered.map((a) => ({
+				id: a.id,
+				name: a.name,
+				type: a.type,
+				moving_time: a.moving_time,
+				distance: a.distance,
+				start_date_local: a.start_date_local,
+			}));
+			jsonRes(res, 200, summary);
+			return;
+		}
+
 		if (req.method === "POST" && subPath.startsWith("/api/stryd/")) {
 			const sport = subPath.split("/").pop();
 			if (sport !== "run") {
@@ -173,6 +286,146 @@ export async function handleRoutes(
 		res.writeHead(500, { "Content-Type": "text/plain" });
 		res.end("Internal server error");
 	}
+}
+
+function jsonRes(res: ServerResponse, status: number, body: unknown): void {
+	res.writeHead(status, { "Content-Type": "application/json" });
+	res.end(JSON.stringify(body));
+}
+
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+	return new Promise((resolve) => {
+		const chunks: Buffer[] = [];
+		let size = 0;
+		req.on("data", (chunk: Buffer) => {
+			size += chunk.length;
+			if (size > 65_536) {
+				resolve(null);
+				req.destroy();
+				return;
+			}
+			chunks.push(chunk);
+		});
+		req.on("end", () => {
+			try {
+				resolve(JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>);
+			} catch {
+				resolve(null);
+			}
+		});
+		req.on("error", () => resolve(null));
+	});
+}
+
+async function runComplianceAssessment(
+	client: IntervalsClient,
+	userId: string,
+	date: string,
+	sport: string,
+	activityId: string,
+): Promise<Record<string, unknown>> {
+	const rx = getPrescription(userId, date, sport);
+	if (!rx) return { error: "No prescription found for that date/sport" };
+
+	// Fetch the activity with laps from intervals.icu
+	const activity = await client.get<Record<string, unknown>>(`/activity/${activityId}`);
+	const laps = (activity.laps ?? []) as ActivityLap[];
+
+	if (laps.length === 0) {
+		return { error: "Activity has no lap data for compliance assessment" };
+	}
+
+	const result = assessCompliance(rx.segments, laps, rx.hrZones);
+
+	saveComplianceAssessment(
+		rx.id,
+		userId,
+		date,
+		sport,
+		activityId,
+		"completed",
+		null,
+		result.overallPass,
+		result.segmentsTotal,
+		result.segmentsPassed,
+		result.segments,
+	);
+
+	// Recompute aggregates
+	recomputeAggregates(userId, date, date);
+
+	return {
+		success: true,
+		overallPass: result.overallPass,
+		segmentsTotal: result.segmentsTotal,
+		segmentsPassed: result.segmentsPassed,
+		segments: result.segments,
+	};
+}
+
+async function runComplianceBackfill(
+	client: IntervalsClient,
+	userId: string,
+	days: number,
+	tz: string,
+): Promise<Record<string, unknown>> {
+	const now = new Date();
+	const oldest = new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+	const newest = localDateStr(now, tz);
+
+	const sendEvents = getSendEvents(userId, oldest, newest);
+	let processed = 0;
+	let assessed = 0;
+	const errors: string[] = [];
+
+	for (const event of sendEvents) {
+		if (event.target !== "intervals" || !event.externalId) continue;
+
+		// Skip if already assessed
+		const existing = getComplianceForDate(userId, event.date, event.sport);
+		if (existing && existing.status !== "pending") continue;
+
+		processed++;
+		try {
+			// Find the activity for this date+sport
+			const activities = await client.get<Record<string, unknown>[]>(
+				`/athlete/${client.athleteId}/activities`,
+				{ oldest: event.date, newest: event.date },
+			);
+			const match = activities.find((a) => a.type === event.sport);
+			if (!match) continue;
+
+			const activity = await client.get<Record<string, unknown>>(`/activity/${match.id}`);
+			const laps = (activity.laps ?? []) as ActivityLap[];
+			if (laps.length === 0) continue;
+
+			const rx = getPrescription(userId, event.date, event.sport);
+			if (!rx) continue;
+
+			const result = assessCompliance(rx.segments, laps, rx.hrZones);
+			saveComplianceAssessment(
+				rx.id,
+				userId,
+				event.date,
+				event.sport,
+				match.id as string,
+				"completed",
+				null,
+				result.overallPass,
+				result.segmentsTotal,
+				result.segmentsPassed,
+				result.segments,
+			);
+			assessed++;
+		} catch (err) {
+			errors.push(`${event.date}/${event.sport}: ${String(err)}`);
+		}
+	}
+
+	// Recompute aggregates for the full range
+	if (assessed > 0) recomputeAggregates(userId, oldest, newest);
+
+	return { processed, assessed, errors };
 }
 
 async function handleMainPage(
@@ -210,6 +463,11 @@ async function handleMainPage(
 			: plainInvocations("Swim")
 		: null;
 
+	// Load compliance data for yesterday's prescriptions (for confirmation UI)
+	const yesterday = localDateStr(new Date(Date.now() - 86_400_000), tz);
+	const runCompliance = buildComplianceView(profile.id, yesterday, "Run");
+	const swimCompliance = buildComplianceView(profile.id, yesterday, "Swim");
+
 	const html = renderPage({
 		profile,
 		run: prescriptions.run ?? null,
@@ -221,7 +479,23 @@ async function handleMainPage(
 		dataSource: prescriptions.dataSource,
 		generatedAt: prescriptions.generated_at,
 		tz,
+		runCompliance,
+		swimCompliance,
 	});
 	res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 	res.end(html);
+}
+
+function buildComplianceView(userId: string, date: string, sport: string): ComplianceView {
+	const assessment = getComplianceForDate(userId, date, sport);
+	const rx = getPrescription(userId, date, sport);
+	// A prescription was sent but not yet assessed
+	const hasSend = rx !== null;
+	const pendingSent = hasSend && assessment === null;
+
+	return {
+		assessment,
+		pendingSent,
+		prescriptionDate: rx ? date : null,
+	};
 }

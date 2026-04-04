@@ -3,6 +3,7 @@
  * Produces a self-contained page with inlined CSS and JS.
  */
 
+import type { ComplianceView, SegmentCompliance } from "../compliance/types.js";
 import type { VigilSummary, WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type { Invocations } from "./invocations.js";
 import type { DataSource } from "./prescriptions.js";
@@ -21,6 +22,9 @@ export interface RenderData {
 	generatedAt: string;
 	/** IANA timezone for display formatting (e.g. "America/Los_Angeles"). */
 	tz?: string;
+	/** Yesterday's compliance data for the confirmation/traffic light UI. */
+	runCompliance?: ComplianceView | null;
+	swimCompliance?: ComplianceView | null;
 }
 
 function escapeHtml(s: string): string {
@@ -97,6 +101,8 @@ function renderSegment(
 	sport: "Run" | "Swim",
 	ftp: number,
 	hrZones: number[] | null,
+	segIndex?: number,
+	complianceSegments?: SegmentCompliance[],
 ): string {
 	const dur = formatDuration(seg.duration_secs);
 	const repeatInfo =
@@ -105,11 +111,33 @@ function renderSegment(
 			: "";
 	const guide = zoneGuide(seg, sport, ftp, hrZones);
 
+	// Traffic light dot (only when compliance data exists for this segment)
+	let complianceDot = "";
+	if (complianceSegments && segIndex != null) {
+		const matching = complianceSegments.filter((s) => s.segmentIndex === segIndex);
+		if (matching.length > 0) {
+			// For repeat segments, show worst-case light
+			const lights = matching.map((m) => m.light);
+			const light = lights.includes("red") ? "red" : lights.includes("amber") ? "amber" : "green";
+			const title = matching
+				.map((m) => {
+					const parts: string[] = [];
+					if (m.hrZonePass === false) parts.push(`HR Z${m.hrZoneActual ?? "?"}`);
+					if (m.powerPass === false) parts.push(`Power ${m.powerDeviationPct?.toFixed(0) ?? "?"}%`);
+					if (m.pacePass === false) parts.push("Pace");
+					if (m.durationPass === false) parts.push("Duration");
+					return parts.length > 0 ? parts.join(", ") : "OK";
+				})
+				.join(" | ");
+			complianceDot = `<span class="compliance-dot compliance-${light}" title="${escapeHtml(title)}"></span>`;
+		}
+	}
+
 	return `
 		<div class="segment">
 			<div class="segment-header">
 				<span class="segment-name">${escapeHtml(seg.name)}</span>
-				<span class="segment-duration">${dur}</span>
+				<span class="segment-duration">${dur}${complianceDot}</span>
 			</div>
 			<div class="segment-target">${repeatInfo}${escapeHtml(seg.target_description)}${guide ? ` <span class="zone-guide">${guide}</span>` : ""}</div>
 		</div>`;
@@ -154,6 +182,55 @@ function renderVigilSection(vigil: VigilSummary | undefined): string {
 		</div>`;
 }
 
+function renderComplianceSection(
+	compliance: ComplianceView | null | undefined,
+	sport: string,
+	sportEndpoint: string,
+): string {
+	if (!compliance) return "";
+
+	// Case 1: Assessment already done — show summary
+	if (compliance.assessment) {
+		const a = compliance.assessment;
+		if (a.status === "skipped") {
+			return `
+			<div class="compliance-section">
+				<div class="compliance-summary compliance-skipped">
+					<span class="compliance-label">Yesterday's ${sport}</span>
+					<span class="compliance-status">Skipped${a.skipReason ? ` \u2014 ${escapeHtml(a.skipReason)}` : ""}</span>
+				</div>
+			</div>`;
+		}
+		if (a.status === "completed") {
+			const light = a.overallPass ? "green" : a.segmentsPassed > 0 ? "amber" : "red";
+			return `
+			<div class="compliance-section">
+				<div class="compliance-summary compliance-${light}">
+					<span class="compliance-label">Yesterday's ${sport}</span>
+					<span class="compliance-status">${a.segmentsPassed}/${a.segmentsTotal} segments compliant</span>
+					<span class="compliance-dot compliance-${light}"></span>
+				</div>
+			</div>`;
+		}
+	}
+
+	// Case 2: Prescription was sent but no assessment yet — show confirmation buttons
+	if (compliance.pendingSent && compliance.prescriptionDate) {
+		return `
+		<div class="compliance-section">
+			<div class="compliance-confirm" data-sport="${sportEndpoint}" data-date="${compliance.prescriptionDate}">
+				<span class="compliance-label">Yesterday's ${sport} prescription</span>
+				<div class="compliance-actions">
+					<button class="compliance-btn confirm-btn" data-action="confirm">I completed this</button>
+					<button class="compliance-btn skip-btn" data-action="skip">I skipped this</button>
+				</div>
+			</div>
+		</div>`;
+	}
+
+	return "";
+}
+
 function renderCard(
 	suggestion: WorkoutSuggestion,
 	invocations: Invocations,
@@ -162,11 +239,13 @@ function renderCard(
 	hrZones: number[] | null,
 	showStryd = false,
 	filteredWarnings?: string[],
+	compliance?: ComplianceView | null,
 ): string {
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
+	const complianceSegs = compliance?.assessment?.segments;
 	const segments = suggestion.segments
-		.map((s) => renderSegment(s, accent, sport, ftp, hrZones))
+		.map((s, i) => renderSegment(s, accent, sport, ftp, hrZones, i, complianceSegs))
 		.join("");
 
 	const sportTag = suggestion.sport === "Run" ? "CURSUS" : "NATATIO";
@@ -215,6 +294,7 @@ function renderCard(
 				</button>
 				${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #5a3eb8">&#x2197; Send to Stryd</button>` : ""}
 			</div>
+			${renderComplianceSection(compliance, sport, sportEndpoint)}
 		</div>
 	</div>`;
 }
@@ -302,6 +382,7 @@ export function renderPage(data: RenderData): string {
 					data.runHrZones,
 					showStryd,
 					runOnlyWarnings,
+					data.runCompliance,
 				)
 			: "";
 	const swimCard =
@@ -314,6 +395,7 @@ export function renderPage(data: RenderData): string {
 					data.swimHrZones,
 					false,
 					swimOnlyWarnings,
+					data.swimCompliance,
 				)
 			: "";
 
@@ -835,6 +917,95 @@ body {
 	background: rgba(196, 78, 34, 0.06);
 }
 
+/* --- Compliance --- */
+
+.compliance-dot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	margin-left: 0.4rem;
+	vertical-align: middle;
+}
+
+.compliance-green { background: #3a7a4a; }
+.compliance-amber { background: #c49828; }
+.compliance-red { background: #c44e22; }
+
+.compliance-section {
+	margin-top: 1rem;
+	padding-top: 0.8rem;
+	border-top: 1px solid var(--border);
+}
+
+.compliance-summary {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 0.78rem;
+}
+
+.compliance-label {
+	color: var(--text-dim);
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.compliance-status {
+	color: var(--text);
+	font-weight: 500;
+}
+
+.compliance-skipped .compliance-status { color: var(--text-dim); }
+
+.compliance-confirm {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.compliance-actions {
+	display: flex;
+	gap: 0.4rem;
+}
+
+.compliance-btn {
+	padding: 0.4rem 0.7rem;
+	border-radius: 5px;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.confirm-btn {
+	background: transparent;
+	border: 1.5px solid #3a7a4a;
+	color: #3a7a4a;
+}
+
+.confirm-btn:hover {
+	background: #3a7a4a;
+	color: var(--surface);
+}
+
+.skip-btn {
+	background: transparent;
+	border: 1.5px solid var(--text-dim);
+	color: var(--text-dim);
+}
+
+.skip-btn:hover {
+	background: var(--text-dim);
+	color: var(--surface);
+}
+
+.compliance-btn:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
 /* --- Footer --- */
 
 .page-footer {
@@ -948,6 +1119,65 @@ document.querySelectorAll('.send-btn:not(.stryd-btn)').forEach(btn => {
 		}
 
 		this.disabled = false;
+	});
+});
+
+// Compliance confirmation buttons
+document.querySelectorAll('.compliance-confirm').forEach(el => {
+	const sport = el.dataset.sport;
+	const date = el.dataset.date;
+	const sportUpper = sport === 'run' ? 'Run' : 'Swim';
+
+	el.querySelector('.confirm-btn')?.addEventListener('click', async function() {
+		this.disabled = true;
+		this.textContent = 'Finding activity\\u2026';
+		try {
+			const listRes = await fetch('${prefix}/api/compliance/activities?date=' + date + '&sport=' + sportUpper);
+			const activities = await listRes.json();
+
+			if (activities.length === 0) {
+				this.textContent = 'No activity found';
+				this.classList.add('error');
+				return;
+			}
+
+			// Auto-pick if only one match, otherwise let user pick
+			const actId = activities.length === 1
+				? activities[0].id
+				: prompt('Multiple activities found. Enter ID:\\n' + activities.map(a => a.id + ' - ' + a.name).join('\\n'));
+
+			if (!actId) { this.disabled = false; this.textContent = 'I completed this'; return; }
+
+			this.textContent = 'Assessing\\u2026';
+			const res = await fetch('${prefix}/api/compliance/confirm', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ date, sport: sportUpper, activityId: actId })
+			});
+			const data = await res.json();
+			if (data.success) {
+				window.location.reload();
+			} else {
+				this.textContent = data.error || 'Assessment failed';
+			}
+		} catch (err) {
+			this.textContent = 'Error';
+		}
+	});
+
+	el.querySelector('.skip-btn')?.addEventListener('click', async function() {
+		const reason = prompt('Why did you skip? (optional)');
+		this.disabled = true;
+		try {
+			await fetch('${prefix}/api/compliance/skip', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ date, sport: sportUpper, reason: reason || null })
+			});
+			window.location.reload();
+		} catch {
+			this.disabled = false;
+		}
 	});
 });
 

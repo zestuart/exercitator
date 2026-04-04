@@ -3,6 +3,7 @@
  * Caches results per user per day to avoid redundant API calls on /api/send.
  */
 
+import { persistPrescription } from "../compliance/persist.js";
 import { hasAnyVigilMetrics } from "../db.js";
 import { localDateStr } from "../engine/date-utils.js";
 import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
@@ -109,6 +110,17 @@ export async function generatePrescriptions(
 	};
 
 	cache.set(profile.id, { date: today, prescription });
+
+	// Persist prescriptions to SQLite for compliance tracking.
+	try {
+		if (run)
+			persistPrescription(profile.id, today, run, prescription.runHrZones, now.toISOString());
+		if (swim)
+			persistPrescription(profile.id, today, swim, prescription.swimHrZones, now.toISOString());
+	} catch (err) {
+		console.error("Failed to persist prescription:", err);
+	}
+
 	return prescription;
 }
 

@@ -4,14 +4,12 @@
  */
 
 import type { ServerResponse } from "node:http";
+import { getPrescription, getSendEvent, persistSendEvent } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import { buildIntervalsDescription } from "./intervals-format.js";
 import { generatePrescriptions } from "./prescriptions.js";
 import type { UserProfile } from "./users.js";
-
-// Dedup: track sends per userId+date+sport → event ID
-const sentToday = new Map<string, string>();
 
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
 	res.writeHead(status, { "Content-Type": "application/json" });
@@ -28,13 +26,14 @@ export async function sendToIntervals(
 ): Promise<void> {
 	try {
 		const today = localDateStr(new Date(), tz);
-		const dedupKey = `${profile.id}-${today}-${sport}`;
+		const sportKey = sport === "run" ? "Run" : "Swim";
 
-		if (!force && sentToday.has(dedupKey)) {
+		const existing = getSendEvent(profile.id, today, sportKey, "intervals");
+		if (!force && existing) {
 			jsonResponse(res, 409, {
 				success: false,
 				duplicate: true,
-				event_id: sentToday.get(dedupKey),
+				event_id: existing.externalId,
 				message: "Already sent today \u2014 send again?",
 			});
 			return;
@@ -63,11 +62,10 @@ export async function sendToIntervals(
 			id: string;
 		};
 
-		sentToday.set(dedupKey, result.id);
-
-		// Clean stale entries
-		for (const key of sentToday.keys()) {
-			if (!key.includes(today)) sentToday.delete(key);
+		// Persist send event to SQLite
+		const rx = getPrescription(profile.id, today, sportKey);
+		if (rx) {
+			persistSendEvent(rx.id, profile.id, today, sportKey, "intervals", result.id);
 		}
 
 		jsonResponse(res, 200, { success: true, event_id: result.id });

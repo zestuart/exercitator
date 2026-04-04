@@ -115,6 +115,123 @@ export function getDb(): Database.Database {
 		)
 	`);
 
+	// -----------------------------------------------------------------------
+	// Compliance tracking tables
+	// -----------------------------------------------------------------------
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS prescriptions (
+			id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id             TEXT NOT NULL,
+			date                TEXT NOT NULL,
+			sport               TEXT NOT NULL,
+			category            TEXT NOT NULL,
+			title               TEXT NOT NULL,
+			total_duration_secs INTEGER NOT NULL,
+			estimated_load      REAL NOT NULL,
+			readiness_score     INTEGER NOT NULL,
+			hr_zones_json       TEXT,
+			suggestion_json     TEXT NOT NULL,
+			generated_at        TEXT NOT NULL,
+			UNIQUE(user_id, date, sport)
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS prescription_segments (
+			id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+			prescription_id       INTEGER NOT NULL REFERENCES prescriptions(id),
+			segment_index         INTEGER NOT NULL,
+			name                  TEXT NOT NULL,
+			duration_secs         INTEGER NOT NULL,
+			target_hr_zone        INTEGER,
+			target_power_low      REAL,
+			target_power_high     REAL,
+			target_pace_secs_low  REAL,
+			target_pace_secs_high REAL,
+			repeats               INTEGER,
+			work_duration_secs    INTEGER,
+			rest_duration_secs    INTEGER,
+			UNIQUE(prescription_id, segment_index)
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS send_events (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			prescription_id INTEGER NOT NULL REFERENCES prescriptions(id),
+			user_id         TEXT NOT NULL,
+			date            TEXT NOT NULL,
+			sport           TEXT NOT NULL,
+			target          TEXT NOT NULL,
+			external_id     TEXT,
+			external_meta   TEXT,
+			sent_at         TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(user_id, date, sport, target)
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS compliance_assessments (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			prescription_id   INTEGER NOT NULL REFERENCES prescriptions(id),
+			user_id           TEXT NOT NULL,
+			date              TEXT NOT NULL,
+			sport             TEXT NOT NULL,
+			activity_id       TEXT,
+			status            TEXT NOT NULL,
+			skip_reason       TEXT,
+			overall_pass      INTEGER,
+			segments_total    INTEGER NOT NULL DEFAULT 0,
+			segments_passed   INTEGER NOT NULL DEFAULT 0,
+			assessed_at       TEXT,
+			created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(prescription_id)
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS segment_compliance (
+			id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+			assessment_id       INTEGER NOT NULL REFERENCES compliance_assessments(id),
+			segment_index       INTEGER NOT NULL,
+			segment_name        TEXT NOT NULL,
+			actual_avg_hr       REAL,
+			actual_avg_power    REAL,
+			actual_avg_pace     REAL,
+			actual_duration_secs INTEGER,
+			hr_zone_pass        INTEGER,
+			power_pass          INTEGER,
+			pace_pass           INTEGER,
+			duration_pass       INTEGER,
+			hr_zone_actual      INTEGER,
+			power_deviation_pct REAL,
+			pace_deviation_pct  REAL,
+			segment_pass        INTEGER NOT NULL,
+			UNIQUE(assessment_id, segment_index)
+		)
+	`);
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS compliance_aggregates (
+			id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id               TEXT NOT NULL,
+			period                TEXT NOT NULL,
+			period_start          TEXT NOT NULL,
+			sport                 TEXT NOT NULL,
+			category              TEXT,
+			total_workouts        INTEGER NOT NULL DEFAULT 0,
+			completed             INTEGER NOT NULL DEFAULT 0,
+			skipped               INTEGER NOT NULL DEFAULT 0,
+			segments_total        INTEGER NOT NULL DEFAULT 0,
+			segments_passed       INTEGER NOT NULL DEFAULT 0,
+			hr_overshoot_count    INTEGER NOT NULL DEFAULT 0,
+			power_overshoot_count INTEGER NOT NULL DEFAULT 0,
+			computed_at           TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(user_id, period, period_start, sport, category)
+		)
+	`);
+
 	return db;
 }
 

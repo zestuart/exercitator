@@ -5,15 +5,13 @@
  */
 
 import type { ServerResponse } from "node:http";
+import { getPrescription, getSendEvent, persistSendEvent } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { generatePrescriptions } from "./prescriptions.js";
 import { toStrydWorkout } from "./stryd-format.js";
 import type { UserProfile } from "./users.js";
-
-// Dedup: track sends per userId+date → { workoutId, calendarId }
-const strydSentToday = new Map<string, { workoutId: number; calendarId: number }>();
 
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
 	res.writeHead(status, { "Content-Type": "application/json" });
@@ -30,27 +28,29 @@ export async function sendToStryd(
 ): Promise<void> {
 	try {
 		const today = localDateStr(new Date(), tz);
-		const dedupKey = `${profile.id}-${today}`;
 
-		if (!force && strydSentToday.has(dedupKey)) {
-			const prev = strydSentToday.get(dedupKey) as { workoutId: number; calendarId: number };
+		const existing = getSendEvent(profile.id, today, "Run", "stryd");
+		if (!force && existing) {
+			const meta = existing.externalMeta ? JSON.parse(existing.externalMeta) : {};
 			jsonResponse(res, 409, {
 				success: false,
 				duplicate: true,
-				workout_id: prev.workoutId,
-				calendar_id: prev.calendarId,
+				workout_id: existing.externalId,
+				calendar_id: meta.calendarId,
 				message: "Already sent to Stryd today \u2014 send again?",
 			});
 			return;
 		}
 
 		// If forcing and a previous entry exists, delete the old calendar entry first
-		if (force && strydSentToday.has(dedupKey)) {
-			const prev = strydSentToday.get(dedupKey) as { workoutId: number; calendarId: number };
-			try {
-				await strydClient.deleteCalendarEntry(prev.calendarId);
-			} catch {
-				// Best-effort cleanup — continue even if deletion fails
+		if (force && existing?.externalMeta) {
+			const meta = JSON.parse(existing.externalMeta);
+			if (meta.calendarId) {
+				try {
+					await strydClient.deleteCalendarEntry(meta.calendarId);
+				} catch {
+					// Best-effort cleanup — continue even if deletion fails
+				}
 			}
 		}
 
@@ -71,11 +71,15 @@ export async function sendToStryd(
 		const workoutId = await strydClient.createWorkout(strydWorkout);
 		const entry = await strydClient.scheduleWorkout(workoutId, new Date());
 
-		strydSentToday.set(dedupKey, { workoutId, calendarId: entry.id });
-
-		// Clean stale entries
-		for (const key of strydSentToday.keys()) {
-			if (!key.includes(today)) strydSentToday.delete(key);
+		// Persist send event to SQLite
+		const rx = getPrescription(profile.id, today, "Run");
+		if (rx) {
+			persistSendEvent(rx.id, profile.id, today, "Run", "stryd", String(workoutId), {
+				calendarId: entry.id,
+				stress: entry.stress,
+				duration: entry.duration,
+				distance: entry.distance,
+			});
 		}
 
 		jsonResponse(res, 200, {
