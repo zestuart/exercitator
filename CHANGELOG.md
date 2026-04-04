@@ -15,9 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - MCP tools: `get_compliance_summary` (completion rate, compliance rate, category breakdown, weekly trends) and `get_compliance_detail` (per-segment pass/fail with actuals vs targets)
 - Compliance aggregation: weekly/monthly rollups with HR overshoot and power deviation tracking for prescription self-correction
 - 6 new SQLite tables: prescriptions, prescription_segments, send_events, compliance_assessments, segment_compliance, compliance_aggregates
+- "Copy FORM Text" button on swim prescription cards — generates FORM goggles Script notation (stroke abbreviations, effort levels, rest intervals) for clipboard copy into the FORM app
+- Rest intervals between non-repeat swim segments (20s easy, 40s hard) for FORM goggles programming and clearer intervals.icu workout descriptions
 
 ### Changed
 - Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
+
+### Fixed
+- Swim workout steps silently dropped by intervals.icu: pace format changed from `/100mtr Pace` to `/100m Pace` (intervals.icu only recognises `/100m` as a pace denominator)
+- Swim workout steps missing from intervals.icu chart: steps with pace-only targets now include both pace and HR targets so the chart renders in any view mode
+- Swim cue text (e.g. "easy free, Z1") removed from step output to avoid confusing intervals.icu parser
 
 ### Added (prior)
 - Per-user timezone awareness — `localDateStr(date, tz)` utility replaces all UTC date computations; timezone resolved per request via browser cookie → intervals.icu athlete profile → UTC fallback; threaded through engine, web layer, and MCP tools
