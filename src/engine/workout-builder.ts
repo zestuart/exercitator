@@ -379,6 +379,7 @@ function swimWarmUp300(scale: number): WorkoutSegment[] {
 			duration_secs: scaled(120, scale),
 			target_description: "100m pull with buoy",
 			target_hr_zone: 1,
+			rest_duration_secs: 20,
 		},
 	];
 }
@@ -386,7 +387,7 @@ function swimWarmUp300(scale: number): WorkoutSegment[] {
 /** 400m warm-up: 4 × 100m (free, kick, pull, drill/swim) with 10s rest between drills. */
 function swimWarmUp400(scale: number): WorkoutSegment[] {
 	const drills = swimWarmUp300(scale);
-	// Add rest to the last 300m drill (pull) before the 4th drill
+	// Override pull rest back to 10s (between drills, not end-of-warmup)
 	drills[drills.length - 1].rest_duration_secs = 10;
 	return [
 		...drills,
@@ -395,6 +396,7 @@ function swimWarmUp400(scale: number): WorkoutSegment[] {
 			duration_secs: scaled(120, scale),
 			target_description: "100m drill/swim choice",
 			target_hr_zone: 1,
+			rest_duration_secs: 20,
 		},
 	];
 }
@@ -407,6 +409,7 @@ function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(240, scale),
 			target_description: swimPaceDesc(settings, 20, "200m easy free, Z1", paceBufferSecs, hrOnly),
 			target_hr_zone: 1,
+			rest_duration_secs: 20,
 		},
 		{
 			name: "Drill set",
@@ -422,6 +425,7 @@ function buildSwimRecovery(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(480, scale),
 			target_description: swimPaceDesc(settings, 18, "400m pull Z1", paceBufferSecs, hrOnly),
 			target_hr_zone: 1,
+			rest_duration_secs: 20,
 		},
 		{
 			name: "Cool-down",
@@ -445,6 +449,8 @@ function buildSwimBase(ctx: BuildContext): WorkoutSegment[] {
 			repeats: reps,
 			work_duration_secs: scaled(250, scale),
 			rest_duration_secs: 20,
+			// Note: rest_duration_secs serves double duty here — it's the rest between
+			// repeats AND the rest after the last rep before cool-down.
 		},
 		{
 			name: "Cool-down",
@@ -510,6 +516,7 @@ function buildSwimIntervals(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(240, scale),
 			target_description: "200m easy",
 			target_hr_zone: 1,
+			rest_duration_secs: 20,
 		},
 		{
 			name: "Sprint set",
