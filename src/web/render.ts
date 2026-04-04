@@ -5,6 +5,7 @@
 
 import type { ComplianceView, SegmentCompliance } from "../compliance/types.js";
 import type { VigilSummary, WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
+import { buildFormDescription } from "./form-format.js";
 import type { Invocations } from "./invocations.js";
 import type { DataSource } from "./prescriptions.js";
 import type { UserProfile } from "./users.js";
@@ -240,6 +241,7 @@ function renderCard(
 	showStryd = false,
 	filteredWarnings?: string[],
 	compliance?: ComplianceView | null,
+	formText?: string,
 ): string {
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
@@ -293,6 +295,7 @@ function renderCard(
 					&#x2197; Send to intervals.icu
 				</button>
 				${showStryd ? `<button class="send-btn stryd-btn" data-sport="${sportEndpoint}" style="--btn-accent: #5a3eb8">&#x2197; Send to Stryd</button>` : ""}
+				${formText ? `<button class="send-btn form-btn" data-form-text="${escapeHtml(formText)}" style="--btn-accent: #c8d600">&#x1F4CB; Copy FORM Text</button>` : ""}
 			</div>
 			${renderComplianceSection(compliance, sport, sportEndpoint)}
 		</div>
@@ -385,6 +388,7 @@ export function renderPage(data: RenderData): string {
 					data.runCompliance,
 				)
 			: "";
+	const swimFormText = data.swim ? buildFormDescription(data.swim) : undefined;
 	const swimCard =
 		data.swim && data.swimInvocations
 			? renderCard(
@@ -396,6 +400,7 @@ export function renderPage(data: RenderData): string {
 					false,
 					swimOnlyWarnings,
 					data.swimCompliance,
+					swimFormText,
 				)
 			: "";
 
@@ -1177,6 +1182,28 @@ document.querySelectorAll('.compliance-confirm').forEach(el => {
 			window.location.reload();
 		} catch {
 			this.disabled = false;
+		}
+	});
+});
+
+// FORM copy button
+document.querySelectorAll('.form-btn').forEach(btn => {
+	btn.addEventListener('click', async function() {
+		const text = this.dataset.formText;
+		try {
+			await navigator.clipboard.writeText(text);
+			this.textContent = '\\u2713 Copied';
+			setTimeout(() => { this.textContent = '\\uD83D\\uDCCB Copy FORM Text'; }, 3000);
+		} catch {
+			// Fallback for non-HTTPS or older browsers
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			document.body.appendChild(ta);
+			ta.select();
+			document.execCommand('copy');
+			document.body.removeChild(ta);
+			this.textContent = '\\u2713 Copied';
+			setTimeout(() => { this.textContent = '\\uD83D\\uDCCB Copy FORM Text'; }, 3000);
 		}
 	});
 });
