@@ -103,6 +103,10 @@ function extractSwimCue(desc: string): string {
 /**
  * Format a swim step in intervals.icu syntax.
  * Uses `mtr` for metres (NOT `m` which means minutes).
+ *
+ * intervals.icu expects: distance first, then target, then optional cue text.
+ * e.g. "200mtr 2:13/100mtr Pace" or "200mtr 50-72% HR"
+ * Free text (cue) goes at the very end to avoid confusing the parser.
  */
 function formatSwimStep(seg: WorkoutSegment): string {
 	const dist = extractSwimDistance(seg.target_description);
@@ -110,17 +114,16 @@ function formatSwimStep(seg: WorkoutSegment): string {
 	const cue = extractSwimCue(seg.target_description);
 
 	const parts: string[] = [];
-	if (cue) parts.push(cue);
+	// Distance or duration first — intervals.icu needs this at the start
 	if (dist) {
 		parts.push(`${dist}mtr`);
 	} else {
-		// Fallback: use duration if no distance found
 		parts.push(formatDuration(seg.duration_secs));
 	}
+	// Target (pace or HR) second
 	if (pace) {
 		parts.push(`${pace}/100mtr Pace`);
 	} else {
-		// No pace — use HR target
 		const hr = formatHrTarget(seg);
 		if (hr) parts.push(hr);
 	}
