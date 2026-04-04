@@ -180,8 +180,8 @@ describe("buildIntervalsDescription", () => {
 		expect(text).toContain("300mtr");
 		expect(text).toContain("100mtr");
 		expect(text).toContain("200mtr");
-		// Pace has Pace suffix with mtr unit
-		expect(text).toContain("1:39/100mtr Pace");
+		// Pace has Pace suffix — /100m is the pace denominator (not /100mtr)
+		expect(text).toContain("1:39/100m Pace");
 		// Repeats present
 		expect(text).toContain("8x");
 		// Rest uses intensity, not "rest" keyword

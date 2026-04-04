@@ -122,7 +122,10 @@ function formatSwimStep(seg: WorkoutSegment): string {
 	}
 	// Target (pace or HR) second
 	if (pace) {
-		parts.push(`${pace}/100mtr Pace`);
+		// Pace unit is /100m (not /100mtr) — intervals.icu only recognises
+		// /100m, /100y, /km, /mi, /500m, /400m, /250m as pace denominators.
+		// The mtr suffix is only for bare distance values (e.g. 200mtr).
+		parts.push(`${pace}/100m Pace`);
 	} else {
 		const hr = formatHrTarget(seg);
 		if (hr) parts.push(hr);
