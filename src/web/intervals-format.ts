@@ -120,16 +120,16 @@ function formatSwimStep(seg: WorkoutSegment): string {
 	} else {
 		parts.push(formatDuration(seg.duration_secs));
 	}
-	// Target (pace or HR) second
+	// Targets: include both pace and HR when available so the chart
+	// renders in both "Pace" and "HR" view modes (Auto defaults to HR for swim).
 	if (pace) {
 		// Pace unit is /100m (not /100mtr) — intervals.icu only recognises
 		// /100m, /100y, /km, /mi, /500m, /400m, /250m as pace denominators.
 		// The mtr suffix is only for bare distance values (e.g. 200mtr).
 		parts.push(`${pace}/100m Pace`);
-	} else {
-		const hr = formatHrTarget(seg);
-		if (hr) parts.push(hr);
 	}
+	const hr = formatHrTarget(seg);
+	if (hr) parts.push(hr);
 
 	return parts.join(" ");
 }
