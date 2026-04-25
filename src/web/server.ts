@@ -8,8 +8,8 @@
 import { createServer } from "node:http";
 import { IntervalsClient } from "../intervals.js";
 import { StrydClient } from "../stryd/client.js";
+import { getUserIds, getUserProfile } from "../users.js";
 import { handleRoutes } from "./routes.js";
-import { getUserIds, getUserProfile } from "./users.js";
 
 const PORT = Number.parseInt(process.env.PRAESCRIPTOR_PORT ?? "3847", 10);
 

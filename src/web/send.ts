@@ -7,9 +7,9 @@ import type { ServerResponse } from "node:http";
 import { getPrescription, getSendEvent, persistSendEvent } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
+import type { UserProfile } from "../users.js";
 import { buildIntervalsDescription } from "./intervals-format.js";
 import { generatePrescriptions } from "./prescriptions.js";
-import type { UserProfile } from "./users.js";
 
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
 	res.writeHead(status, { "Content-Type": "application/json" });

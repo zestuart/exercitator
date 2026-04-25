@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- HTTP API for native clients (`/api/...`) — tailnet-only via new `exercitator-api.tail7ab379.ts.net` Tailscale sidecar, co-resident with the MCP server on port 8643. Endpoints: `/api/health`, per-user `/api/users/:userId/{status,workouts/today,workouts/suggested,workouts/:id,dashboard,compliance/summary,compliance/detail,cross-training/:activityId/rpe}`. Bearer auth scoped `<client>:<userId>:<token>` with constant-time compare and cross-user 403 enforcement. Polymorphic segment targets (power / pace / hr) so swim is first-class. 409 + `awaiting_input` envelope unblocks cross-training RPE via dedicated POST. Per-user response cache (300 s default) shields intervals.icu and Stryd from poll amplification.
+- Shared user registry (`src/users.ts`) — lifted from `src/web/users.ts` so Praescriptor and the HTTP API share one source of truth for (ze, pam) + env var names + feature flags.
 - Workout compliance tracking: persist prescriptions and send events to SQLite, compare actual activity laps against prescribed targets with binary pass/fail scoring per segment
 - Traffic light UI on Praescriptor cards: green/amber/red dots per segment showing how closely execution matched prescription; compliance summary with segment count
 - Confirmation UI for yesterday's prescriptions: "I completed this" (auto-matches activity from intervals.icu) and "I skipped this" (with optional reason) buttons

@@ -3,8 +3,8 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { suggestWorkoutForSport } from "../../src/engine/suggest.js";
 import type { IntervalsClient } from "../../src/intervals.js";
+import type { UserProfile } from "../../src/users.js";
 import { generatePrescriptions, invalidateCache } from "../../src/web/prescriptions.js";
-import type { UserProfile } from "../../src/web/users.js";
 
 const ZE_PROFILE: UserProfile = {
 	id: "ze",

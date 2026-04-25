@@ -12,7 +12,7 @@ import { runBackfill } from "../engine/vigil/backfill.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
-import type { UserProfile } from "./users.js";
+import type { UserProfile } from "../users.js";
 
 export interface DataSource {
 	/** Number of activities in the 14-day window. */

@@ -11,6 +11,7 @@ import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { startApiServer } from "./api/server.js";
 import { authEnabled, createOAuthHandler, validateBearer } from "./auth.js";
 import { IntervalsClient } from "./intervals.js";
 import { registerActivityTools } from "./tools/activities.js";
@@ -66,6 +67,7 @@ if (TRANSPORT === "stdio") {
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 	console.error("Exercitator MCP server running on stdio");
+	startApiServer({ defaultHost: "127.0.0.1", version: "0.1.0" });
 }
 
 // ---------------------------------------------------------------------------
@@ -185,4 +187,6 @@ if (TRANSPORT === "streamable-http") {
 			`Exercitator MCP server listening on ${HOST}:${PORT} (auth: ${useAuth ? "on" : "off"})`,
 		);
 	});
+
+	startApiServer({ defaultHost: "0.0.0.0", version: "0.1.0" });
 }
