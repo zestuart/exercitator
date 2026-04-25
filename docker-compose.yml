@@ -112,6 +112,7 @@ services:
 volumes:
   exercitator-data:
     name: exercitator-data
+    external: true
   tailscale-state:
     name: exercitator-tailscale-state
     external: true

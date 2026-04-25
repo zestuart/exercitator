@@ -13,6 +13,7 @@ import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { fetchTrainingData, suggestWorkoutFromData } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
+import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
 import { apiError, jsonResponse } from "../errors.js";
 import {
@@ -75,6 +76,9 @@ export async function handleDashboard(
 		}
 		const isRunSport = user.profile.sports.includes("Run");
 		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now, tz) : null;
+		if (user.profile.stryd) {
+			void runVigilBackfillIfNeeded(user.stryd, user.profile.id);
+		}
 
 		const status: StatusResponse = {
 			generated_at: now.toISOString(),

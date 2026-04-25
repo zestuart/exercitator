@@ -4,11 +4,10 @@
  */
 
 import { persistPrescription } from "../compliance/persist.js";
-import { hasAnyVigilMetrics } from "../db.js";
 import { localDateStr } from "../engine/date-utils.js";
 import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
-import { runBackfill } from "../engine/vigil/backfill.js";
+import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
@@ -74,6 +73,7 @@ export async function generatePrescriptions(
 	const strydEnriched = data.activities.filter((a) => !preEnrichIds.has(a.id)).length;
 
 	// Vigil: one-off 90-day backfill if vigil_metrics is empty for this athlete.
+	// Praescriptor awaits so the day's prescription includes the new alert state.
 	if (profile.stryd) {
 		await runVigilBackfillIfNeeded(strydClient ?? null, profile.id);
 	}
@@ -140,22 +140,6 @@ async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | n
 	} catch (err) {
 		console.error("Stryd CP fetch failed:", err);
 		return null;
-	}
-}
-
-async function runVigilBackfillIfNeeded(
-	strydClient: StrydClient | null,
-	athleteId: string,
-): Promise<void> {
-	if (!strydClient) return;
-	if (hasAnyVigilMetrics(athleteId)) return;
-
-	try {
-		console.error("Vigil: no metrics found — running 90-day backfill from Stryd");
-		const count = await runBackfill(strydClient, athleteId);
-		console.error(`Vigil: backfill complete — ${count} activities processed`);
-	} catch (err) {
-		console.error("Vigil backfill failed:", err);
 	}
 }
 

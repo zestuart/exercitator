@@ -9,7 +9,7 @@
  * caught and logged.
  */
 
-import { hasVigilMetrics, saveVigilMetrics } from "../../db.js";
+import { hasAnyVigilMetrics, hasVigilMetrics, saveVigilMetrics } from "../../db.js";
 import type { StrydActivity, StrydClient } from "../../stryd/client.js";
 import { extractMetrics, parseFitBuffer } from "./fit-parser.js";
 
@@ -110,4 +110,38 @@ export async function runBackfill(
 		`Vigil backfill complete: ${processed} new metrics from ${activities.length} activities`,
 	);
 	return processed;
+}
+
+/**
+ * Per-athlete in-flight guard so concurrent callers (Praescriptor's daily
+ * generate + /api/users/:userId/status polling) don't both kick off a
+ * backfill on the same fresh DB.
+ */
+const backfillsInFlight = new Set<string>();
+
+/**
+ * Run a 90-day backfill if (a) Stryd creds are present, (b) no metrics
+ * exist for this athlete, and (c) no backfill is already running for
+ * them. Awaitable — Praescriptor blocks on it before generating
+ * prescriptions; the HTTP API's /status endpoint fires-and-forgets via
+ * `runVigilBackfillIfNeeded(...).catch(...)`.
+ */
+export async function runVigilBackfillIfNeeded(
+	strydClient: StrydClient | null,
+	athleteId: string,
+): Promise<void> {
+	if (!strydClient) return;
+	if (hasAnyVigilMetrics(athleteId)) return;
+	if (backfillsInFlight.has(athleteId)) return;
+
+	backfillsInFlight.add(athleteId);
+	try {
+		console.error(`Vigil: no metrics for ${athleteId} — running 90-day backfill from Stryd`);
+		const count = await runBackfill(strydClient, athleteId);
+		console.error(`Vigil: backfill complete for ${athleteId} — ${count} activities processed`);
+	} catch (err) {
+		console.error(`Vigil backfill failed for ${athleteId}:`, err);
+	} finally {
+		backfillsInFlight.delete(athleteId);
+	}
 }
