@@ -22,8 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
+- Vigil 90-day Stryd FIT backfill: helper lifted from Praescriptor to `src/engine/vigil/backfill.ts` so the HTTP API's `/status` and `/dashboard` can fire-and-forget on first call. Per-athlete in-flight Set guards against concurrent kicks.
+- Deployment target moved from Arca Ingens (QNAP, decommissioned 2026-04-04) to Cogitator (Mac Mini M4 Pro). Same tarball flow, different host (`dominus@cogitator.tail7ab379.ts.net`, port 22, key auth) and home path (`~/Container/exercitator/`). See `praefectura/docs/cogitator-operations.md`.
+- `docker-compose.yml`: `exercitator-data` volume now declared `external: true` to match its actual lifecycle and silence the compose warning.
 
 ### Fixed
+- HTTP API `suggestion.power_context.source` emitted bare engine value (`"stryd"`) instead of the spec wire enum (`"stryd_direct" | "stryd_intervals" | "intervals_inferred" | "none"`); `status.critical_power.source` already mapped correctly. Extracted shared `mapWirePowerSource` helper so the two endpoints can never disagree, and rewired `/workouts/suggested` to fetch Stryd CP so `stryd_direct` is reachable from that path. (closes #25)
+- HTTP API `critical_power.watts` returned a float from the Stryd CP API; now rounded to integer at the wire boundary.
 - Swim workout steps silently dropped by intervals.icu: pace format changed from `/100mtr Pace` to `/100m Pace` (intervals.icu only recognises `/100m` as a pace denominator)
 - Swim workout steps missing from intervals.icu chart: steps with pace-only targets now include both pace and HR targets so the chart renders in any view mode
 - Swim cue text (e.g. "easy free, Z1") removed from step output to avoid confusing intervals.icu parser
