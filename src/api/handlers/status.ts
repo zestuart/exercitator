@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { fetchTrainingData } from "../../engine/suggest.js";
+import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
 import { cacheGet, cacheSet } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -56,6 +57,16 @@ export async function handleStatus(
 
 		const isRunSport = user.profile.sports.includes("Run");
 		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now) : null;
+
+		// Fire-and-forget Vigil backfill on first call for this athlete.
+		// runVigilBackfillIfNeeded short-circuits when (a) no Stryd creds,
+		// (b) metrics already present, or (c) a backfill is in-flight.
+		// Subsequent /status calls (after the backfill completes) will see
+		// real injury_warning data; this call returns the current
+		// "building" / "inactive" state.
+		if (user.profile.stryd) {
+			void runVigilBackfillIfNeeded(user.stryd, user.profile.id);
+		}
 
 		const body: StatusResponse = {
 			generated_at: now.toISOString(),
