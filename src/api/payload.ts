@@ -139,9 +139,9 @@ export function criticalPowerFromContext(
 	else if (powerContext.source === "garmin") source = "intervals_inferred";
 	else source = "none";
 
-	const watts = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
+	const rawWatts = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
 	return {
-		watts,
+		watts: rawWatts != null ? Math.round(rawWatts) : null,
 		source,
 		updated_at: strydCpUpdatedAt,
 		confidence: powerContext.confidence === "high" ? "high" : "low",

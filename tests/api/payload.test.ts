@@ -84,6 +84,11 @@ describe("criticalPowerFromContext", () => {
 		expect(cp.source).toBe("none");
 		expect(cp.watts).toBeNull();
 	});
+
+	it("rounds float watts from Stryd CP API to integer", () => {
+		const cp = criticalPowerFromContext(pcStryd, 273.84478, "2026-04-20T00:00:00Z");
+		expect(cp.watts).toBe(274);
+	});
 });
 
 describe("injuryWarningFromVigil", () => {
