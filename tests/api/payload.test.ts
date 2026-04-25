@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
 	criticalPowerFromContext,
 	injuryWarningFromVigil,
+	mapWirePowerSource,
 	readinessFromEngine,
 	segmentToApi,
+	suggestionToApi,
 } from "../../src/api/payload.js";
-import type { PowerContext, WorkoutSegment } from "../../src/engine/types.js";
+import type { PowerContext, WorkoutSegment, WorkoutSuggestion } from "../../src/engine/types.js";
 import type { VigilResult } from "../../src/engine/vigil/index.js";
 
 describe("readinessFromEngine", () => {
@@ -88,6 +90,82 @@ describe("criticalPowerFromContext", () => {
 	it("rounds float watts from Stryd CP API to integer", () => {
 		const cp = criticalPowerFromContext(pcStryd, 273.84478, "2026-04-20T00:00:00Z");
 		expect(cp.watts).toBe(274);
+	});
+});
+
+describe("mapWirePowerSource (issue #25)", () => {
+	it("stryd_direct when stryd CP was fetched", () => {
+		expect(mapWirePowerSource("stryd", true)).toBe("stryd_direct");
+		expect(mapWirePowerSource("none", true)).toBe("stryd_direct");
+	});
+
+	it("stryd_intervals when source is stryd but no direct CP", () => {
+		expect(mapWirePowerSource("stryd", false)).toBe("stryd_intervals");
+	});
+
+	it("intervals_inferred for garmin source", () => {
+		expect(mapWirePowerSource("garmin", false)).toBe("intervals_inferred");
+	});
+
+	it("none for no power", () => {
+		expect(mapWirePowerSource("none", false)).toBe("none");
+	});
+});
+
+describe("suggestionToApi power_context.source (issue #25)", () => {
+	function makeSuggestion(engineSource: PowerContext["source"], ftp = 280): WorkoutSuggestion {
+		return {
+			sport: "Run",
+			category: "tempo",
+			title: "Test",
+			rationale: "test",
+			total_duration_secs: 1800,
+			estimated_load: 30,
+			segments: [],
+			readiness_score: 70,
+			sport_selection_reason: "test",
+			terrain: "flat",
+			terrain_rationale: "test",
+			power_context: {
+				source: engineSource,
+				ftp,
+				rolling_ftp: ftp,
+				correction_factor: 1.0,
+				confidence: "high",
+				warnings: [],
+			},
+			warnings: [],
+		};
+	}
+
+	it("emits stryd_direct when strydCpProvided is true", () => {
+		const out = suggestionToApi(makeSuggestion("stryd"), true);
+		expect(out.power_context.source).toBe("stryd_direct");
+	});
+
+	it("emits stryd_intervals when engine source is stryd but no direct CP", () => {
+		const out = suggestionToApi(makeSuggestion("stryd"), false);
+		expect(out.power_context.source).toBe("stryd_intervals");
+	});
+
+	it("emits intervals_inferred for garmin source", () => {
+		const out = suggestionToApi(makeSuggestion("garmin"), false);
+		expect(out.power_context.source).toBe("intervals_inferred");
+	});
+
+	it("emits none for no power", () => {
+		const out = suggestionToApi(makeSuggestion("none"), false);
+		expect(out.power_context.source).toBe("none");
+	});
+
+	it("never emits a bare engine source string", () => {
+		const allowed = new Set(["stryd_direct", "stryd_intervals", "intervals_inferred", "none"]);
+		for (const engine of ["stryd", "garmin", "none"] as const) {
+			for (const direct of [true, false]) {
+				const out = suggestionToApi(makeSuggestion(engine), direct);
+				expect(allowed.has(out.power_context.source)).toBe(true);
+			}
+		}
 	});
 });
 

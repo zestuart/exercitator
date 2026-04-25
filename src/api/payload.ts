@@ -128,21 +128,34 @@ export function injuryWarningFromAlertOnly(alert: VigilAlert | null): InjuryWarn
 // Critical power
 // ---------------------------------------------------------------------------
 
+/**
+ * Map the engine's bare PowerSource ("stryd" | "garmin" | "none") onto the
+ * spec wire enum. The single signal that distinguishes stryd_direct from
+ * stryd_intervals is whether a CP value was fetched from the Stryd API
+ * (typically via getLatestCriticalPower()) — i.e. `strydCpProvided=true`.
+ *
+ * Used by both critical_power.source and suggestion.power_context.source so
+ * the two never disagree (issue #25).
+ */
+export function mapWirePowerSource(
+	engineSource: PowerContext["source"],
+	strydCpProvided: boolean,
+): CriticalPowerSource {
+	if (strydCpProvided) return "stryd_direct";
+	if (engineSource === "stryd") return "stryd_intervals";
+	if (engineSource === "garmin") return "intervals_inferred";
+	return "none";
+}
+
 export function criticalPowerFromContext(
 	powerContext: PowerContext,
 	strydCp: number | null,
 	strydCpUpdatedAt: string | null,
 ): CriticalPowerBlock {
-	let source: CriticalPowerSource;
-	if (strydCp != null) source = "stryd_direct";
-	else if (powerContext.source === "stryd") source = "stryd_intervals";
-	else if (powerContext.source === "garmin") source = "intervals_inferred";
-	else source = "none";
-
 	const rawWatts = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
 	return {
 		watts: rawWatts != null ? Math.round(rawWatts) : null,
-		source,
+		source: mapWirePowerSource(powerContext.source, strydCp != null),
 		updated_at: strydCpUpdatedAt,
 		confidence: powerContext.confidence === "high" ? "high" : "low",
 	};
@@ -267,7 +280,10 @@ export function segmentToApi(seg: WorkoutSegment, sport: "Run" | "Swim"): ApiSeg
 // WorkoutSuggestion → SuggestedWorkoutBody
 // ---------------------------------------------------------------------------
 
-export function suggestionToApi(s: WorkoutSuggestion): SuggestedWorkoutBody {
+export function suggestionToApi(
+	s: WorkoutSuggestion,
+	strydCpProvided = false,
+): SuggestedWorkoutBody {
 	return {
 		sport: s.sport,
 		category: s.category,
@@ -280,7 +296,7 @@ export function suggestionToApi(s: WorkoutSuggestion): SuggestedWorkoutBody {
 		terrain: s.terrain,
 		terrain_rationale: s.terrain_rationale,
 		power_context: {
-			source: s.power_context.source,
+			source: mapWirePowerSource(s.power_context.source, strydCpProvided),
 			ftp: s.power_context.ftp,
 			confidence: s.power_context.confidence,
 		},

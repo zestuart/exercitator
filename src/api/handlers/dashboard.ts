@@ -165,7 +165,7 @@ export async function handleDashboard(
 					date: today,
 					tz,
 					status: "ready",
-					suggestion: suggestionToApi(suggestion),
+					suggestion: suggestionToApi(suggestion, strydCp != null),
 				};
 			}
 		} catch (err) {
