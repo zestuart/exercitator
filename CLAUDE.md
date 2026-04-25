@@ -23,16 +23,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Type checking**: `tsc --noEmit`
 - **Test runner**: Vitest
 - **Containerisation**: Docker + Docker Compose
-- **Networking**: Tailscale funnel (MCP, public) + Tailscale serve (web UI, tailnet-only) on Arca Ingens
+- **Networking**: Tailscale funnel (MCP, public) + Tailscale serve (Praescriptor + HTTP API, tailnet-only) on Arca Ingens
 - **External API**: [intervals.icu](https://intervals.icu) REST API
+- **HTTP API**: bearer-scoped REST surface for native clients (Excubitor iOS/watchOS) — port 8643, tailnet-only
 
 ## Architecture
 
 ```
 src/
-  index.ts              — entry point, transport selection, session management
+  index.ts              — entry point, transport selection, session management, HTTP API listener wiring
   intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
+  users.ts              — shared user profile registry (ze, pam) consumed by Praescriptor + HTTP API
   db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines + compliance tables (better-sqlite3, WAL mode)
   compliance/
     types.ts            — compliance tracking type definitions
@@ -72,7 +74,6 @@ src/
   web/
     server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
     routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
-    users.ts            — UserProfile type + static registry (ze, pam)
     prescriptions.ts    — per-user prescription generator with day-level cache
     send.ts             — push workout to intervals.icu calendar with per-user dedup
     send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup)
@@ -81,6 +82,21 @@ src/
     form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
     render.ts           — SSR HTML renderer (inlined CSS + JS, no framework)
+  api/
+    server.ts           — HTTP API listener (port 8643, co-resident with MCP; started only when EXERCITATOR_API_KEYS set)
+    router.ts           — dispatch /api/users/:userId/* to handlers with bearer-userId scoping
+    auth.ts             — bearer middleware (<client>:<userId>:<token> constant-time compare)
+    errors.ts           — JSON error envelope + jsonResponse helper
+    types.ts            — wire DTOs (independent of engine internals)
+    payload.ts          — engine → DTO mappers (readiness bands, polymorphic segment targets, Vigil → injury_warning)
+    cache.ts            — per-user response cache (default 300s, keyed by userId+endpoint)
+    handlers/
+      health.ts         — GET /api/health (unauthenticated, 60s-cached upstream probe)
+      status.ts         — GET /api/users/:userId/status (readiness, CP, fitness/fatigue/form)
+      workouts.ts       — GET /workouts/{today,suggested,:id} (engine-backed, polymorphic targets)
+      compliance.ts     — GET /compliance/{summary,detail}
+      dashboard.ts      — GET /dashboard (status + today + suggested aggregate)
+      cross-training.ts — POST /cross-training/:activityId/rpe (unblocks 409 awaiting_input)
 ```
 
 ### Key patterns
@@ -283,6 +299,8 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **OAuth redirect URI**: Validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, localhost). Do not add arbitrary URIs.
 - **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.
 - **Request body size**: OAuth endpoints limit request bodies to 64 KiB.
+- **HTTP API bearer keys**: `EXERCITATOR_API_KEYS` holds `<client>:<userId>:<token>` triples. Tokens are compared in constant time. Each key is scoped to one userId — cross-user reads return 403 before the user profile is loaded. Tailnet-only exposure means only tailnet members can reach the listener at all.
+- **HTTP API body size**: POST bodies (cross-training RPE) are capped at 1 KiB; the listener also enforces a 1 MiB global body cap.
 
 ## Testing
 
@@ -316,10 +334,10 @@ When a deployment or production issue occurs:
 - **Target**: Arca Ingens (QNAP NAS) — `dominus@192.168.4.180:2022`
 - **Path on server**: `/share/Container/exercitator/`
 - **Method**: Tarball upload + `docker compose up -d --build` (no git on QNAP)
-- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`) → `praescriptor-web:3847`
+- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`) → `praescriptor-web:3847`; Tailscale serve (`exercitator-api.tail7ab379.ts.net`) → `exercitator-mcp:8643` (HTTP API, tailnet-only, co-resident with MCP)
 - **Branch**: `main` — deploy from main only
-- **Containers**: `exercitator-mcp` (MCP server) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar)
-- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external) — do not delete external volumes
+- **Containers**: `exercitator-mcp` (MCP server + HTTP API on 8643) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar) + `exercitator-api-ts` (serve sidecar for HTTP API)
+- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external), `exercitator-api-tailscale-state` (external) — do not delete external volumes. Pre-create the new API state volume on Arca Ingens with `docker volume create exercitator-api-tailscale-state` before first deploy.
 
 ### Deploy procedure
 

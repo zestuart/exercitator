@@ -19,12 +19,12 @@ import type { ComplianceView } from "../compliance/types.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
+import { DEFAULT_USER, type UserProfile, getUserProfile } from "../users.js";
 import { generateInvocations, plainInvocations } from "./invocations.js";
 import { generatePrescriptions, invalidateCache } from "./prescriptions.js";
 import { renderPage } from "./render.js";
 import { sendToStryd } from "./send-stryd.js";
 import { sendToIntervals } from "./send.js";
-import { DEFAULT_USER, type UserProfile, getUserProfile } from "./users.js";
 
 /** Cache of athlete profile timezone per user (1h TTL via athlete profile cache). */
 const athleteTzCache = new Map<string, { tz: string; fetchedAt: number }>();

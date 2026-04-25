@@ -5,15 +5,23 @@ services:
     restart: unless-stopped
     expose:
       - "8642"
+      - "8643"
     volumes:
       - exercitator-data:/app/data
     environment:
       - INTERVALS_ICU_API_KEY=${INTERVALS_ICU_API_KEY:?required}
+      - INTERVALS_ICU_API_KEY_PAM=${INTERVALS_ICU_API_KEY_PAM:-}
+      - STRYD_EMAIL=${STRYD_EMAIL:-}
+      - STRYD_PASSWORD=${STRYD_PASSWORD:-}
+      - STRYD_EMAIL_PAM=${STRYD_EMAIL_PAM:-}
+      - STRYD_PASSWORD_PAM=${STRYD_PASSWORD_PAM:-}
       - MCP_OAUTH_CLIENT_ID=${MCP_OAUTH_CLIENT_ID:-exercitator}
       - MCP_OAUTH_CLIENT_SECRET=${MCP_OAUTH_CLIENT_SECRET:?required}
       - MCP_OAUTH_AUTHORIZE_PASSPHRASE=${MCP_OAUTH_AUTHORIZE_PASSPHRASE:?required}
       - MCP_SERVER_URL=exercitator.tail7ab379.ts.net
       - MCP_TOKEN_VERSION=${MCP_TOKEN_VERSION:-1}
+      - EXERCITATOR_API_KEYS=${EXERCITATOR_API_KEYS:-}
+      - EXERCITATOR_API_BIND_ADDR=${EXERCITATOR_API_BIND_ADDR:-0.0.0.0:8643}
     deploy:
       resources:
         limits:
@@ -87,6 +95,20 @@ services:
       - TS_USERSPACE=true
       - TS_SERVE_CONFIG=/config/serve.json
 
+  tailscale-exercitator-api:
+    container_name: exercitator-api-ts
+    image: tailscale/tailscale:latest
+    hostname: exercitator-api
+    restart: unless-stopped
+    volumes:
+      - exercitator-api-tailscale-state:/var/lib/tailscale
+      - ./tailscale-config-exercitator-api:/config:ro
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+      - TS_SERVE_CONFIG=/config/serve.json
+
 volumes:
   exercitator-data:
     name: exercitator-data
@@ -95,4 +117,7 @@ volumes:
     external: true
   praescriptor-tailscale-state:
     name: praescriptor-tailscale-state
+    external: true
+  exercitator-api-tailscale-state:
+    name: exercitator-api-tailscale-state
     external: true

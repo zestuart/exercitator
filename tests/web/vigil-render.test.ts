@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VigilSummary, WorkoutSuggestion } from "../../src/engine/types.js";
+import type { UserProfile } from "../../src/users.js";
 import { type RenderData, renderPage } from "../../src/web/render.js";
-import type { UserProfile } from "../../src/web/users.js";
 
 const ZE_PROFILE: UserProfile = {
 	id: "ze",

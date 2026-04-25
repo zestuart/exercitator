@@ -5,10 +5,10 @@
 
 import type { ComplianceView, SegmentCompliance } from "../compliance/types.js";
 import type { VigilSummary, WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
+import type { UserProfile } from "../users.js";
 import { buildFormDescription } from "./form-format.js";
 import type { Invocations } from "./invocations.js";
 import type { DataSource } from "./prescriptions.js";
-import type { UserProfile } from "./users.js";
 
 export interface RenderData {
 	profile: UserProfile;
