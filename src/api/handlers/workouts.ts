@@ -7,7 +7,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getPrescription } from "../../compliance/persist.js";
 import { localDateStr } from "../../engine/date-utils.js";
-import { suggestWorkout, suggestWorkoutForSport } from "../../engine/suggest.js";
+import { detectPowerSource } from "../../engine/power-source.js";
+import { computeReadiness } from "../../engine/readiness.js";
+import { selectSport } from "../../engine/sport-selector.js";
+import { fetchTrainingData, suggestWorkoutFromData } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { cacheGet, cacheSet } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -171,12 +174,42 @@ export async function handleWorkoutsSuggested(
 	}
 
 	try {
-		let suggestion: WorkoutSuggestion;
-		if (sportParam === "Run" || sportParam === "Swim") {
-			suggestion = await suggestWorkoutForSport(user.intervals, sportParam);
-		} else {
-			suggestion = await suggestWorkout(user.intervals, tz);
+		const now = new Date();
+		const data = await fetchTrainingData(user.intervals, tz);
+
+		// Authoritative CP from Stryd's foot pod when credentials are present —
+		// drives the stryd_direct wire enum and overrides intervals.icu's FTP.
+		let strydCp: number | null = null;
+		if (user.stryd) {
+			try {
+				if (!user.stryd.isAuthenticated) await user.stryd.login();
+				strydCp = (await user.stryd.getLatestCriticalPower()) ?? null;
+			} catch (err) {
+				console.error("workouts/suggested: Stryd CP fetch failed:", err);
+			}
 		}
+
+		let sport: "Run" | "Swim";
+		let sportSelectionReason: string | undefined;
+		if (sportParam === "Run" || sportParam === "Swim") {
+			sport = sportParam;
+		} else {
+			const pc = detectPowerSource(data.activities);
+			const readiness = computeReadiness(data.wellness, data.activities, now);
+			const sel = selectSport(data.activities, readiness.score, now, pc);
+			sport = sel.sport;
+			sportSelectionReason = sel.reason;
+		}
+
+		const suggestion: WorkoutSuggestion = suggestWorkoutFromData(
+			data,
+			sport,
+			now,
+			sportSelectionReason,
+			strydCp,
+			user.profile.id,
+			tz,
+		);
 
 		if (suggestion.status === "awaiting_input") {
 			emitAwaitingInput(res, suggestion);
@@ -184,12 +217,12 @@ export async function handleWorkoutsSuggested(
 		}
 
 		const body: SuggestedResponse = {
-			generated_at: new Date().toISOString(),
+			generated_at: now.toISOString(),
 			user_id: user.profile.id,
-			date: localDateStr(new Date(), tz),
+			date: localDateStr(now, tz),
 			tz,
 			status: "ready",
-			suggestion: suggestionToApi(suggestion),
+			suggestion: suggestionToApi(suggestion, strydCp != null),
 		};
 
 		cacheSet(user.profile.id, cacheKey, body);

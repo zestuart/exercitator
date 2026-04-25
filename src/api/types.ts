@@ -127,7 +127,7 @@ export interface SuggestedWorkoutBody {
 	terrain: string;
 	terrain_rationale: string;
 	power_context: {
-		source: string;
+		source: CriticalPowerSource;
 		ftp: number;
 		confidence: "high" | "low";
 	};
