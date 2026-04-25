@@ -331,47 +331,44 @@ When a deployment or production issue occurs:
 
 ## Deployment
 
-- **Target**: Arca Ingens (QNAP NAS) — `dominus@192.168.4.180:2022`
-- **Path on server**: `/share/Container/exercitator/`
-- **Method**: Tarball upload + `docker compose up -d --build` (no git on QNAP)
-- **Networking**: Tailscale funnel (`exercitator.tail7ab379.ts.net`) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`) → `praescriptor-web:3847`; Tailscale serve (`exercitator-api.tail7ab379.ts.net`) → `exercitator-mcp:8643` (HTTP API, tailnet-only, co-resident with MCP)
-- **Branch**: `main` — deploy from main only
-- **Containers**: `exercitator-mcp` (MCP server + HTTP API on 8643) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar) + `exercitator-api-ts` (serve sidecar for HTTP API)
-- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external), `exercitator-api-tailscale-state` (external) — do not delete external volumes. Pre-create the new API state volume on Arca Ingens with `docker volume create exercitator-api-tailscale-state` before first deploy.
+- **Target**: Cogitator (Mac Mini M4 Pro) — `dominus@cogitator.tail7ab379.ts.net` (tailnet) or `dominus@192.168.4.192` (LAN). Key auth via `~/.ssh/id_ed25519`; password fallback in `.env` as `cogitatorPass`. Services migrated from Arca Ingens 2026-04-04.
+- **Path on server**: `~/Container/exercitator/` (i.e. `/Users/dominus/Container/exercitator/`). `.env` lives here and is managed out-of-band.
+- **Docker**: Colima VM, `DOCKER_HOST=unix:///Users/dominus/.colima/docker.sock`. Non-interactive SSH does not source `~/.zshrc` — wrap docker commands in `zsh -ic "..."`. Only `$HOME` is mounted into the VM; don't use `/tmp` for bind mounts or build contexts.
+- **Method**: Tarball upload + `docker compose up -d --build`. Same pattern as Arca Ingens, different host/port/path.
+- **Networking**: Tailscale serve (`exercitator.tail7ab379.ts.net`, funnel-enabled) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`, tailnet-only) → `praescriptor-web:3847`; Tailscale serve (`exercitator-api.tail7ab379.ts.net`, tailnet-only) → `exercitator-mcp:8643` (HTTP API, co-resident with MCP).
+- **Branch**: `main` — deploy from main only.
+- **Containers**: `exercitator-mcp` (MCP server + HTTP API on 8643) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar) + `exercitator-api-ts` (serve sidecar for HTTP API).
+- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external), `exercitator-api-tailscale-state` (external). Do not delete external volumes — Tailscale node identity lives in them. Pre-create the new API state volume on Cogitator once: `ssh dominus@cogitator.tail7ab379.ts.net 'zsh -ic "docker volume create exercitator-api-tailscale-state"'`.
+- **Tailscale auth key**: exercitator family `tskey-auth-kqDKwGVavf...` (reusable, preauthorised). Works for all three sidecars. See `praefectura/docs/tailscale.md`.
+- **Operations reference**: full Cogitator conventions in `github.com/zestuart/praefectura` (`docs/cogitator-operations.md`, `docs/exercitator.md`, `docs/tailscale.md`).
 
 ### Deploy procedure
 
 ```bash
-# 1. SSH password (special characters — use Python file-write, not shell expansion)
-python3 -c "
-with open('/Users/ze/Documents/claude/exercitator/.env') as f:
-    for line in f:
-        if line.startswith('QNAP_PASSWORD='):
-            open('/tmp/.qnap_pass','w').write(line.split('=',1)[1].strip())
-" && chmod 600 /tmp/.qnap_pass
+# 1. Load cogitator password (only needed if key auth fails)
+CP=$(grep '^cogitatorPass=' .env | cut -d= -f2-)
 
-# 2. Tarball (exclude git, node_modules, .env, data)
+# 2. Tarball (exclude git, node_modules, .env, data, dist, phase2)
 tar czf /tmp/exercitator.tar.gz --exclude='.git' --exclude='node_modules' \
   --exclude='dist' --exclude='data' --exclude='.env' --exclude='phase2' \
   --exclude='.claude/settings.local.json' .
 
-# 3. Upload and extract
-sshpass -f /tmp/.qnap_pass scp -P 2022 /tmp/exercitator.tar.gz \
-  dominus@192.168.4.180:/share/Container/exercitator/
-sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
-  'cd /share/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz'
+# 3. Upload and extract (key auth)
+scp /tmp/exercitator.tar.gz dominus@cogitator.tail7ab379.ts.net:~/Container/exercitator/
+ssh dominus@cogitator.tail7ab379.ts.net \
+  'cd ~/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz'
 
-# 4. Rebuild app containers (Tailscale sidecars stay running)
-sshpass -f /tmp/.qnap_pass ssh -p 2022 dominus@192.168.4.180 \
-  'export PATH=/share/CE_CACHEDEV1_DATA/.qpkg/container-station/usr/bin/.libs:$PATH && \
-   cd /share/Container/exercitator && docker compose up -d --build exercitator praescriptor'
+# 4. Unlock keychain, then rebuild (non-interactive SSH needs zsh -ic for docker)
+ssh dominus@cogitator.tail7ab379.ts.net "security unlock-keychain -p '$CP' ~/Library/Keychains/login.keychain-db && \
+  cd ~/Container/exercitator && zsh -ic 'docker compose up -d --build exercitator praescriptor'"
 
-# 5. Verify both services
+# 5. Verify services
 curl -s https://exercitator.tail7ab379.ts.net/health
 curl -s https://praescriptor.tail7ab379.ts.net/health
+curl -s https://exercitator-api.tail7ab379.ts.net/api/health
 
 # 6. Clean up
-rm -f /tmp/.qnap_pass /tmp/exercitator.tar.gz
+rm -f /tmp/exercitator.tar.gz
 ```
 
 ### Pre-flight sequence (enforced by /deploy)
