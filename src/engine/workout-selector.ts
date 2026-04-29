@@ -198,11 +198,25 @@ export function selectWorkoutCategory(
 	if (readinessScore <= 50) {
 		category = "base";
 	} else if (readinessScore <= 65) {
+		// Sweet-spot tempo (Stryd Z2 Moderate) is the moderate-readiness step.
 		category = daysSinceHard >= 2 ? "tempo" : "base";
 	} else if (readinessScore <= 80) {
-		category = daysSinceHard >= 2 ? "intervals" : "base";
+		// Threshold (Stryd Z3) sits between sweet-spot and VO2max — when
+		// readiness is solid but not peak, prescribe intensive-threshold work
+		// rather than jumping straight to Z4 intervals.
+		category = daysSinceHard >= 2 ? "threshold" : "base";
 	} else {
-		category = daysSinceHard >= 3 ? "intervals" : "tempo";
+		// Top of readiness — graceful degradation as the last hard session
+		// gets more recent: intervals (3+ days rest) → threshold (2 days)
+		// → tempo (yesterday). Never prescribe two intense sessions
+		// back-to-back even at peak readiness.
+		if (daysSinceHard >= 3) {
+			category = "intervals";
+		} else if (daysSinceHard >= 2) {
+			category = "threshold";
+		} else {
+			category = "tempo";
+		}
 	}
 
 	// Track whether category was downshifted due to a recent hard session.
@@ -215,6 +229,8 @@ export function selectWorkoutCategory(
 	if (lowPct > 0.7 && category === "base" && readinessScore > 50 && !hardSessionGuard) {
 		category = "tempo";
 	} else if (highPct > 0.4 && category === "intervals") {
+		category = "threshold";
+	} else if (highPct > 0.4 && category === "threshold") {
 		category = "tempo";
 	} else if (highPct > 0.4 && category === "tempo") {
 		category = "base";
@@ -234,11 +250,16 @@ export function selectWorkoutCategory(
 	if (crossTrainingStrains && crossTrainingStrains.size > 0) {
 		const cap = sameDayCrossTrainingCap(crossTrainingStrains, activities, now, tz);
 		if (cap) {
+			// Order ascends through the engine's intensity ladder; `long`
+			// trails because it amplifies fatigue cost more than its raw
+			// intensity suggests.
 			const capOrder: WorkoutCategory[] = [
 				"rest",
 				"recovery",
 				"base",
+				"progression",
 				"tempo",
+				"threshold",
 				"intervals",
 				"long",
 			];
@@ -256,8 +277,10 @@ export function selectWorkoutCategory(
 	// but protects against future additions).
 	if (vigilAlert && vigilAlert.severity >= 2) {
 		const downshiftMap: Record<string, WorkoutCategory> = {
-			intervals: "tempo",
+			intervals: "threshold",
+			threshold: "tempo",
 			tempo: "base",
+			progression: "base",
 			long: "base",
 			base: "base",
 			recovery: "recovery",
@@ -276,7 +299,13 @@ export function selectWorkoutCategory(
 	// Sleep debt cap: 3+ consecutive poor nights → cap at base.
 	// Applied last — sleep debt overrides all upstream intensity selections.
 	if (sleepDebt && category !== "rest" && category !== "recovery") {
-		if (category === "tempo" || category === "intervals" || category === "long") {
+		if (
+			category === "progression" ||
+			category === "tempo" ||
+			category === "threshold" ||
+			category === "intervals" ||
+			category === "long"
+		) {
 			category = "base";
 		}
 	}

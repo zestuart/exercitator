@@ -27,7 +27,9 @@ const INTENSITY_FACTOR: Record<WorkoutCategory, number> = {
 	rest: 0,
 	recovery: 0.5,
 	base: 0.7,
-	tempo: 1.0,
+	progression: 0.78,
+	tempo: 0.9,
+	threshold: 1.05,
 	intervals: 1.2,
 	long: 0.8,
 };
@@ -37,7 +39,9 @@ const MIN_DURATION: Record<WorkoutCategory, { Run: number; Swim: number }> = {
 	rest: { Run: 0, Swim: 0 },
 	recovery: { Run: 1200, Swim: 1200 }, // 20 min
 	base: { Run: 1500, Swim: 1500 }, // 25 min
+	progression: { Run: 1800, Swim: 1800 }, // 30 min
 	tempo: { Run: 1800, Swim: 1800 }, // 30 min
+	threshold: { Run: 2400, Swim: 2400 }, // 40 min — sustained Z3 needs runway
 	intervals: { Run: 1800, Swim: 1800 }, // 30 min
 	long: { Run: 2700, Swim: 2100 }, // 45 min run, 35 min swim
 };
@@ -101,9 +105,10 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z1 recovery: < 70% CP — easy jog territory; below this the target collapses
-	// into brisk-walk wattage on athletes with high CP.
-	const z1 = hasPower ? powerZone(power.ftp, 0, 0.7) : null;
+	// Recovery: low end of Stryd Z1 Easy (65–75% CP). Sub-65% is walking
+	// territory — if the prescription wants less than this, prescribe rest
+	// instead. Cool-down step still drops to walk pace at the end.
+	const z1Low = hasPower ? powerZone(power.ftp, 0.65, 0.75) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.3 + paceBufferSecs / 1000
@@ -111,7 +116,7 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 
 	const mainDesc = hasPower
 		? dualTargetDesc(
-				`Z1 power <${z1?.high}W`,
+				`Stryd Z1 Easy ${z1Low?.low}–${z1Low?.high}W`,
 				hrCapDesc(settings, 1),
 				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
@@ -123,7 +128,7 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Warm-up",
 			duration_secs: scaled(300, scale),
-			target_description: "Easy walk",
+			target_description: "Easy walk to gentle jog",
 			target_hr_zone: 1,
 		},
 		{
@@ -131,7 +136,8 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(1350, scale),
 			target_description: mainDesc,
 			target_hr_zone: 1,
-			...(z1 && { target_power_low: 0, target_power_high: z1.high }),
+			stryd_zone: 1,
+			...(z1Low && { target_power_low: z1Low.low, target_power_high: z1Low.high }),
 		},
 		{
 			name: "Cool-down",
@@ -146,10 +152,9 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z2 endurance: 70–80% CP — true aerobic running. Below 70% the lower bound
-	// drops into walk-jog wattage; the upper bound matches Stryd's published
-	// "Easy" ceiling (80% CP).
-	const z2 = hasPower ? powerZone(power.ftp, 0.7, 0.8) : null;
+	// Base endurance: full Stryd Z1 Easy (65–80% CP). Aligns with Stryd's
+	// published Easy zone — start at 65%, settle at 75–78%, ceiling at 80%.
+	const z1 = hasPower ? powerZone(power.ftp, 0.65, 0.8) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000
@@ -157,12 +162,12 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 
 	const mainDesc = hasPower
 		? dualTargetDesc(
-				`Z2 power ${z2?.low}–${z2?.high}W`,
-				hrCapDesc(settings, 0),
+				`Stryd Z1 Easy ${z1?.low}–${z1?.high}W`,
+				hrCapDesc(settings, 1),
 				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
 		: paceWithBuffer && !hrOnly
-			? `Steady Z2, ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(2)}`
+			? `Steady easy, ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(2)}`
 			: `Steady ${hrZoneDesc(2)}`;
 
 	return [
@@ -177,7 +182,85 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(2100, scale),
 			target_description: mainDesc,
 			target_hr_zone: 2,
-			...(z2 && { target_power_low: z2.low, target_power_high: z2.high }),
+			stryd_zone: 1,
+			...(z1 && { target_power_low: z1.low, target_power_high: z1.high }),
+		},
+		{
+			name: "Cool-down",
+			duration_secs: scaled(300, scale),
+			target_description: "Easy jog to walk",
+			target_hr_zone: 1,
+		},
+	];
+}
+
+function buildRunProgression(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
+
+	// Progression run: thirds split. Each third climbs through a sub-band of
+	// Stryd's Z1/Z2:
+	//   1st  65–72% CP — easy start
+	//   2nd  72–80% CP — comfortable
+	//   3rd  80–87% CP — building (low Stryd Z2 Moderate, sweet-spot floor)
+	const t1 = hasPower ? powerZone(power.ftp, 0.65, 0.72) : null;
+	const t2 = hasPower ? powerZone(power.ftp, 0.72, 0.8) : null;
+	const t3 = hasPower ? powerZone(power.ftp, 0.8, 0.87) : null;
+
+	const pacePerKm = settings.threshold_pace
+		? settings.threshold_pace + paceBufferSecs / 1000
+		: null;
+
+	function thirdDesc(
+		zone: { low: number; high: number } | null,
+		paceMul: number,
+		zoneLabel: string,
+	): string {
+		const paceTarget = pacePerKm ? pacePerKm * paceMul : null;
+		if (hasPower && zone) {
+			return dualTargetDesc(
+				`${zoneLabel} ${zone.low}–${zone.high}W`,
+				hrCapDesc(settings, 2),
+				paceTarget ? formatPace(paceTarget, "km") : null,
+			);
+		}
+		if (paceTarget && !hrOnly) return `${zoneLabel}, ${formatPace(paceTarget, "km")}`;
+		return zoneLabel;
+	}
+
+	const thirdSecs = scaled(900, scale); // 15 min each third by default
+
+	return [
+		{
+			name: "Warm-up",
+			duration_secs: scaled(600, scale),
+			target_description: "Progressive walk to easy run",
+			target_hr_zone: 1,
+			stryd_zone: 1,
+		},
+		{
+			name: "Easy third",
+			duration_secs: thirdSecs,
+			target_description: thirdDesc(t1, 1.25, "Stryd Z1 Easy (low)"),
+			target_hr_zone: 1,
+			stryd_zone: 1,
+			...(t1 && { target_power_low: t1.low, target_power_high: t1.high }),
+		},
+		{
+			name: "Steady third",
+			duration_secs: thirdSecs,
+			target_description: thirdDesc(t2, 1.15, "Stryd Z1 Easy (high)"),
+			target_hr_zone: 2,
+			stryd_zone: 1,
+			...(t2 && { target_power_low: t2.low, target_power_high: t2.high }),
+		},
+		{
+			name: "Building third",
+			duration_secs: thirdSecs,
+			target_description: thirdDesc(t3, 1.08, "Stryd Z2 Moderate (low)"),
+			target_hr_zone: 3,
+			stryd_zone: 2,
+			...(t3 && { target_power_low: t3.low, target_power_high: t3.high }),
 		},
 		{
 			name: "Cool-down",
@@ -192,40 +275,44 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z3 tempo: 80–90% CP — Stryd-aligned moderate/threshold band.
-	const z3 = hasPower ? powerZone(power.ftp, 0.8, 0.9) : null;
+	// Tempo / sweet-spot: Stryd Z2 Moderate (80–90% CP). Stryd calls this
+	// "Extensive Threshold Stimulus" — sustained sub-LT work. 2×10 min with
+	// 3 min easy recovery between is the classic structure.
+	const z2 = hasPower ? powerZone(power.ftp, 0.8, 0.9) : null;
 
 	const reps = 2;
 	const workSecs = scaled(600, scale);
 	const restSecs = 180;
 
 	const paceWithBuffer = settings.threshold_pace
-		? settings.threshold_pace + paceBufferSecs / 1000
+		? settings.threshold_pace * 1.05 + paceBufferSecs / 1000
 		: null;
 
 	const workDesc = hasPower
 		? dualTargetDesc(
-				`Z3 power ${z3?.low}–${z3?.high}W`,
+				`Stryd Z2 Moderate ${z2?.low}–${z2?.high}W`,
 				hrCapDesc(settings, 2),
 				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
 		: paceWithBuffer && !hrOnly
-			? `Threshold ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(3)}`
+			? `Sweet-spot ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(3)}`
 			: hrZoneDesc(3);
 
 	return [
 		{
 			name: "Warm-up",
 			duration_secs: scaled(600, scale),
-			target_description: "Progressive warm-up to Z2",
+			target_description: "Progressive build through Stryd Z1 Easy",
 			target_hr_zone: 2,
+			stryd_zone: 1,
 		},
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: `${Math.round(workSecs / 60)}min ${workDesc} / 3min Z1 recovery`,
+			target_description: `${Math.round(workSecs / 60)}min ${workDesc} / 3min Stryd Z1 Easy recovery`,
 			target_hr_zone: 3,
-			...(z3 && { target_power_low: z3.low, target_power_high: z3.high }),
+			stryd_zone: 2,
+			...(z2 && { target_power_low: z2.low, target_power_high: z2.high }),
 			repeats: reps,
 			work_duration_secs: workSecs,
 			rest_duration_secs: restSecs,
@@ -239,12 +326,68 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 	];
 }
 
+function buildRunThreshold(ctx: BuildContext): WorkoutSegment[] {
+	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
+	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
+
+	// Threshold: Stryd Z3 Threshold (90–100% CP). Stryd calls this
+	// "Intensive Threshold Stimulus" — sustained at LT. 3×15 min with
+	// 3 min recovery; the longer reps demand a real warm-up.
+	const z3 = hasPower ? powerZone(power.ftp, 0.9, 1.0) : null;
+
+	const reps = 3;
+	const workSecs = scaled(900, scale);
+	const restSecs = 180;
+
+	const paceWithBuffer = settings.threshold_pace
+		? settings.threshold_pace * 0.97 + paceBufferSecs / 1000
+		: null;
+
+	const workDesc = hasPower
+		? dualTargetDesc(
+				`Stryd Z3 Threshold ${z3?.low}–${z3?.high}W`,
+				hrCapDesc(settings, 3),
+				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
+			)
+		: paceWithBuffer && !hrOnly
+			? `Threshold ${formatPace(paceWithBuffer, "km")} | ${hrZoneDesc(4)}`
+			: hrZoneDesc(4);
+
+	return [
+		{
+			name: "Warm-up",
+			duration_secs: scaled(900, scale),
+			target_description: "Progressive build through Stryd Z1 Easy → Z2 Moderate",
+			target_hr_zone: 2,
+			stryd_zone: 1,
+		},
+		{
+			name: "Main set",
+			duration_secs: reps * (workSecs + restSecs),
+			target_description: `${Math.round(workSecs / 60)}min ${workDesc} / 3min Stryd Z1 Easy recovery`,
+			target_hr_zone: 4,
+			stryd_zone: 3,
+			...(z3 && { target_power_low: z3.low, target_power_high: z3.high }),
+			repeats: reps,
+			work_duration_secs: workSecs,
+			rest_duration_secs: restSecs,
+		},
+		{
+			name: "Cool-down",
+			duration_secs: scaled(600, scale),
+			target_description: "Easy jog to walk",
+			target_hr_zone: 1,
+		},
+	];
+}
+
 function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z4 VO2max: 90–105% CP.
-	const z4 = hasPower ? powerZone(power.ftp, 0.9, 1.05) : null;
+	// Intervals / VO2max: Stryd Z4 Interval (100–115% CP). 5+ × 2:30 with
+	// 2 min Z1 Easy jog recovery is the bread-and-butter VO2max session.
+	const z4 = hasPower ? powerZone(power.ftp, 1.0, 1.15) : null;
 
 	const reps = Math.max(5, Math.round(7 * scale));
 	const workSecs = 150;
@@ -256,7 +399,7 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 
 	const workDesc = hasPower
 		? dualTargetDesc(
-				`Z4 power ${z4?.low}–${z4?.high}W`,
+				`Stryd Z4 Interval ${z4?.low}–${z4?.high}W`,
 				hrCapDesc(settings, 3),
 				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
 			)
@@ -268,14 +411,16 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 		{
 			name: "Warm-up",
 			duration_secs: scaled(600, scale),
-			target_description: "Progressive warm-up to Z2",
+			target_description: "Progressive build through Stryd Z1 Easy → Z2 Moderate",
 			target_hr_zone: 2,
+			stryd_zone: 1,
 		},
 		{
 			name: "Main set",
 			duration_secs: reps * (workSecs + restSecs),
-			target_description: `2.5min ${workDesc} / 2min Z1 jog`,
+			target_description: `2.5min ${workDesc} / 2min Stryd Z1 Easy jog`,
 			target_hr_zone: 4,
+			stryd_zone: 4,
 			...(z4 && { target_power_low: z4.low, target_power_high: z4.high }),
 			repeats: reps,
 			work_duration_secs: workSecs,
@@ -294,8 +439,10 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z2 endurance: 70–80% CP, with optional Z3 pickup.
-	const z2 = hasPower ? powerZone(power.ftp, 0.7, 0.8) : null;
+	// Long: full Stryd Z1 Easy (65–80% CP) sustained, with optional 10 min
+	// Stryd Z2 Moderate pickup near the end. Duration is the stimulus, not
+	// intensity — keep it conversational.
+	const z1 = hasPower ? powerZone(power.ftp, 0.65, 0.8) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000
@@ -304,13 +451,13 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 	const mainSecs = scaled(4200, scale);
 	const mainDesc = hasPower
 		? `${dualTargetDesc(
-				`Z2 power ${z2?.low}–${z2?.high}W`,
+				`Stryd Z1 Easy ${z1?.low}–${z1?.high}W`,
 				hrCapDesc(settings, 1),
 				paceWithBuffer ? formatPace(paceWithBuffer, "km") : null,
-			)} with optional 10min Z3 pickup`
+			)} with optional 10min Stryd Z2 Moderate pickup`
 		: paceWithBuffer && !hrOnly
-			? `Steady Z2, ${formatPace(paceWithBuffer, "km")} with optional 10min Z3 pickup`
-			: `Steady ${hrZoneDesc(2)} with optional 10min Z3 pickup`;
+			? `Steady easy, ${formatPace(paceWithBuffer, "km")} with optional 10min Z2 pickup`
+			: `Steady ${hrZoneDesc(2)} with optional Z3 pickup`;
 
 	return [
 		{
@@ -318,13 +465,15 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(600, scale),
 			target_description: "Progressive warm-up",
 			target_hr_zone: 1,
+			stryd_zone: 1,
 		},
 		{
 			name: "Main set",
 			duration_secs: mainSecs,
 			target_description: mainDesc,
 			target_hr_zone: 2,
-			...(z2 && { target_power_low: z2.low, target_power_high: z2.high }),
+			stryd_zone: 1,
+			...(z1 && { target_power_low: z1.low, target_power_high: z1.high }),
 		},
 		{
 			name: "Cool-down",
@@ -578,7 +727,9 @@ const BUILDERS: Record<string, Record<WorkoutCategory, (ctx: BuildContext) => Wo
 		rest: () => [],
 		recovery: buildRunRecovery,
 		base: buildRunBase,
+		progression: buildRunProgression,
 		tempo: buildRunTempo,
+		threshold: buildRunThreshold,
 		intervals: buildRunIntervals,
 		long: buildRunLong,
 	},
@@ -586,7 +737,13 @@ const BUILDERS: Record<string, Record<WorkoutCategory, (ctx: BuildContext) => Wo
 		rest: () => [],
 		recovery: buildSwimRecovery,
 		base: buildSwimBase,
+		// Swim doesn't have power-based zones, so progression / threshold map
+		// onto the existing structures: progression → base (longer warm-up
+		// build), threshold → tempo. Swim is unaffected by the Stryd zone
+		// re-mapping.
+		progression: buildSwimBase,
 		tempo: buildSwimTempo,
+		threshold: buildSwimTempo,
 		intervals: buildSwimIntervals,
 		long: buildSwimLong,
 	},
@@ -596,7 +753,9 @@ const TITLES: Record<WorkoutCategory, Record<string, string>> = {
 	rest: { Run: "Rest Day", Swim: "Rest Day" },
 	recovery: { Run: "Recovery Run", Swim: "Recovery Swim" },
 	base: { Run: "Easy Base Run", Swim: "Endurance Swim" },
-	tempo: { Run: "Threshold Tempo Run", Swim: "Threshold Swim" },
+	progression: { Run: "Progression Run", Swim: "Endurance Swim" },
+	tempo: { Run: "Sweet-spot Tempo Run", Swim: "Threshold Swim" },
+	threshold: { Run: "Threshold Run", Swim: "Threshold Swim" },
 	intervals: { Run: "VO2max Intervals", Swim: "Speed Intervals" },
 	long: { Run: "Long Run", Swim: "Distance Swim" },
 };
@@ -667,10 +826,14 @@ function buildRationale(category: WorkoutCategory, _readiness: number, sport: st
 			return `A gentle ${sport.toLowerCase()} session to promote blood flow without adding fatigue.`;
 		case "base":
 			return `Building aerobic base with steady-state ${sport.toLowerCase()}.`;
+		case "progression":
+			return "Aerobic build that climbs through Stryd Z1 Easy into low Z2 Moderate over thirds — endurance work with a productive sting at the end.";
 		case "tempo":
-			return "Threshold work to improve lactate clearance.";
+			return "Sweet-spot tempo (Stryd Z2 Moderate) — sub-LT sustained work to lift threshold without the cost of true threshold.";
+		case "threshold":
+			return "Threshold intervals at Stryd Z3 (Intensive Threshold Stimulus) — sustained 15-min reps at lactate threshold.";
 		case "intervals":
-			return "High-intensity intervals to build VO2max and speed.";
+			return "High-intensity intervals at Stryd Z4 to build VO2max and running economy.";
 		case "long":
 			return `No long session this week. Extended ${sport.toLowerCase()} for endurance.`;
 	}

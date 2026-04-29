@@ -44,11 +44,31 @@ export function selectTerrain(
 		};
 	}
 
-	// Intervals: always flat for accurate power target execution
-	if (category === "intervals") {
+	// Threshold and intervals: flat for accurate power target execution
+	if (category === "threshold" || category === "intervals") {
 		return {
 			terrain: "flat",
 			rationale: "Flat terrain required for consistent interval power targets",
+		};
+	}
+
+	// Progression: rolling adds variety to a build run; flat keeps the
+	// thirds clean. Default to flat unless recent sessions have all been flat.
+	if (category === "progression") {
+		const recentFlat = activities
+			.filter((a) => isRun(a.type) && daysAgo(a.start_date_local, now) <= 14)
+			.slice(0, 3)
+			.every((a) => (a.total_elevation_gain ?? 0) < 30);
+		if (recentFlat) {
+			return {
+				terrain: "rolling",
+				rationale:
+					"Recent runs have been flat — rolling terrain adds variety to the progression build",
+			};
+		}
+		return {
+			terrain: "flat",
+			rationale: "Flat terrain keeps the progression thirds clean and the power bands honest",
 		};
 	}
 

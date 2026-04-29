@@ -120,15 +120,40 @@ describe("Vigil protective downshift in selectWorkoutCategory", () => {
 		expect(withoutVigil).toBe(withVigil);
 	});
 
-	it("severity 2 downshifts intervals → tempo", () => {
+	it("severity 2 downshifts intervals → threshold", () => {
+		// Push activities 5+ days back so even if they trip the load-based
+		// hard-session check, daysSinceHard ≥ 3 still holds — top-of-ladder
+		// at readiness 90 requires that.
+		const activities = [
+			makeActivity({ start_date_local: "2026-03-22T08:00:00", icu_intensity: 60 }),
+			makeActivity({ start_date_local: "2026-03-23T08:00:00", icu_intensity: 55 }),
+		];
+
+		// Readiness 90 + last hard session ≥ 3 days ago → intervals (top of ladder)
+		const withoutVigil = selectWorkoutCategory(90, activities, "Run", now, defaultPowerCtx);
+		expect(withoutVigil).toBe("intervals");
+
+		// Vigil severity 2 protective downshift: intervals → threshold (one rung).
+		const withVigil = selectWorkoutCategory(
+			90,
+			activities,
+			"Run",
+			now,
+			defaultPowerCtx,
+			makeVigilAlert(2),
+		);
+		expect(withVigil).toBe("threshold");
+	});
+
+	it("severity 2 downshifts threshold → tempo", () => {
 		const activities = [
 			makeActivity({ start_date_local: "2026-03-24T08:00:00", icu_intensity: 65 }),
 			makeActivity({ start_date_local: "2026-03-25T08:00:00", icu_intensity: 60 }),
 		];
 
-		// Without Vigil, readiness 75 + no recent hard → intervals
+		// Readiness 75 + no recent hard → threshold
 		const withoutVigil = selectWorkoutCategory(75, activities, "Run", now, defaultPowerCtx);
-		expect(withoutVigil).toBe("intervals");
+		expect(withoutVigil).toBe("threshold");
 
 		const withVigil = selectWorkoutCategory(
 			75,

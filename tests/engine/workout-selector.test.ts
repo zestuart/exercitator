@@ -84,12 +84,21 @@ describe("selectWorkoutCategory", () => {
 		expect(selectWorkoutCategory(60, activities, "Run", NOW)).toBe("base");
 	});
 
-	it("returns intervals when readiness 75 and no hard session in 2+ days", () => {
+	it("returns threshold when readiness 75 and no hard session in 2+ days", () => {
+		// Mid-readiness band (66–80) prescribes Stryd Z3 Threshold work —
+		// productive but less recovery cost than VO2max intervals.
 		const activities = [makeActivity("Run", 4, 20)];
-		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("threshold");
+	});
+
+	it("returns intervals when readiness 90 and well-rested (3+ days)", () => {
+		const activities = [makeActivity("Run", 4, 20)];
+		expect(selectWorkoutCategory(90, activities, "Run", NOW)).toBe("intervals");
 	});
 
 	it("returns tempo when readiness 90 but hard session yesterday", () => {
+		// Even at peak readiness, never stack two intense sessions back-to-back —
+		// degrade to sweet-spot tempo (Stryd Z2 Moderate).
 		const activities = [makeActivity("Run", 1, 80, 8)];
 		expect(selectWorkoutCategory(90, activities, "Run", NOW)).toBe("tempo");
 	});
@@ -196,8 +205,8 @@ describe("selectWorkoutCategory", () => {
 			makeActivity("Run", 5, 50),
 			makeActivity("Run", 7, 50),
 		];
-		// Readiness 75 + no hard session → intervals
-		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+		// Readiness 75 + no hard session → threshold (mid-readiness band).
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("threshold");
 	});
 
 	it("zone rebalancing does not override hard-session guard (issue #11 scenario)", () => {
@@ -292,32 +301,33 @@ describe("cross-training hard-session guard (#20)", () => {
 		);
 	});
 
-	it("light weight session yesterday does not prevent intervals", () => {
+	it("light weight session yesterday does not prevent threshold", () => {
 		const wtYesterday = makeActivity("WeightTraining", 1, 20);
 		const easyRun = makeActivity("Run", 4, 20);
 		const longRun = { ...makeActivity("Run", 5, 60), moving_time: 6000 };
 		const activities = [wtYesterday, easyRun, longRun];
 		const strains = new Map([[wtYesterday.id, makeStrain(wtYesterday.id, "light")]]);
 
+		// Readiness 75 + no hard run + light WT → threshold (mid-readiness band).
 		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
-			"intervals",
+			"threshold",
 		);
 	});
 
-	it("hard weight session 3 days ago does not prevent intervals", () => {
+	it("hard weight session 3 days ago does not prevent threshold", () => {
 		const wt3DaysAgo = makeActivity("WeightTraining", 3, 20);
 		const easyRun = makeActivity("Run", 5, 20);
 		const activities = [wt3DaysAgo, easyRun];
 		const strains = new Map([[wt3DaysAgo.id, makeStrain(wt3DaysAgo.id, "hard")]]);
 
 		expect(selectWorkoutCategory(75, activities, "Run", NOW, undefined, undefined, strains)).toBe(
-			"intervals",
+			"threshold",
 		);
 	});
 
 	it("backward compat: no crossTrainingStrains param works", () => {
 		const activities = [makeActivity("Run", 4, 20)];
-		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("intervals");
+		expect(selectWorkoutCategory(75, activities, "Run", NOW)).toBe("threshold");
 	});
 });
 

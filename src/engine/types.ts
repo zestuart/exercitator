@@ -73,8 +73,27 @@ export interface PowerContext {
 	warnings: string[];
 }
 
-/** The six workout categories the engine can recommend */
-export type WorkoutCategory = "rest" | "recovery" | "base" | "tempo" | "intervals" | "long";
+/**
+ * Workout categories the engine can recommend, ordered by intensity:
+ *
+ *   rest        — no work
+ *   recovery    — Stryd Z1 Easy, low end (very gentle jog)
+ *   base        — Stryd Z1 Easy, full band (steady aerobic)
+ *   progression — Z1 Easy → low Z2 Moderate, thirds split
+ *   tempo       — Stryd Z2 Moderate, sweet-spot (extensive threshold)
+ *   threshold   — Stryd Z3 Threshold, sustained (intensive threshold)
+ *   intervals   — Stryd Z4 Interval, VO2max
+ *   long        — Stryd Z1 Easy duration build, optional Z2 pickup
+ */
+export type WorkoutCategory =
+	| "rest"
+	| "recovery"
+	| "base"
+	| "progression"
+	| "tempo"
+	| "threshold"
+	| "intervals"
+	| "long";
 
 /** Terrain guidance */
 export type TerrainPreference = "flat" | "rolling" | "hilly" | "trail" | "pool" | "any";
@@ -92,6 +111,18 @@ export interface WorkoutSegment {
 	repeats?: number;
 	work_duration_secs?: number;
 	rest_duration_secs?: number;
+	/**
+	 * Stryd power zone (1–5) for Stryd workout export. Maps to Stryd's
+	 * published 5-zone model:
+	 *   1 Easy 65–80%, 2 Moderate 80–90%, 3 Threshold 90–100%,
+	 *   4 Interval 100–115%, 5 Repetition 115–130% (% of CP).
+	 *
+	 * Distinct from `target_hr_zone` — HR and power zones can diverge.
+	 * When unset, Stryd export falls back to a conservative recovery band
+	 * (sub-Z1) for warm-up / cool-down / rest, or to `target_hr_zone`
+	 * with the Stryd map for working segments.
+	 */
+	stryd_zone?: number;
 }
 
 /** Vigil alert summary for inclusion in workout suggestion output. */

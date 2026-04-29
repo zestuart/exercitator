@@ -155,8 +155,11 @@ describe("applyStaleness", () => {
 	});
 
 	it("downgrades one level for moderate tier", () => {
-		expect(applyStaleness("intervals", "moderate")).toBe("tempo");
+		// Stryd 5-zone ladder: intervals → threshold → tempo → base → recovery
+		expect(applyStaleness("intervals", "moderate")).toBe("threshold");
+		expect(applyStaleness("threshold", "moderate")).toBe("tempo");
 		expect(applyStaleness("tempo", "moderate")).toBe("base");
+		expect(applyStaleness("progression", "moderate")).toBe("base");
 		expect(applyStaleness("base", "moderate")).toBe("recovery");
 		expect(applyStaleness("long", "moderate")).toBe("base");
 		expect(applyStaleness("recovery", "moderate")).toBe("recovery");

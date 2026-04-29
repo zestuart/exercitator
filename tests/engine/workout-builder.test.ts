@@ -69,36 +69,85 @@ describe("buildWorkout", () => {
 		expect(result.total_duration_secs).toBeLessThanOrEqual(2100);
 		expect(result.title).toBe("Recovery Run");
 
-		// Power targets present in Stryd scale (< 70% of 248 = 174W)
+		// Recovery sits in the bottom half of Stryd Z1 Easy: 65–75% of 248 ≈ 161–186W.
 		const main = result.segments[1];
-		expect(main.target_power_high).toBeDefined();
-		expect(main.target_power_high).toBeLessThanOrEqual(174);
-		expect(main.target_power_high).toBeGreaterThanOrEqual(170);
-		expect(main.target_description).toContain("W");
+		expect(main.target_power_low).toBeGreaterThanOrEqual(158);
+		expect(main.target_power_low).toBeLessThanOrEqual(165);
+		expect(main.target_power_high).toBeGreaterThanOrEqual(180);
+		expect(main.target_power_high).toBeLessThanOrEqual(190);
+		expect(main.stryd_zone).toBe(1);
+		expect(main.target_description).toContain("Stryd Z1 Easy");
 		expect(main.target_description).toContain("HR cap");
 	});
 
 	it("builds run base with Stryd dual targets", () => {
 		const result = buildWorkout("base", "Run", runSettings, 50, 50, strydCtx);
 		const main = result.segments[1];
-		// Z2: 70-80% of 248 = 174-198W — runnable aerobic, not brisk-walk wattage.
-		expect(main.target_power_low).toBeGreaterThanOrEqual(170);
-		expect(main.target_power_low).toBeLessThanOrEqual(180);
+		// Base = full Stryd Z1 Easy: 65–80% of 248 ≈ 161–198W.
+		expect(main.target_power_low).toBeGreaterThanOrEqual(158);
+		expect(main.target_power_low).toBeLessThanOrEqual(165);
 		expect(main.target_power_high).toBeGreaterThanOrEqual(195);
 		expect(main.target_power_high).toBeLessThanOrEqual(200);
-		expect(main.target_description).toContain("Z2 power");
+		expect(main.stryd_zone).toBe(1);
+		expect(main.target_description).toContain("Stryd Z1 Easy");
 		expect(main.target_description).toContain("HR cap");
 	});
 
-	it("builds run intervals with Garmin power (no Stryd)", () => {
+	it("builds run progression with thirds at climbing power bands", () => {
+		const result = buildWorkout("progression", "Run", runSettings, 60, 50, strydCtx);
+		const easy = result.segments.find((s) => s.name === "Easy third");
+		const steady = result.segments.find((s) => s.name === "Steady third");
+		const building = result.segments.find((s) => s.name === "Building third");
+		expect(easy).toBeDefined();
+		expect(steady).toBeDefined();
+		expect(building).toBeDefined();
+		// 65–72% / 72–80% / 80–87% of 248
+		expect(easy?.target_power_high).toBeLessThan(steady?.target_power_high ?? 0);
+		expect(steady?.target_power_high).toBeLessThan(building?.target_power_high ?? 0);
+		expect(easy?.stryd_zone).toBe(1);
+		expect(steady?.stryd_zone).toBe(1);
+		expect(building?.stryd_zone).toBe(2);
+		expect(building?.target_description).toContain("Stryd Z2 Moderate");
+	});
+
+	it("builds run threshold with Stryd Z3 sustained reps", () => {
+		const result = buildWorkout("threshold", "Run", runSettings, 75, 50, strydCtx);
+		const main = result.segments.find((s) => s.name === "Main set");
+		expect(main).toBeDefined();
+		// 90–100% of 248 ≈ 223–248W
+		expect(main?.target_power_low).toBeGreaterThanOrEqual(220);
+		expect(main?.target_power_low).toBeLessThanOrEqual(228);
+		expect(main?.target_power_high).toBeGreaterThanOrEqual(245);
+		expect(main?.target_power_high).toBeLessThanOrEqual(252);
+		expect(main?.stryd_zone).toBe(3);
+		expect(main?.repeats).toBe(3);
+		expect(main?.target_description).toContain("Stryd Z3 Threshold");
+	});
+
+	it("builds run intervals with Garmin power at Stryd Z4", () => {
 		const result = buildWorkout("intervals", "Run", runSettings, 80, 50, garminCtx);
 		const mainSet = result.segments.find((s) => s.name === "Main set");
 		expect(mainSet).toBeDefined();
 		expect(mainSet?.repeats).toBeGreaterThanOrEqual(5);
-		// Z4: 90-105% of 292 = 263-307W (Garmin scale)
-		expect(mainSet?.target_power_low).toBeGreaterThanOrEqual(260);
-		expect(mainSet?.target_power_high).toBeLessThanOrEqual(310);
-		expect(mainSet?.target_description).toContain("Z4 power");
+		// Stryd Z4 Interval: 100–115% of 292 ≈ 292–336W (Garmin scale)
+		expect(mainSet?.target_power_low).toBeGreaterThanOrEqual(290);
+		expect(mainSet?.target_power_low).toBeLessThanOrEqual(295);
+		expect(mainSet?.target_power_high).toBeGreaterThanOrEqual(330);
+		expect(mainSet?.target_power_high).toBeLessThanOrEqual(340);
+		expect(mainSet?.stryd_zone).toBe(4);
+		expect(mainSet?.target_description).toContain("Stryd Z4 Interval");
+	});
+
+	it("tempo run sits in Stryd Z2 Moderate (sweet-spot)", () => {
+		const result = buildWorkout("tempo", "Run", runSettings, 60, 50, strydCtx);
+		const main = result.segments.find((s) => s.name === "Main set");
+		// 80–90% of 248 ≈ 198–223W
+		expect(main?.target_power_low).toBeGreaterThanOrEqual(195);
+		expect(main?.target_power_low).toBeLessThanOrEqual(202);
+		expect(main?.target_power_high).toBeGreaterThanOrEqual(220);
+		expect(main?.target_power_high).toBeLessThanOrEqual(228);
+		expect(main?.stryd_zone).toBe(2);
+		expect(main?.target_description).toContain("Stryd Z2 Moderate");
 	});
 
 	it("builds run base with HR-only when no power source", () => {
@@ -143,7 +192,8 @@ describe("buildWorkout", () => {
 	it("produces estimated load within expected range", () => {
 		const result = buildWorkout("tempo", "Run", runSettings, 65, 50, strydCtx);
 		const durationMins = result.total_duration_secs / 60;
-		const expectedLoad = durationMins * 1.0;
+		// Sweet-spot tempo intensity factor is 0.9.
+		const expectedLoad = durationMins * 0.9;
 		expect(result.estimated_load).toBeGreaterThan(expectedLoad * 0.8);
 		expect(result.estimated_load).toBeLessThan(expectedLoad * 1.2);
 	});
@@ -166,7 +216,15 @@ describe("buildWorkout", () => {
 		for (const sport of ["Run", "Swim"] as const) {
 			const settings = sport === "Run" ? runSettings : swimSettings;
 			const power = sport === "Run" ? strydCtx : undefined;
-			for (const cat of ["recovery", "base", "tempo", "intervals", "long"] as const) {
+			for (const cat of [
+				"recovery",
+				"base",
+				"progression",
+				"tempo",
+				"threshold",
+				"intervals",
+				"long",
+			] as const) {
 				const result = buildWorkout(cat, sport, settings, 70, 50, power);
 				for (const seg of result.segments) {
 					if (seg.repeats && seg.repeats > 1) {
@@ -181,7 +239,15 @@ describe("buildWorkout", () => {
 	});
 
 	it("includes dual targets on every running segment with power source", () => {
-		for (const cat of ["recovery", "base", "tempo", "intervals", "long"] as const) {
+		for (const cat of [
+			"recovery",
+			"base",
+			"progression",
+			"tempo",
+			"threshold",
+			"intervals",
+			"long",
+		] as const) {
 			const result = buildWorkout(cat, "Run", runSettings, 70, 50, strydCtx);
 			const mainSegments = result.segments.filter(
 				(s) => s.name !== "Warm-up" && s.name !== "Cool-down",

@@ -118,8 +118,10 @@ const DOWNGRADE: Record<WorkoutCategory, WorkoutCategory> = {
 	rest: "rest",
 	recovery: "recovery",
 	base: "recovery",
+	progression: "base",
 	tempo: "base",
-	intervals: "tempo",
+	threshold: "tempo",
+	intervals: "threshold",
 	long: "base",
 };
 

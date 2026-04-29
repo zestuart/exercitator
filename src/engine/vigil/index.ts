@@ -27,6 +27,18 @@ export interface VigilResult {
 const MIN_BASELINE_ACTIVITIES = 5;
 
 /**
+ * Lookback window (days) used only for the activity-count gate.
+ *
+ * The metric baseline still computes statistics over the most recent
+ * 30 days (`computeBaselines`) — that's the rolling window relevant to
+ * detecting deviation from current form. But the `building` gate counts
+ * over a wider 60 days so an athlete who runs 4 times a month doesn't
+ * get stuck at "4/5 activities" indefinitely while their baseline is
+ * actually statistically usable.
+ */
+const COUNT_WINDOW_DAYS = 60;
+
+/**
  * Run the Vigil pipeline for a sport.
  *
  * 1. Check we have enough stored metrics for a baseline
@@ -47,34 +59,40 @@ export function runVigilPipeline(
 ): VigilResult {
 	const ref = referenceDate ?? new Date();
 	const newest = localDateStr(ref, tz);
+	const oldestCount = localDateStr(new Date(ref.getTime() - COUNT_WINDOW_DAYS * 86_400_000), tz);
 	const oldest30d = localDateStr(new Date(ref.getTime() - 30 * 86_400_000), tz);
 	const oldest7d = localDateStr(new Date(ref.getTime() - 7 * 86_400_000), tz);
 
-	const count30d = countVigilMetrics(athleteId, sport, oldest30d, newest);
+	const countWindow = countVigilMetrics(athleteId, sport, oldestCount, newest);
 
-	if (count30d === 0) {
+	if (countWindow === 0) {
 		return {
 			alert: { severity: 0, flags: [], summary: "Vigil: no Stryd data", recommendation: "" },
-			baselineWindow: "30d (0 activities)",
+			baselineWindow: `${COUNT_WINDOW_DAYS}d (0 activities)`,
 			acuteWindow: "7d (0 activities)",
 			status: "inactive",
 		};
 	}
 
-	if (count30d < MIN_BASELINE_ACTIVITIES) {
+	if (countWindow < MIN_BASELINE_ACTIVITIES) {
 		return {
 			alert: {
 				severity: 0,
 				flags: [],
-				summary: `Vigil: baseline building (${count30d}/${MIN_BASELINE_ACTIVITIES} activities)`,
+				summary: `Vigil: baseline building (${countWindow}/${MIN_BASELINE_ACTIVITIES} activities in ${COUNT_WINDOW_DAYS}d)`,
 				recommendation: "",
 			},
-			baselineWindow: `30d (${count30d} activities)`,
+			baselineWindow: `${COUNT_WINDOW_DAYS}d (${countWindow} activities)`,
 			acuteWindow: "7d (pending)",
 			status: "building",
 		};
 	}
 
+	// Metric baseline still uses the 30-day window — that's the statistically
+	// relevant horizon for deviation detection. The 60-day count above just
+	// confirms the athlete is consistent enough for the alert system to be
+	// useful.
+	const count30d = countVigilMetrics(athleteId, sport, oldest30d, newest);
 	const count7d = countVigilMetrics(athleteId, sport, oldest7d, newest);
 	const baselines = computeBaselines(athleteId, sport, ref, tz);
 	const alert = scoreDeviations(baselines);

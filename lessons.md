@@ -3,6 +3,29 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-04-29 — Run zones realigned to Stryd's 5-zone model + threshold/progression categories
+
+**What happened**: User flagged that the morning's run-power tune (Z2 base 70–80% CP) was still "barely above a brisk walk" and asked for the engine bands to map onto Stryd's published 5-zone model directly. Stryd's bands at CP=274W: Z1 Easy 65–80%, Z2 Moderate 80–90%, Z3 Threshold 90–100%, Z4 Interval 100–115%, Z5 Repetition 115–130%.
+
+**Root cause** (zones): The engine had its own ad-hoc 4-zone model (recovery / base / tempo / intervals + long) that no longer matched Stryd's prescriptive guidance. "Tempo" lived at 80–90% which the engine labelled Z3 but Stryd actually labels as Z2 Moderate; Stryd's "tempo workout" is *Extensive Threshold Stimulus* (sweet-spot, 80–90%) while their "threshold workout" is *Intensive Threshold Stimulus* (90–95%) — these are two different sessions, and the engine collapsed them. A quick web search of Stryd's own blog/help-centre surfaced the distinction; user picked Path C (add a `threshold` category, keep `tempo` as sweet-spot) over my initial suggestion of redefining `tempo` as Z3.
+
+**Fix**:
+- `WorkoutCategory` extended to 8 values: `rest | recovery | base | progression | tempo | threshold | intervals | long`. `progression` is a new "thirds" build (65–72 / 72–80 / 80–87% CP) for variety in moderate-readiness weeks; `threshold` is sustained 3×15 min at 90–100%.
+- All run-builder bands shifted to the Stryd 5-zone model. Sub-65% CP (walk territory) is no longer prescribed for any working segment — if readiness wants less, the prescription is rest, not "barely above a brisk walk".
+- New `WorkoutSegment.stryd_zone` field (1–5) so Stryd export can pick the right CP-% band independently of `target_hr_zone` (which still drives the safety-cap HR display in Praescriptor). HR zones and power zones don't always align under the new mapping (e.g. base sits at HR Z2 but Stryd Z1 Easy), and a single field would have forced one or the other to lie.
+- Selector ladder: 51–65 → tempo, 66–80 → threshold, 81+ → intervals (3-day rest), threshold (2-day rest), tempo (yesterday). Vigil downshift, staleness DOWNGRADE, sleep-debt cap, and cross-training capOrder all updated for the two new rungs.
+- Stryd export gained an explicit `RECOVERY_PCT` band (sub-Z1, 0–65%) so warm-up walks and inter-rep recovery jogs aren't pushed up into the new 65–80% Z1 Easy floor.
+
+**Root cause** (Vigil 4/5): Not a bug — user has 22 Stryd-instrumented runs going back to 2025-12-31, but only 4 fall inside the rolling 30-day count window (most recent before today was 2026-03-27, three days outside the window). Threshold gate was sound; window was just narrow for an athlete with low-but-consistent volume.
+
+**Fix** (Vigil): Decoupled the *count window* (now 60d) from the *metric baseline window* (still 30d). The 30d window remains the statistically relevant horizon for deviation detection — sliding it to 60d would let stale form pollute the baseline. The 60d count just confirms the athlete is "consistent enough for the alert system to be useful" before the alerter activates.
+
+**Prevention**: Two structural things to keep:
+1. When aligning the engine to a third-party model, always cross-reference the model's *workout structure* guidance, not just its zone-label nomenclature. Stryd's app calls Z3 "Threshold" but their training guidance reserves *threshold workouts* for the 90–95% subset of Z3 — collapsing the two would have made every "threshold" prescription dramatically too easy or too hard depending on which interpretation Claude picked.
+2. When introducing a new field that overlaps with an existing one (HR zone vs power zone), keep them distinct from the start. We almost reused `target_hr_zone` for both display and Stryd-export selection; that would have forced base runs to display as "Z1 HR" (false — they're HR Z2) just to get the right Stryd band on export.
+
+Tests: `tests/engine/workout-builder.test.ts` regrown with band assertions for all 7 working categories at FTP=248. `tests/engine/staleness.test.ts` covers the new 8-rung downgrade ladder. `tests/engine/vigil/integration.test.ts` updated for the new downshift map (intervals → threshold instead of intervals → tempo). 380/380 green after the changes.
+
 ## 2026-04-29 — SAST cleanup: cache bound, constant-time bearer, rate limit, security headers
 
 **What happened**: The five accepted findings from the 2026-04-29 deploy (one High, two Medium, two Low) were closed in a dedicated cleanup pass. While re-running SAST after the fixes a new Medium finding surfaced — `handleWorkoutsSuggested` was using the user-supplied `sport` query parameter directly in the cache key, which became reachable now that the cache is bounded but still LRU-evicted on insert. Closed in the same pass.

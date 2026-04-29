@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Two new run workout categories aligned to Stryd's published 5-zone model: **`progression`** (Stryd Z1 Easy → Z2 Moderate, three equal-duration thirds at 65–72%, 72–80%, 80–87% CP) and **`threshold`** (Stryd Z3 Threshold, 3 × 15 min sustained at 90–100% CP). The selector inserts `threshold` between `tempo` and `intervals` on the readiness ladder so a solid-but-not-peak day prescribes intensive-threshold work rather than jumping straight to VO2max. `WorkoutCategory` union, builder dispatch, terrain rules, staleness downgrade, Vigil downshift, sleep-debt cap, and same-day cross-training cap order all updated.
+- `WorkoutSegment.stryd_zone` (1–5) — explicit Stryd power zone for export, distinct from `target_hr_zone`. Lets the engine carry HR-zone (for the safety cap UI) and Stryd-zone (for the workout export) independently, since the two don't always align under the new mapping.
+- `isValidIntervalsId` (`src/api/validate.ts`) — already lived here; now also referenced from the threshold/progression flow via the cache-key allowlist.
 - HTTP API for native clients (`/api/...`) — tailnet-only via new `exercitator-api.tail7ab379.ts.net` Tailscale sidecar, co-resident with the MCP server on port 8643. Endpoints: `/api/health`, per-user `/api/users/:userId/{status,workouts/today,workouts/suggested,workouts/:id,dashboard,compliance/summary,compliance/detail,cross-training/:activityId/rpe}`. Bearer auth scoped `<client>:<userId>:<token>` with constant-time compare and cross-user 403 enforcement. Polymorphic segment targets (power / pace / hr) so swim is first-class. 409 + `awaiting_input` envelope unblocks cross-training RPE via dedicated POST. Per-user response cache (300 s default) shields intervals.icu and Stryd from poll amplification.
 - Shared user registry (`src/users.ts`) — lifted from `src/web/users.ts` so Praescriptor and the HTTP API share one source of truth for (ze, pam) + env var names + feature flags.
 - Workout compliance tracking: persist prescriptions and send events to SQLite, compare actual activity laps against prescribed targets with binary pass/fail scoring per segment
@@ -21,8 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Rest intervals between non-repeat swim segments (20s easy, 40s hard) for FORM goggles programming and clearer intervals.icu workout descriptions
 
 ### Changed
-- Run power zones tuned for runnability: Z1 recovery now <70% CP (was <55%), Z2 base/long now 70–80% CP (was 55–75%), Z3 tempo now 80–90% CP (was 76–90%), Z4 intervals now 90–105% CP (was 91–105%). The old Z2 lower bound collapsed into walk-jog wattage on athletes with high CP (e.g. 173 W lower bound on a 315 W CP); the new bands match Stryd's published "Easy/Moderate" zones and the user's actual easy-run power distribution.
+- Run power zones realigned to Stryd's published 5-zone model. Engine categories now map onto Stryd zones as follows:
+
+  | Engine category | Stryd zone | % CP |
+  |---|---|---|
+  | recovery | Z1 Easy (low) | 65–75% |
+  | base | Z1 Easy | 65–80% |
+  | long | Z1 Easy | 65–80% with optional Z2 Moderate pickup |
+  | progression *(new)* | Z1 Easy → Z2 Moderate | thirds: 65–72 / 72–80 / 80–87% |
+  | tempo | Z2 Moderate (sweet-spot) | 80–90% |
+  | threshold *(new)* | Z3 Threshold | 90–100% |
+  | intervals | Z4 Interval (VO2max) | 100–115% |
+
+  Sweet-spot tempo replaces the previous "tempo = 80–90% CP" — Stryd labels this band "Extensive Threshold Stimulus" and reserves the term *threshold* for sustained 90–95% CP work, now its own category. Intervals jumped from 90–105% to true VO2max territory at 100–115% so the Z3/Z4 distinction becomes prescriptive rather than nominal. Stryd-format (`src/web/stryd-format.ts`) also gained an explicit `RECOVERY_PCT` band (sub-Z1, 0–65%) so warm-up walks and inter-rep recoveries don't get pushed up into a jog target by the new Z1 floor.
+- Run power zones tuned for runnability (2026-04-29 morning, superseded by Stryd 5-zone alignment later the same day): Z1 recovery <70% CP, Z2 base/long 70–80%, Z3 tempo 80–90%, Z4 intervals 90–105%. See above for the final values.
 - `runVigilBackfillIfNeeded` now does an incremental 14-day Stryd sync once the initial 90-day baseline exists, debounced to once per UTC day per athlete. Garmin + Stryd CIQ runs that arrive after the seed (the enricher only catches Apple Watch low-fidelity uploads) now reach `vigil_metrics` on the next prescription render instead of being silently skipped forever.
+- Vigil baseline-building gate now counts activities over a **60-day** lookback window (was 30 days). The metric baseline still computes statistics over the most recent 30 days — the wider count just stops athletes who run 4×/month from being stuck at "4/5 activities" indefinitely while their baseline is statistically usable. Building summary updated to include the count-window duration. (`src/engine/vigil/index.ts`)
 - Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
 - Vigil 90-day Stryd FIT backfill: helper lifted from Praescriptor to `src/engine/vigil/backfill.ts` so the HTTP API's `/status` and `/dashboard` can fire-and-forget on first call. Per-athlete in-flight Set guards against concurrent kicks.
 - Deployment target moved from Arca Ingens (QNAP, decommissioned 2026-04-04) to Cogitator (Mac Mini M4 Pro). Same tarball flow, different host (`dominus@cogitator.tail7ab379.ts.net`, port 22, key auth) and home path (`~/Container/exercitator/`). See `praefectura/docs/cogitator-operations.md`.
