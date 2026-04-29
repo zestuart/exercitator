@@ -61,30 +61,49 @@ function formatLocalTime(isoStr: string, tz?: string): string {
  * Swimming (with HR):   "Z2 (137–145bpm)"
  * Swimming (no HR):     "Z2"
  */
+/**
+ * Stryd 5-zone CP percentage bands. Mirrors src/web/stryd-format.ts \u2014
+ * keep the two in sync if either changes.
+ */
+const STRYD_ZONE_PCT: Record<number, [number, number]> = {
+	1: [65, 80],
+	2: [80, 90],
+	3: [90, 100],
+	4: [100, 115],
+	5: [115, 130],
+};
+
+const STRYD_ZONE_LABEL: Record<number, string> = {
+	1: "Stryd Z1 Easy",
+	2: "Stryd Z2 Moderate",
+	3: "Stryd Z3 Threshold",
+	4: "Stryd Z4 Interval",
+	5: "Stryd Z5 Repetition",
+};
+
 function zoneGuide(
 	seg: WorkoutSegment,
 	sport: "Run" | "Swim",
 	ftp: number,
 	hrZones: number[] | null,
 ): string {
+	// Run with explicit Stryd zone \u2014 derive watts from Stryd's published
+	// 5-zone percentage bands (keeps the on-page guide aligned with the
+	// engine's actual prescription).
+	if (sport === "Run" && ftp > 0 && seg.stryd_zone != null) {
+		const pcts = STRYD_ZONE_PCT[seg.stryd_zone];
+		const label = STRYD_ZONE_LABEL[seg.stryd_zone] ?? `Stryd Z${seg.stryd_zone}`;
+		if (pcts) {
+			const lo = Math.round((ftp * pcts[0]) / 100);
+			const hi = Math.round((ftp * pcts[1]) / 100);
+			return `${label} (${lo}\u2013${hi}W)`;
+		}
+		return label;
+	}
+
 	if (seg.target_hr_zone == null) return "";
 	const z = seg.target_hr_zone;
 	const label = `Z${z}`;
-
-	if (sport === "Run" && ftp > 0) {
-		// Derive watts from FTP zone percentages
-		const zonePcts: [number, number][] = [
-			[0, 55],
-			[55, 75],
-			[75, 90],
-			[90, 105],
-			[105, 120],
-		];
-		const pcts = zonePcts[z - 1] ?? zonePcts[zonePcts.length - 1];
-		const lo = Math.round((ftp * pcts[0]) / 100);
-		const hi = Math.round((ftp * pcts[1]) / 100);
-		return lo === 0 ? `${label} (&lt;${hi}W)` : `${label} (${lo}\u2013${hi}W)`;
-	}
 
 	if (sport === "Swim" && hrZones && hrZones.length > 0) {
 		// hrZones[i] is the ceiling of zone i+1; floor is previous ceiling
