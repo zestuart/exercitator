@@ -101,8 +101,9 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z1 recovery: < 55% FTP
-	const z1 = hasPower ? powerZone(power.ftp, 0, 0.55) : null;
+	// Z1 recovery: < 70% CP — easy jog territory; below this the target collapses
+	// into brisk-walk wattage on athletes with high CP.
+	const z1 = hasPower ? powerZone(power.ftp, 0, 0.7) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.3 + paceBufferSecs / 1000
@@ -145,8 +146,10 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z2 endurance: 55–75% FTP
-	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
+	// Z2 endurance: 70–80% CP — true aerobic running. Below 70% the lower bound
+	// drops into walk-jog wattage; the upper bound matches Stryd's published
+	// "Easy" ceiling (80% CP).
+	const z2 = hasPower ? powerZone(power.ftp, 0.7, 0.8) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000
@@ -189,8 +192,8 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z3 tempo: 76–90% FTP
-	const z3 = hasPower ? powerZone(power.ftp, 0.76, 0.9) : null;
+	// Z3 tempo: 80–90% CP — Stryd-aligned moderate/threshold band.
+	const z3 = hasPower ? powerZone(power.ftp, 0.8, 0.9) : null;
 
 	const reps = 2;
 	const workSecs = scaled(600, scale);
@@ -240,8 +243,8 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z4 VO2max: 91–105% FTP
-	const z4 = hasPower ? powerZone(power.ftp, 0.91, 1.05) : null;
+	// Z4 VO2max: 90–105% CP.
+	const z4 = hasPower ? powerZone(power.ftp, 0.9, 1.05) : null;
 
 	const reps = Math.max(5, Math.round(7 * scale));
 	const workSecs = 150;
@@ -291,8 +294,8 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 	const { settings, scale, power, paceBufferSecs, hrOnly } = ctx;
 	const hasPower = !hrOnly && power.source !== "none" && power.ftp > 0;
 
-	// Z2 endurance: 55–75% FTP, with optional Z3 pickup
-	const z2 = hasPower ? powerZone(power.ftp, 0.55, 0.75) : null;
+	// Z2 endurance: 70–80% CP, with optional Z3 pickup.
+	const z2 = hasPower ? powerZone(power.ftp, 0.7, 0.8) : null;
 
 	const paceWithBuffer = settings.threshold_pace
 		? settings.threshold_pace * 1.15 + paceBufferSecs / 1000

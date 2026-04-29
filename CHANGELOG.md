@@ -21,10 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Rest intervals between non-repeat swim segments (20s easy, 40s hard) for FORM goggles programming and clearer intervals.icu workout descriptions
 
 ### Changed
+- Run power zones tuned for runnability: Z1 recovery now <70% CP (was <55%), Z2 base/long now 70–80% CP (was 55–75%), Z3 tempo now 80–90% CP (was 76–90%), Z4 intervals now 90–105% CP (was 91–105%). The old Z2 lower bound collapsed into walk-jog wattage on athletes with high CP (e.g. 173 W lower bound on a 315 W CP); the new bands match Stryd's published "Easy/Moderate" zones and the user's actual easy-run power distribution.
+- `runVigilBackfillIfNeeded` now does an incremental 14-day Stryd sync once the initial 90-day baseline exists, debounced to once per UTC day per athlete. Garmin + Stryd CIQ runs that arrive after the seed (the enricher only catches Apple Watch low-fidelity uploads) now reach `vigil_metrics` on the next prescription render instead of being silently skipped forever.
 - Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
 - Vigil 90-day Stryd FIT backfill: helper lifted from Praescriptor to `src/engine/vigil/backfill.ts` so the HTTP API's `/status` and `/dashboard` can fire-and-forget on first call. Per-athlete in-flight Set guards against concurrent kicks.
 - Deployment target moved from Arca Ingens (QNAP, decommissioned 2026-04-04) to Cogitator (Mac Mini M4 Pro). Same tarball flow, different host (`dominus@cogitator.tail7ab379.ts.net`, port 22, key auth) and home path (`~/Container/exercitator/`). See `praefectura/docs/cogitator-operations.md`.
 - `docker-compose.yml`: `exercitator-data` volume now declared `external: true` to match its actual lifecycle and silence the compose warning.
+
+### Security
+- URL-encode caller-supplied activity IDs before path-interpolating them into intervals.icu API URLs. Closed a SAST-flagged path traversal in the Praescriptor `/api/compliance/confirm` handler (`src/web/routes.ts`) where a malicious tailnet client could traverse the upstream API path; the same pattern in the MCP `submit_cross_training_rpe` tool (`src/tools/suggest.ts`) was hardened pre-emptively.
 
 ### Fixed
 - HTTP API `suggestion.power_context.source` emitted bare engine value (`"stryd"`) instead of the spec wire enum (`"stryd_direct" | "stryd_intervals" | "intervals_inferred" | "none"`); `status.critical_power.source` already mapped correctly. Extracted shared `mapWirePowerSource` helper so the two endpoints can never disagree, and rewired `/workouts/suggested` to fetch Stryd CP so `stryd_direct` is reachable from that path. (closes #25)

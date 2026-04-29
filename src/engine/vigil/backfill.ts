@@ -19,6 +19,11 @@ const DOWNLOAD_DELAY_MS = 500;
 /** Default backfill depth on first run. */
 const BACKFILL_DAYS = 90;
 
+/** Window for incremental sync once a baseline already exists.
+ *  Wide enough to recover from a few days of missed prescription generation
+ *  but tight enough to stay cheap on the Stryd API. */
+const INCREMENTAL_SYNC_DAYS = 14;
+
 function strydTimestampToDate(ts: number): string {
 	return new Date(ts * 1000).toISOString().slice(0, 10);
 }
@@ -120,10 +125,23 @@ export async function runBackfill(
 const backfillsInFlight = new Set<string>();
 
 /**
- * Run a 90-day backfill if (a) Stryd creds are present, (b) no metrics
- * exist for this athlete, and (c) no backfill is already running for
- * them. Awaitable — Praescriptor blocks on it before generating
- * prescriptions; the HTTP API's /status endpoint fires-and-forgets via
+ * Per-athlete debounce: once we've reached out to the Stryd API on a given
+ * UTC date, skip until tomorrow. Stops every prescription render from
+ * triggering a fresh listActivities call.
+ */
+const lastSyncByAthlete = new Map<string, string>();
+
+/**
+ * Ensure Vigil metrics are up to date for this athlete. On first encounter
+ * (no metrics in DB), runs a 90-day backfill from Stryd. On subsequent
+ * calls, runs an incremental 14-day sync so activities that arrived after
+ * the initial backfill (e.g. a Garmin + Stryd CIQ run, which the Apple
+ * Watch enricher never touches) eventually land in vigil_metrics.
+ *
+ * Debounced to once per UTC day per athlete to stay cheap on the Stryd API.
+ *
+ * Awaitable — Praescriptor blocks on it before generating prescriptions;
+ * the HTTP API's /status endpoint fires-and-forgets via
  * `runVigilBackfillIfNeeded(...).catch(...)`.
  */
 export async function runVigilBackfillIfNeeded(
@@ -131,17 +149,33 @@ export async function runVigilBackfillIfNeeded(
 	athleteId: string,
 ): Promise<void> {
 	if (!strydClient) return;
-	if (hasAnyVigilMetrics(athleteId)) return;
 	if (backfillsInFlight.has(athleteId)) return;
+
+	const isFirstTime = !hasAnyVigilMetrics(athleteId);
+	const today = new Date().toISOString().slice(0, 10);
+	if (!isFirstTime && lastSyncByAthlete.get(athleteId) === today) return;
 
 	backfillsInFlight.add(athleteId);
 	try {
-		console.error(`Vigil: no metrics for ${athleteId} — running 90-day backfill from Stryd`);
-		const count = await runBackfill(strydClient, athleteId);
-		console.error(`Vigil: backfill complete for ${athleteId} — ${count} activities processed`);
+		if (isFirstTime) {
+			console.error(`Vigil: no metrics for ${athleteId} — running 90-day backfill from Stryd`);
+			const count = await runBackfill(strydClient, athleteId, BACKFILL_DAYS);
+			console.error(`Vigil: backfill complete for ${athleteId} — ${count} activities processed`);
+		} else {
+			const count = await runBackfill(strydClient, athleteId, INCREMENTAL_SYNC_DAYS);
+			if (count > 0) {
+				console.error(`Vigil: incremental sync added ${count} new activities for ${athleteId}`);
+			}
+		}
+		lastSyncByAthlete.set(athleteId, today);
 	} catch (err) {
-		console.error(`Vigil backfill failed for ${athleteId}:`, err);
+		console.error(`Vigil backfill/sync failed for ${athleteId}:`, err);
 	} finally {
 		backfillsInFlight.delete(athleteId);
 	}
+}
+
+/** Test-only: clear the per-athlete daily-sync debounce. */
+export function _resetVigilSyncDebounceForTesting(): void {
+	lastSyncByAthlete.clear();
 }

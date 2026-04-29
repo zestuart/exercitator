@@ -69,10 +69,11 @@ describe("buildWorkout", () => {
 		expect(result.total_duration_secs).toBeLessThanOrEqual(2100);
 		expect(result.title).toBe("Recovery Run");
 
-		// Power targets present in Stryd scale (< 55% of 248 = 136W)
+		// Power targets present in Stryd scale (< 70% of 248 = 174W)
 		const main = result.segments[1];
 		expect(main.target_power_high).toBeDefined();
-		expect(main.target_power_high).toBeLessThanOrEqual(137);
+		expect(main.target_power_high).toBeLessThanOrEqual(174);
+		expect(main.target_power_high).toBeGreaterThanOrEqual(170);
 		expect(main.target_description).toContain("W");
 		expect(main.target_description).toContain("HR cap");
 	});
@@ -80,9 +81,11 @@ describe("buildWorkout", () => {
 	it("builds run base with Stryd dual targets", () => {
 		const result = buildWorkout("base", "Run", runSettings, 50, 50, strydCtx);
 		const main = result.segments[1];
-		// Z2: 55-75% of 248 = 136-186W
-		expect(main.target_power_low).toBeGreaterThanOrEqual(130);
-		expect(main.target_power_high).toBeLessThanOrEqual(190);
+		// Z2: 70-80% of 248 = 174-198W — runnable aerobic, not brisk-walk wattage.
+		expect(main.target_power_low).toBeGreaterThanOrEqual(170);
+		expect(main.target_power_low).toBeLessThanOrEqual(180);
+		expect(main.target_power_high).toBeGreaterThanOrEqual(195);
+		expect(main.target_power_high).toBeLessThanOrEqual(200);
 		expect(main.target_description).toContain("Z2 power");
 		expect(main.target_description).toContain("HR cap");
 	});
@@ -92,7 +95,7 @@ describe("buildWorkout", () => {
 		const mainSet = result.segments.find((s) => s.name === "Main set");
 		expect(mainSet).toBeDefined();
 		expect(mainSet?.repeats).toBeGreaterThanOrEqual(5);
-		// Z4: 91-105% of 292 = 266-307W (Garmin scale)
+		// Z4: 90-105% of 292 = 263-307W (Garmin scale)
 		expect(mainSet?.target_power_low).toBeGreaterThanOrEqual(260);
 		expect(mainSet?.target_power_high).toBeLessThanOrEqual(310);
 		expect(mainSet?.target_description).toContain("Z4 power");

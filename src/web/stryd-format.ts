@@ -2,7 +2,7 @@
  * Converts Praescriptor WorkoutSegment[] to Stryd workout API format.
  *
  * Stryd power targets use percentage of critical power (CP).
- * Our zone model: Z1=0–55%, Z2=55–75%, Z3=75–90%, Z4=90–105%, Z5=105–120%.
+ * Our zone model: Z1=0–70%, Z2=70–80%, Z3=80–90%, Z4=90–105%, Z5=105–120%.
  */
 
 import { localDateStr } from "../engine/date-utils.js";
@@ -13,11 +13,11 @@ import type {
 	StrydWorkoutSegment,
 } from "../stryd/client.js";
 
-/** Zone → CP percentage mapping: [min, max, centre]. */
+/** Zone → CP percentage mapping: [min, max, centre]. Aligned with workout-builder. */
 const ZONE_CP_PCT: Record<number, [number, number, number]> = {
-	1: [0, 55, 28],
-	2: [55, 75, 65],
-	3: [75, 90, 83],
+	1: [0, 70, 50],
+	2: [70, 80, 75],
+	3: [80, 90, 85],
 	4: [90, 105, 98],
 	5: [105, 120, 113],
 };

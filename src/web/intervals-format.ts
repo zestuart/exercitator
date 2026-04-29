@@ -7,7 +7,7 @@
  * - Each step is a line starting with `- `
  * - Duration: `m` for minutes, `s` for seconds (e.g. `5m`, `30s`, `5m30s`)
  * - Distance: `mtr` for metres (NOT `m` — that means minutes), `km` for kilometres
- * - Power: percentage of FTP (e.g. `55-75%`) or watts (e.g. `160-219W`)
+ * - Power: percentage of FTP (e.g. `70-80%`) or watts (e.g. `220-252W`)
  * - HR: percentage with `HR` suffix (e.g. `70% HR`)
  * - Pace: `mm:ss/km Pace` for running, `mm:ss/100mtr Pace` for swimming
  * - Repeats: `Nx` on its own line, blank lines before/after, followed by steps

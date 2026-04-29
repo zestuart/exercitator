@@ -327,8 +327,11 @@ async function runComplianceAssessment(
 	const rx = getPrescription(userId, date, sport);
 	if (!rx) return { error: "No prescription found for that date/sport" };
 
-	// Fetch the activity with laps from intervals.icu
-	const activity = await client.get<Record<string, unknown>>(`/activity/${activityId}`);
+	// Fetch the activity with laps from intervals.icu. Encode the user-supplied
+	// activityId so a malicious POST body can't traverse the upstream API path.
+	const activity = await client.get<Record<string, unknown>>(
+		`/activity/${encodeURIComponent(activityId)}`,
+	);
 	const laps = (activity.laps ?? []) as ActivityLap[];
 
 	if (laps.length === 0) {

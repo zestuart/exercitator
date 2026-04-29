@@ -3,6 +3,33 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-04-29 — Accepted SAST findings deferred to a dedicated cleanup PR
+
+**What happened**: Pre-deploy SAST (`scripts/sast_scan.py --mode diff`) surfaced one new Medium-severity finding (path traversal in the `/api/compliance/confirm` endpoint via the user-supplied `activityId`) and re-surfaced five pre-existing issues in HTTP API / Praescriptor infrastructure that the baseline `sast-baseline-2026-03-29-b` predates.
+**Root cause**: SAST diff mode compares against the most recent clean baseline; the HTTP API and Praescriptor compliance routes were rolled out after that baseline was tagged, so all of their unflagged tech debt surfaces on every diff run until a fresh clean baseline is pinned.
+**Fix**: Patched the path traversal (`src/web/routes.ts` + `src/tools/suggest.ts` — wrap caller-supplied activity IDs in `encodeURIComponent` before path interpolation) and re-ran SAST. The remaining findings are accepted with the user's explicit consent and tracked for a dedicated cleanup pass:
+  1. **High** — Unbounded in-memory cache in `src/api/cache.ts`. Tailnet-only and requires a valid bearer; needs LRU eviction + periodic prune of expired entries.
+  2. **Medium** — Short-circuit logic inside `matchBearer` (`src/api/auth.ts`). The token compare itself is `timingSafeEqual` over fixed-length buffers, but the surrounding `&&` chain leaks whether `(client, userId)` matches a configured key. Real but very low impact (userIds are 2 known short strings, `ze` and `pam`, already implicit in the URL space). Refactor to evaluate all three comparisons unconditionally and aggregate with bitwise AND.
+  3. **Medium** — No rate limiting on Praescriptor / HTTP API endpoints beyond the OAuth surface and `/api/refresh`'s 30 s cooldown. Tailnet-only mitigates impact, but `force=true` calendar sends and Stryd round-trips warrant per-user buckets.
+  4. **Low** — `CLAUDE.md` line 342 prints a truncated Tailscale auth-key prefix (`tskey-auth-kqDKwGVavf...`). Not a usable key, but violates the "no secrets in docs" rule. Replace with a placeholder pointing at `praefectura/docs/tailscale.md`.
+  5. **Low** — Praescriptor HTML responses ship without CSP / HSTS / `X-Content-Type-Options` / `X-Frame-Options`. Tailnet-only, but defence-in-depth; add the headers in `handleMainPage`.
+A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future diff scans surface only post-2026-04-29 changes; the cleanup PR will clear these and re-baseline once landed.
+**Prevention**: When the SAST baseline tag drifts a long way behind reality (here: a month, including a major HTTP API rollout), every diff scan re-prosecutes pre-existing issues and the deploy team starts treating SAST output as background noise. Re-baseline immediately after each accepted-risk deploy so the next diff scan only flags genuinely new issues, and open the cleanup ticket at the same time so accepted findings don't quietly accrue.
+
+## 2026-04-29 — Run power Z2 lower bound dropped into walk-jog wattage
+
+**What happened**: User reported that today's "Easy Base Run" prescription gave a power band of 173–236 W on a 315 W critical power. They flagged the lower bound as "brisk walk, not runnable" — for a runner whose actual easy run power averages 220–260 W, anything below ~210 W is sub-running effort.
+**Root cause**: `workout-builder.ts` derived Z2 endurance as 55–75% of FTP/CP, which loosely matches intervals.icu's stored `icu_power_zones` but is below the running-power model Stryd uses. Stryd's "Easy" ceiling is 80% CP and the user's lowest comfortable run sits at ~72% CP. 55% CP on a high CP collapses into walking territory.
+**Fix**: Tightened all run-power bands toward Stryd's published model: Z1 <70%, Z2 70–80%, Z3 80–90%, Z4 90–105%. Updated `tests/engine/workout-builder.test.ts` expectations and the `ZONE_CP_PCT` map in `src/web/stryd-format.ts` so the Stryd workout-export agrees with the engine.
+**Prevention**: When reasoning about run-power zones, anchor against the foot-pod's measured easy-run distribution, not against intervals.icu's auto-zone defaults — the latter were inherited from cycling-style zone widths and don't reflect the walk-to-run transition power floor.
+
+## 2026-04-29 — Vigil baseline froze at 2/5 after initial backfill
+
+**What happened**: User saw "Vigil: baseline building (2/5 activities)" on Praescriptor despite having four Stryd-instrumented runs in the last 30 days. Two runs (the Stryd-device uploads from the start of April) were in `vigil_metrics`; the more recent Garmin + Stryd CIQ run and the Apple Watch + Stryd run were not.
+**Root cause**: `runVigilBackfillIfNeeded` was gated by `hasAnyVigilMetrics` — it ran the 90-day backfill exactly once, then returned early forever. The only ongoing path that wrote to `vigil_metrics` was `enrichLowFidelityActivities`, which by design only processes Apple Watch native runs that lack CIQ developer fields. Garmin + Stryd CIQ runs and any post-seed Stryd-device upload were structurally invisible to Vigil.
+**Fix**: `runVigilBackfillIfNeeded` now runs an incremental 14-day Stryd sync once the seed exists. `processStrydActivity` is already idempotent via `hasVigilMetrics(activityId)`, so the new path is cheap once everything is processed. Debounced to once per UTC day per athlete to keep the Stryd `listActivities` call from firing on every prescription render. Added `tests/engine/vigil/backfill.test.ts` covering first-time vs. incremental, debounce, and the no-client no-op.
+**Prevention**: When a one-shot bootstrap step writes to a table that other code paths also need to keep current, audit every long-running write path the next time a metric "froze." Symmetric writes (enrichment) and asymmetric writes (one-time backfill) need an incremental cousin or the table goes stale.
+
 ## 2026-03-23 — SAST found five vulnerabilities in initial scaffold
 
 **What happened**: First full SAST scan (Gemini 2.5 Pro) flagged 5 findings: open redirect in OAuth (Critical), global auth lockout DoS (High), unbounded request body (Medium), path traversal via date params (Medium), unbounded session storage (Medium).

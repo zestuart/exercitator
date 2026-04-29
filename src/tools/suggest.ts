@@ -49,14 +49,17 @@ export function registerSuggestTools(server: McpServer, client: IntervalsClient)
 			rpe: z.number().min(1).max(10).describe("RPE on 1–10 scale"),
 		},
 		async ({ activityId, rpe }) => {
+			// Encode the caller-supplied activityId so a crafted value can't
+			// traverse the intervals.icu API path.
+			const encodedId = encodeURIComponent(activityId);
 			// Fetch the activity to get its moving_time for synthetic session_rpe
 			const activity = await client.get<{ id: string; moving_time: number }>(
-				`/activity/${activityId}`,
+				`/activity/${encodedId}`,
 			);
 			const syntheticSessionRpe = rpe * activity.moving_time;
 
 			// Write RPE back to intervals.icu
-			await client.put(`/activity/${activityId}`, {
+			await client.put(`/activity/${encodedId}`, {
 				perceived_exertion: rpe,
 			});
 
