@@ -19,3 +19,19 @@
 export function localDateStr(d: Date, tz = "UTC"): string {
 	return d.toLocaleDateString("en-CA", { timeZone: tz });
 }
+
+/**
+ * Strictly validate an IANA timezone string by attempting to construct an
+ * `Intl.DateTimeFormat` with it. Used at the request boundary (cookies,
+ * query params) so a crafted value can't reach `localDateStr` (which would
+ * throw a RangeError) or pollute caches keyed by `tz`.
+ */
+export function isValidTimezone(tz: unknown): tz is string {
+	if (typeof tz !== "string" || tz.length === 0 || tz.length > 64) return false;
+	try {
+		new Intl.DateTimeFormat(undefined, { timeZone: tz });
+		return true;
+	} catch {
+		return false;
+	}
+}

@@ -13,6 +13,7 @@ import { cacheInvalidate } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
 import type { UserContext } from "../router.js";
 import type { CrossTrainingRpeRequest, CrossTrainingRpeResponse } from "../types.js";
+import { isValidIntervalsId } from "../validate.js";
 
 function strainTier(sessionRpe: number): "easy" | "moderate" | "hard" {
 	// Mirror the thresholds from src/engine/cross-training-strain.ts
@@ -59,6 +60,11 @@ export async function handleCrossTrainingRpe(
 	user: UserContext,
 	activityId: string,
 ): Promise<void> {
+	if (!isValidIntervalsId(activityId)) {
+		apiError(res, 400, "invalid activity id");
+		return;
+	}
+
 	let body: unknown;
 	try {
 		body = await readJsonBody(req);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { localDateStr } from "../../src/engine/date-utils.js";
+import { isValidTimezone, localDateStr } from "../../src/engine/date-utils.js";
 
 describe("localDateStr", () => {
 	it("defaults to UTC", () => {
@@ -50,5 +50,28 @@ describe("localDateStr", () => {
 		expect(localDateStr(d, "America/Los_Angeles")).toBe("2026-07-14"); // PDT: 20:00
 		expect(localDateStr(d, "Europe/London")).toBe("2026-07-15"); // BST: 04:00
 		expect(localDateStr(d, "Asia/Tokyo")).toBe("2026-07-15"); // JST: 12:00
+	});
+});
+
+describe("isValidTimezone", () => {
+	it("accepts well-known IANA names", () => {
+		expect(isValidTimezone("UTC")).toBe(true);
+		expect(isValidTimezone("America/Los_Angeles")).toBe(true);
+		expect(isValidTimezone("Europe/London")).toBe(true);
+		expect(isValidTimezone("Asia/Tokyo")).toBe(true);
+	});
+
+	it("rejects crafted slash-bearing strings", () => {
+		expect(isValidTimezone("a/b")).toBe(false);
+		expect(isValidTimezone("../etc/passwd")).toBe(false);
+		expect(isValidTimezone("Foo/Bar")).toBe(false);
+	});
+
+	it("rejects empty / non-string / over-long input", () => {
+		expect(isValidTimezone("")).toBe(false);
+		expect(isValidTimezone(undefined)).toBe(false);
+		expect(isValidTimezone(null)).toBe(false);
+		expect(isValidTimezone(42)).toBe(false);
+		expect(isValidTimezone("a".repeat(128))).toBe(false);
 	});
 });

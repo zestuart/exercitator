@@ -6,7 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getPrescription } from "../../compliance/persist.js";
-import { localDateStr } from "../../engine/date-utils.js";
+import { isValidTimezone, localDateStr } from "../../engine/date-utils.js";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { selectSport } from "../../engine/sport-selector.js";
@@ -22,19 +22,24 @@ import type {
 	TodayResponse,
 	TodayScheduledWorkout,
 } from "../types.js";
+import { isValidIntervalsId } from "../validate.js";
 
 // ---------------------------------------------------------------------------
 // TZ resolution — mirror Praescriptor's strategy
 // ---------------------------------------------------------------------------
 
 async function resolveTz(user: UserContext, url: URL): Promise<string> {
+	// Strict IANA validation — `tz` flows into both the response cache key
+	// and `localDateStr`. A crafted value (`?tz=a/a`, `?tz=a/b`, ...) without
+	// validation would either explode the cache or raise a RangeError 500.
 	const q = url.searchParams.get("tz");
-	if (q?.includes("/")) return q;
+	if (isValidTimezone(q)) return q;
 	try {
 		const profile = await user.intervals.get<{ timezone?: string }>(
 			`/athlete/${user.intervals.athleteId}`,
 		);
-		return profile.timezone ?? "UTC";
+		const profileTz = profile.timezone;
+		return isValidTimezone(profileTz) ? profileTz : "UTC";
 	} catch {
 		return "UTC";
 	}
@@ -167,7 +172,11 @@ export async function handleWorkoutsSuggested(
 	const sportParamRaw = url.searchParams.get("sport") ?? "auto";
 	const sportParam = sportParamRaw === "Run" || sportParamRaw === "Swim" ? sportParamRaw : "auto";
 	const tz = await resolveTz(user, url);
-	const cacheKey = `suggested:${sportParam}`;
+	// `tz` is part of the cache key — `localDateStr(now, tz)` and the
+	// "today/yesterday" windows fed into `fetchTrainingData` change with
+	// timezone, so two clients on different sides of the date line must
+	// not share a cached suggestion.
+	const cacheKey = `suggested:${sportParam}:${tz}`;
 
 	const cached = cacheGet<SuggestedResponse>(user.profile.id, cacheKey);
 	if (cached && url.searchParams.get("fresh") !== "1") {
@@ -294,6 +303,10 @@ export async function handleWorkoutDetail(
 	const ivMatch = id.match(/^iv-(.+)$/);
 	if (ivMatch) {
 		const rawId = ivMatch[1];
+		if (!isValidIntervalsId(rawId)) {
+			apiError(res, 400, "invalid workout id");
+			return;
+		}
 		try {
 			const activity = await user.intervals.get<ActivitySummary>(
 				`/activity/${encodeURIComponent(rawId)}`,

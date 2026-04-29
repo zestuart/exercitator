@@ -121,4 +121,18 @@ describe("handleCrossTrainingRpe", () => {
 		await handleCrossTrainingRpe(makeReq({ rpe: 5 }), res, user, "1");
 		expect(res._status).toBe(502);
 	});
+
+	// SAST defence-in-depth — encodeURIComponent already neutralises a
+	// protocol-relative path, but we also reject obviously-malformed IDs at
+	// the request boundary so a crafted upstream call never even fires.
+	it("rejects an activity ID with path-traversal characters before any upstream call", async () => {
+		const { user, put } = makeUser();
+		const res = fakeRes();
+		await handleCrossTrainingRpe(makeReq({ rpe: 5 }), res, user, "//attacker.com/path");
+		expect(res._status).toBe(400);
+		expect(put).not.toHaveBeenCalled();
+		expect(
+			(user.intervals.get as unknown as { mock: { calls: unknown[] } }).mock.calls.length,
+		).toBe(0);
+	});
 });

@@ -93,4 +93,24 @@ describe("api cache", () => {
 		cacheSet("u", "b", 2);
 		expect(cacheGet("u", "b")).toBe(2);
 	});
+
+	// Per-user buckets — one user spamming distinct keys must not evict
+	// another user's entries. Closes the cross-user cache-flooding vector
+	// the SAST scanner flagged after `tz` joined the cache key.
+	it("isolates eviction per user", () => {
+		process.env.EXERCITATOR_API_CACHE_MAX_ENTRIES = "2";
+		cacheSet("ze", "x", 1);
+		cacheSet("ze", "y", 2);
+		cacheSet("pam", "a", 3);
+		// pam now floods their bucket beyond the cap; ze's entries must survive.
+		cacheSet("pam", "b", 4);
+		cacheSet("pam", "c", 5);
+		cacheSet("pam", "d", 6);
+		expect(cacheGet("ze", "x")).toBe(1);
+		expect(cacheGet("ze", "y")).toBe(2);
+		expect(cacheGet("pam", "a")).toBeNull(); // evicted (oldest in pam's bucket)
+		expect(cacheGet("pam", "b")).toBeNull();
+		expect(cacheGet("pam", "c")).toBe(5);
+		expect(cacheGet("pam", "d")).toBe(6);
+	});
 });

@@ -16,7 +16,7 @@ import {
 	saveComplianceAssessment,
 } from "../compliance/persist.js";
 import type { ComplianceView } from "../compliance/types.js";
-import { localDateStr } from "../engine/date-utils.js";
+import { isValidTimezone, localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -37,13 +37,18 @@ const TZ_CACHE_TTL = 3_600_000; // 1 hour
  * Fallback chain: browser cookie → intervals.icu athlete profile → UTC.
  */
 async function resolveTimezone(req: IncomingMessage, client: IntervalsClient): Promise<string> {
-	// 1. Browser-detected TZ via cookie
+	// 1. Browser-detected TZ via cookie — strict IANA validation. A crafted
+	//    cookie like `tz=a/b` would otherwise reach `localDateStr` and throw
+	//    a RangeError, surfacing as a 500.
 	const cookies = req.headers.cookie ?? "";
 	const tzMatch = cookies.match(/(?:^|;\s*)tz=([^;]+)/);
 	if (tzMatch) {
-		const tz = decodeURIComponent(tzMatch[1]);
-		// Basic validation: IANA timezone names contain a slash
-		if (tz.includes("/")) return tz;
+		try {
+			const tz = decodeURIComponent(tzMatch[1]);
+			if (isValidTimezone(tz)) return tz;
+		} catch {
+			// malformed URI escape — fall through
+		}
 	}
 
 	// 2. intervals.icu athlete profile timezone (cached)
@@ -54,7 +59,8 @@ async function resolveTimezone(req: IncomingMessage, client: IntervalsClient): P
 
 	try {
 		const profile = await client.get<{ timezone?: string }>(`/athlete/${client.athleteId}`);
-		const tz = profile.timezone ?? "UTC";
+		const profileTz = profile.timezone;
+		const tz = isValidTimezone(profileTz) ? profileTz : "UTC";
 		athleteTzCache.set(client.athleteId, { tz, fetchedAt: Date.now() });
 		return tz;
 	} catch {
@@ -200,7 +206,9 @@ export async function handleRoutes(
 
 		if (req.method === "GET" && subPath === "/api/compliance/trending") {
 			const { buildComplianceTrend } = await import("../compliance/aggregate.js");
-			const days = Number(url.searchParams.get("days") ?? "30");
+			const requested = Number(url.searchParams.get("days") ?? "30");
+			const days =
+				Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), 730) : 30;
 			const sport = url.searchParams.get("sport") ?? undefined;
 			const trend = buildComplianceTrend(profile.id, days, sport);
 			jsonRes(res, 200, trend);
@@ -258,7 +266,14 @@ export async function handleRoutes(
 		}
 
 		if (req.method === "POST" && subPath === "/api/compliance/backfill") {
-			const days = Number(url.searchParams.get("days") ?? "90");
+			// Clamp the lookback window — `runComplianceBackfill` issues one
+			// upstream call per day with a send event, so an unclamped `days`
+			// value lets a tailnet caller burn intervals.icu quota and CPU
+			// for as long as they please. 730 d ≈ 2 y, comfortably more than
+			// the longest reasonable backfill.
+			const requested = Number(url.searchParams.get("days") ?? "90");
+			const days =
+				Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), 730) : 90;
 			const result = await runComplianceBackfill(client, profile.id, days, tz);
 			jsonRes(res, 200, result);
 			return;
@@ -351,11 +366,18 @@ async function runComplianceAssessment(
 	sport: string,
 	activityId: string,
 ): Promise<Record<string, unknown>> {
+	// Allowlist the activity ID shape before interpolation. encodeURIComponent
+	// already prevents protocol-relative SSRF (`%2F%2F` survives URL parsing),
+	// but a strict regex also gives 400 for clearly-malformed input rather
+	// than a 502 from the upstream and aligns with the `Date param` allowlist
+	// pattern documented in CLAUDE.md.
+	if (!/^[A-Za-z0-9_-]{1,64}$/.test(activityId)) {
+		return { error: "Invalid activityId format" };
+	}
+
 	const rx = getPrescription(userId, date, sport);
 	if (!rx) return { error: "No prescription found for that date/sport" };
 
-	// Fetch the activity with laps from intervals.icu. Encode the user-supplied
-	// activityId so a malicious POST body can't traverse the upstream API path.
 	const activity = await client.get<Record<string, unknown>>(
 		`/activity/${encodeURIComponent(activityId)}`,
 	);
