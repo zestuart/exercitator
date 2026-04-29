@@ -162,7 +162,10 @@ export async function handleWorkoutsSuggested(
 	user: UserContext,
 	url: URL,
 ): Promise<void> {
-	const sportParam = url.searchParams.get("sport") ?? "auto";
+	// Allowlist `sport` so an arbitrarily long query string can't pollute the
+	// cache key and inflate memory under repeated requests.
+	const sportParamRaw = url.searchParams.get("sport") ?? "auto";
+	const sportParam = sportParamRaw === "Run" || sportParamRaw === "Swim" ? sportParamRaw : "auto";
 	const tz = await resolveTz(user, url);
 	const cacheKey = `suggested:${sportParam}`;
 

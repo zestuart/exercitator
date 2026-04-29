@@ -339,7 +339,7 @@ When a deployment or production issue occurs:
 - **Branch**: `main` — deploy from main only.
 - **Containers**: `exercitator-mcp` (MCP server + HTTP API on 8643) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar) + `exercitator-api-ts` (serve sidecar for HTTP API).
 - **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external), `exercitator-api-tailscale-state` (external). Do not delete external volumes — Tailscale node identity lives in them. Pre-create the new API state volume on Cogitator once: `ssh dominus@cogitator.tail7ab379.ts.net 'zsh -ic "docker volume create exercitator-api-tailscale-state"'`.
-- **Tailscale auth key**: exercitator family `tskey-auth-kqDKwGVavf...` (reusable, preauthorised). Works for all three sidecars. See `praefectura/docs/tailscale.md`.
+- **Tailscale auth key**: exercitator family — reusable, preauthorised; works for all three sidecars. The key value lives only in `.env` and `praefectura/docs/tailscale.md` — never echo it (or any prefix of it) into source-controlled docs.
 - **Operations reference**: full Cogitator conventions in `github.com/zestuart/praefectura` (`docs/cogitator-operations.md`, `docs/exercitator.md`, `docs/tailscale.md`).
 
 ### Deploy procedure

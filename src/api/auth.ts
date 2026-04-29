@@ -19,6 +19,8 @@ export interface ApiKey {
 	userId: string;
 	token: string;
 	tokenBuf: Buffer;
+	clientBuf: Buffer;
+	userIdBuf: Buffer;
 }
 
 /**
@@ -37,7 +39,14 @@ export function parseApiKeys(raw: string | undefined): ApiKey[] {
 		const userId = parts[1];
 		const token = parts.slice(2).join(":");
 		if (!client || !userId || !token) continue;
-		keys.push({ client, userId, token, tokenBuf: Buffer.from(token) });
+		keys.push({
+			client,
+			userId,
+			token,
+			tokenBuf: Buffer.from(token),
+			clientBuf: Buffer.from(client),
+			userIdBuf: Buffer.from(userId),
+		});
 	}
 	return keys;
 }
@@ -65,40 +74,74 @@ function extractBearer(req: IncomingMessage): string | null {
 }
 
 /**
+ * Constant-time comparison of two byte buffers of arbitrary length.
+ *
+ * Returns 1 if equal, 0 otherwise. Always traverses the longer buffer so
+ * timing does not leak which buffer was shorter or where the first
+ * differing byte sat. We do not short-circuit on a length mismatch.
+ */
+function constantTimeBytesEqual(a: Buffer, b: Buffer): 0 | 1 {
+	const len = Math.max(a.length, b.length);
+	let diff = a.length ^ b.length;
+	for (let i = 0; i < len; i++) {
+		const av = i < a.length ? a[i] : 0;
+		const bv = i < b.length ? b[i] : 0;
+		diff |= av ^ bv;
+	}
+	return diff === 0 ? 1 : 0;
+}
+
+/**
  * Match a presented bearer against the configured key list in constant time.
  * Returns the matching ApiKey or null.
  *
- * We compare each entry individually with timingSafeEqual on equal-length
- * buffers; length mismatches don't leak because we still do a fake compare.
+ * Every configured key receives the same comparison work — three
+ * `constantTimeBytesEqual` calls (client, userId, token) aggregated with a
+ * bitwise AND. We do not short-circuit on a malformed bearer either: a
+ * dummy compare against every key keeps total work flat regardless of
+ * input shape, so a remote caller can't time the difference between
+ * "(client, userId) matches but token is wrong" vs. "no key with this
+ * (client, userId) is configured".
+ *
+ * The token compare itself uses `timingSafeEqual` on a same-length buffer
+ * for a defence-in-depth against compiler optimisation of the manual loop.
  */
 function matchBearer(presented: string, keys: ApiKey[]): ApiKey | null {
-	const presentedBuf = Buffer.from(presented);
-	// Presented format must be `<client>:<userId>:<token>`
 	const parts = presented.split(":");
-	if (parts.length < 3) {
-		for (const k of keys) {
-			const equalLen = Buffer.alloc(k.tokenBuf.length);
-			timingSafeEqual(equalLen, k.tokenBuf.length > 0 ? k.tokenBuf : equalLen);
-		}
-		return null;
-	}
-	const pClient = parts[0];
-	const pUserId = parts[1];
-	const pToken = parts.slice(2).join(":");
+	const malformed = parts.length < 3;
+	const pClient = malformed ? "" : parts[0];
+	const pUserId = malformed ? "" : parts[1];
+	const pToken = malformed ? "" : parts.slice(2).join(":");
+	const pClientBuf = Buffer.from(pClient);
+	const pUserIdBuf = Buffer.from(pUserId);
 	const pTokenBuf = Buffer.from(pToken);
 
 	let matched: ApiKey | null = null;
+
 	for (const k of keys) {
-		const sameLen = k.tokenBuf.length === pTokenBuf.length;
-		const compareBuf = sameLen ? pTokenBuf : Buffer.alloc(k.tokenBuf.length);
-		const tokenEq = timingSafeEqual(k.tokenBuf, compareBuf);
-		// client + userId are not secret; direct equality is fine.
-		if (sameLen && tokenEq && k.client === pClient && k.userId === pUserId) {
+		const clientEq = constantTimeBytesEqual(k.clientBuf, pClientBuf);
+		const userIdEq = constantTimeBytesEqual(k.userIdBuf, pUserIdBuf);
+
+		// Use timingSafeEqual on a same-length buffer for the token compare.
+		// We pad the presented token to the configured token length when they
+		// differ so timingSafeEqual doesn't throw, and we still factor the
+		// real-vs-padded comparison through `tokenEq`.
+		const tokenSameLen = k.tokenBuf.length === pTokenBuf.length ? 1 : 0;
+		const tokenCompareBuf = tokenSameLen === 1 ? pTokenBuf : Buffer.alloc(k.tokenBuf.length);
+		const tokenSafeEq = timingSafeEqual(k.tokenBuf, tokenCompareBuf) ? 1 : 0;
+		const tokenEq = tokenSameLen & tokenSafeEq;
+
+		const allEq = clientEq & userIdEq & tokenEq;
+
+		// Conditionally assign without short-circuiting the rest of the loop.
+		// `matched` flips only when the bitwise AND is 1 AND the bearer was
+		// well-formed. Malformed bearers never produce a match because every
+		// `constantTimeBytesEqual` call against an empty buffer returns 0.
+		if (allEq === 1 && !malformed) {
 			matched = k;
 		}
 	}
-	// Consume presentedBuf so the variable is used even when unmatched
-	void presentedBuf;
+
 	return matched;
 }
 

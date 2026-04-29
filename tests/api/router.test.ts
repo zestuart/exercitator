@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseApiKeys } from "../../src/api/auth.js";
 import { type ApiContext, handleApiRequest } from "../../src/api/router.js";
 import type { IntervalsClient } from "../../src/intervals.js";
+import { _resetRateLimits } from "../../src/rate-limit.js";
 import type { StrydClient } from "../../src/stryd/client.js";
 
 function fakeReq(
@@ -31,6 +32,9 @@ function fakeRes(): ServerResponse & { _status?: number; _body?: string } {
 			this._body = body;
 			return this;
 		},
+		setHeader(_k: string, _v: string) {
+			return this;
+		},
 	};
 	return res as unknown as ServerResponse & { _status?: number; _body?: string };
 }
@@ -54,6 +58,15 @@ function makeContext(): ApiContext {
 }
 
 describe("API router", () => {
+	beforeEach(() => {
+		_resetRateLimits();
+	});
+
+	afterEach(() => {
+		_resetRateLimits();
+		process.env.EXERCITATOR_RATE_LIMIT_WRITE = undefined;
+	});
+
 	it("/api/health returns 200 without a bearer", async () => {
 		const ctx = makeContext();
 		const req = fakeReq("GET", "/api/health");
@@ -97,6 +110,26 @@ describe("API router", () => {
 		const res = fakeRes();
 		await handleApiRequest(req, res, ctx);
 		expect(res._status).toBe(503);
+	});
+
+	it("returns 429 with Retry-After once the write bucket is empty", async () => {
+		process.env.EXERCITATOR_RATE_LIMIT_WRITE = "1";
+		const ctx = makeContext();
+		// First write call burns the single token. We don't actually have a
+		// real handler attached for /cross-training/.../rpe in this fake
+		// IntervalsClient, but the rate limiter runs before user resolution
+		// and the auth check, so it'll trip on the second call regardless.
+		const fire = () =>
+			fakeReq("POST", "/api/users/ze/cross-training/123/rpe", {
+				authorization: "Bearer excubitor-ios:ze:ze-token",
+			});
+		const r1 = fakeRes();
+		await handleApiRequest(fire(), r1, ctx);
+		expect(r1._status).not.toBe(429); // first call passes the limiter
+		const r2 = fakeRes();
+		await handleApiRequest(fire(), r2, ctx);
+		expect(r2._status).toBe(429);
+		expect(r2._body).toContain("rate limit exceeded");
 	});
 
 	it("/api/users/unknown returns 404 after successful auth", async () => {

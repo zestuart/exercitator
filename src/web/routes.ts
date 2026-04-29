@@ -18,11 +18,13 @@ import {
 import type { ComplianceView } from "../compliance/types.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
+import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
 import { DEFAULT_USER, type UserProfile, getUserProfile } from "../users.js";
 import { generateInvocations, plainInvocations } from "./invocations.js";
 import { generatePrescriptions, invalidateCache } from "./prescriptions.js";
 import { renderPage } from "./render.js";
+import { applyBaseSecurityHeaders, applyHtmlSecurityHeaders } from "./security-headers.js";
 import { sendToStryd } from "./send-stryd.js";
 import { sendToIntervals } from "./send.js";
 
@@ -72,6 +74,9 @@ export async function handleRoutes(
 ): Promise<void> {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
+	// Defence-in-depth headers — applied to every response.
+	applyBaseSecurityHeaders(res);
+
 	try {
 		// Health check — no user context needed
 		if (req.method === "GET" && url.pathname === "/health") {
@@ -103,6 +108,28 @@ export async function handleRoutes(
 		if (!client) {
 			res.writeHead(503, { "Content-Type": "text/plain" });
 			res.end(`${profile.displayName}'s intervals.icu API key is not configured`);
+			return;
+		}
+
+		// Rate limit per-userId — reads vs. writes share independent buckets.
+		// The HTML page render is a read; calendar pushes / refresh / compliance
+		// confirm-skip-backfill are writes.
+		const scope: "read" | "write" =
+			req.method === "GET" || req.method === "HEAD" ? "read" : "write";
+		const limit = checkRate(scope, profile.id);
+		if (!limit.allowed) {
+			res.setHeader("Retry-After", String(limit.retryAfterS));
+			res.writeHead(429, { "Content-Type": "application/json" });
+			res.end(
+				JSON.stringify({
+					error: "rate limit exceeded",
+					details: {
+						scope,
+						retry_after_s: limit.retryAfterS,
+						limit: limit.limit,
+					},
+				}),
+			);
 			return;
 		}
 
@@ -485,6 +512,7 @@ async function handleMainPage(
 		runCompliance,
 		swimCompliance,
 	});
+	applyHtmlSecurityHeaders(res);
 	res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 	res.end(html);
 }

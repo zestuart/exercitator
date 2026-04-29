@@ -7,6 +7,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { IntervalsClient } from "../intervals.js";
+import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
 import { getUserProfile } from "../users.js";
 import type { UserProfile } from "../users.js";
@@ -71,6 +72,21 @@ export async function handleApiRequest(
 	// Auth must succeed before we disclose user existence.
 	const key = requireBearer(req, res, ctx.auth, userId);
 	if (!key) return;
+
+	// Rate limit per-userId. Reads share a 60/min bucket; writes share a
+	// 10/min bucket. Buckets are independent so an iOS read poll doesn't
+	// starve a calendar push.
+	const scope = req.method === "GET" || req.method === "HEAD" ? "read" : "write";
+	const limit = checkRate(scope, key.userId);
+	if (!limit.allowed) {
+		res.setHeader("Retry-After", String(limit.retryAfterS));
+		apiError(res, 429, "rate limit exceeded", {
+			scope,
+			retry_after_s: limit.retryAfterS,
+			limit: limit.limit,
+		});
+		return;
+	}
 
 	const user = resolveUser(ctx, userId, res);
 	if (!user) return;

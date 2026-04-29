@@ -11,9 +11,11 @@
 
 import { createServer } from "node:http";
 import { IntervalsClient } from "../intervals.js";
+import { startRateLimitPrune } from "../rate-limit.js";
 import { StrydClient } from "../stryd/client.js";
 import { getUserIds, getUserProfile } from "../users.js";
 import { loadApiKeys } from "./auth.js";
+import { startCachePrune } from "./cache.js";
 import { apiError } from "./errors.js";
 import { type ApiContext, handleApiRequest } from "./router.js";
 
@@ -107,6 +109,8 @@ export function startApiServer(opts: StartApiOptions): void {
 	});
 
 	httpServer.listen(port, host, () => {
+		startCachePrune();
+		startRateLimitPrune();
 		console.error(`HTTP API listening on ${host}:${port} (${keys.length} keys configured)`);
 	});
 }

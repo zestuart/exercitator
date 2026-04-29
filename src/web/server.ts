@@ -7,6 +7,7 @@
 
 import { createServer } from "node:http";
 import { IntervalsClient } from "../intervals.js";
+import { startRateLimitPrune } from "../rate-limit.js";
 import { StrydClient } from "../stryd/client.js";
 import { getUserIds, getUserProfile } from "../users.js";
 import { handleRoutes } from "./routes.js";
@@ -63,5 +64,6 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
+	startRateLimitPrune();
 	console.error(`Praescriptor web UI listening on port ${PORT}`);
 });

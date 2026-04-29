@@ -109,4 +109,39 @@ describe("requireBearer", () => {
 		expect(out).not.toBeNull();
 		expect(res._status).toBeUndefined();
 	});
+
+	// Regression: matchBearer must not short-circuit on a (client, userId)
+	// mismatch — every key still goes through all three comparisons. We
+	// can't observe timing in a unit test, but we can at least confirm
+	// well-formed bearers with no matching (client, userId) tuple are
+	// rejected with 401 (not 403, not a crash).
+	it("returns 401 when bearer is well-formed but (client, userId) is unknown", () => {
+		const req = fakeReq({
+			authorization: "Bearer excubitor-ios:ghost:ze-secret-token",
+		});
+		const res = fakeRes();
+		const out = requireBearer(req, res, { keys }, "ze");
+		expect(out).toBeNull();
+		expect(res._status).toBe(401);
+	});
+
+	it("returns 401 when client portion is unknown but userId+token match a key", () => {
+		const req = fakeReq({
+			authorization: "Bearer wrong-client:ze:ze-secret-token",
+		});
+		const res = fakeRes();
+		const out = requireBearer(req, res, { keys }, "ze");
+		expect(out).toBeNull();
+		expect(res._status).toBe(401);
+	});
+
+	it("returns 401 on a presented token of a different length", () => {
+		const req = fakeReq({
+			authorization: "Bearer excubitor-ios:ze:short",
+		});
+		const res = fakeRes();
+		const out = requireBearer(req, res, { keys }, "ze");
+		expect(out).toBeNull();
+		expect(res._status).toBe(401);
+	});
 });
