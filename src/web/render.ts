@@ -1101,7 +1101,12 @@ document.getElementById('refresh-btn')?.addEventListener('click', async function
 	}
 });
 
-document.querySelectorAll('.send-btn:not(.stryd-btn)').forEach(btn => {
+// Calendar-send handler — explicitly skips both .stryd-btn (handled
+// separately below) and .form-btn (clipboard-only, no upstream POST).
+// The FORM button shares the .send-btn class for visual styling, so
+// without :not(.form-btn) this handler fires alongside the FORM copy
+// handler and overwrites the "Copied" state with "Failed".
+document.querySelectorAll('.send-btn:not(.stryd-btn):not(.form-btn)').forEach(btn => {
 	btn.addEventListener('click', async function() {
 		const sport = this.dataset.sport;
 		const isSent = this.classList.contains('sent');
