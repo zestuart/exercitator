@@ -130,6 +130,7 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(300, scale),
 			target_description: "Easy walk to gentle jog",
 			target_hr_zone: 1,
+			stryd_zone: 1,
 		},
 		{
 			name: "Main set",
@@ -176,6 +177,7 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 			duration_secs: scaled(600, scale),
 			target_description: "Progressive walk to easy run",
 			target_hr_zone: 1,
+			stryd_zone: 1,
 		},
 		{
 			name: "Main set",

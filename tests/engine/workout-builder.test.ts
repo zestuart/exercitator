@@ -238,6 +238,27 @@ describe("buildWorkout", () => {
 		}
 	});
 
+	it("every running warm-up sits at Stryd Z1 Easy", () => {
+		// User explicitly aligned warm-ups to Stryd's published warmup band
+		// (65–80% CP). Every run category's warm-up segment should carry
+		// stryd_zone: 1 so the renderer's zone-guide pill and the Stryd
+		// workout export both treat the warmup as Z1 Easy.
+		for (const cat of [
+			"recovery",
+			"base",
+			"progression",
+			"tempo",
+			"threshold",
+			"intervals",
+			"long",
+		] as const) {
+			const result = buildWorkout(cat, "Run", runSettings, 70, 50, strydCtx);
+			const warmup = result.segments.find((s) => s.name === "Warm-up");
+			expect(warmup, `${cat} should have a Warm-up segment`).toBeDefined();
+			expect(warmup?.stryd_zone, `${cat} warm-up should be Stryd Z1 Easy`).toBe(1);
+		}
+	});
+
 	it("includes dual targets on every running segment with power source", () => {
 		for (const cat of [
 			"recovery",
