@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 6 new SQLite tables: prescriptions, prescription_segments, send_events, compliance_assessments, segment_compliance, compliance_aggregates
 - "Copy FORM Text" button on swim prescription cards — generates FORM goggles Script notation (stroke abbreviations, effort levels, rest intervals) for clipboard copy into the FORM app
 - Rest intervals between non-repeat swim segments (20s easy, 40s hard) for FORM goggles programming and clearer intervals.icu workout descriptions
+- Page-level readiness score in the Praescriptor header (replaces per-card duplicates). Whole-athlete metric appears once below the date row in gold accent.
 
 ### Changed
 - Run power zones realigned to Stryd's published 5-zone model. Engine categories now map onto Stryd zones as follows:
@@ -40,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Run power zones tuned for runnability (2026-04-29 morning, superseded by Stryd 5-zone alignment later the same day): Z1 recovery <70% CP, Z2 base/long 70–80%, Z3 tempo 80–90%, Z4 intervals 90–105%. See above for the final values.
 - `runVigilBackfillIfNeeded` now does an incremental 14-day Stryd sync once the initial 90-day baseline exists, debounced to once per UTC day per athlete. Garmin + Stryd CIQ runs that arrive after the seed (the enricher only catches Apple Watch low-fidelity uploads) now reach `vigil_metrics` on the next prescription render instead of being silently skipped forever.
 - Vigil baseline-building gate now counts activities over a **60-day** lookback window (was 30 days). The metric baseline still computes statistics over the most recent 30 days — the wider count just stops athletes who run 4×/month from being stuck at "4/5 activities" indefinitely while their baseline is statistically usable. Building summary updated to include the count-window duration. (`src/engine/vigil/index.ts`)
+- All run warm-ups now uniformly carry `stryd_zone: 1` (Stryd Z1 Easy 65–80% CP). Tempo / threshold / intervals / long / progression already did; recovery and base warm-ups had been bare and fell through to the sub-Z1 RECOVERY_PCT band. Cool-downs deliberately stay bare so they remain in the walk-fade band.
+- Praescriptor renderer's segment zone-guide pill now derives watt bands from `stryd_zone` rather than a stale FTP-percent table keyed off `target_hr_zone`. Eliminates the case where the engine prescription said "Stryd Z1 Easy 178–219W" while the same segment's pill said "Z2 (151–206W)".
+- Praescriptor `buildRationale` is now sport-aware. Run rationales keep Stryd-zone vocabulary ("Sweet-spot tempo (Stryd Z2 Moderate)…"); swim rationales drop Stryd references entirely since Stryd doesn't apply to swim. Sport-agnostic categories (rest/recovery/base/long) are unchanged.
+- Card title for sweet-spot tempo run is now "Sweet-spot Tempo Run" (was "Threshold Tempo Run") — distinguishes it from the new `threshold` run category at Stryd Z3.
 - Send-to-intervals.icu and send-to-Stryd dedup migrated from in-memory Maps to SQLite persistence (survives container restarts)
 - Vigil 90-day Stryd FIT backfill: helper lifted from Praescriptor to `src/engine/vigil/backfill.ts` so the HTTP API's `/status` and `/dashboard` can fire-and-forget on first call. Per-athlete in-flight Set guards against concurrent kicks.
 - Deployment target moved from Arca Ingens (QNAP, decommissioned 2026-04-04) to Cogitator (Mac Mini M4 Pro). Same tarball flow, different host (`dominus@cogitator.tail7ab379.ts.net`, port 22, key auth) and home path (`~/Container/exercitator/`). See `praefectura/docs/cogitator-operations.md`.
@@ -58,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed the truncated Tailscale auth-key prefix from `CLAUDE.md` — the value lives only in `.env` and `praefectura/docs/tailscale.md` so a partial leak can't seed an attacker's recovery work.
 
 ### Fixed
+- FORM copy button on swim card no longer flips to "✗ Failed — try again" after a successful clipboard copy. The button shares `class="send-btn"` for visual styling but the general send handler's selector excluded only `.stryd-btn`, so it also tried `fetch('/api/send/undefined')` and overwrote the "✓ Copied" state with the failed-fetch error. Selector now also excludes `.form-btn`.
 - HTTP API `suggestion.power_context.source` emitted bare engine value (`"stryd"`) instead of the spec wire enum (`"stryd_direct" | "stryd_intervals" | "intervals_inferred" | "none"`); `status.critical_power.source` already mapped correctly. Extracted shared `mapWirePowerSource` helper so the two endpoints can never disagree, and rewired `/workouts/suggested` to fetch Stryd CP so `stryd_direct` is reachable from that path. (closes #25)
 - HTTP API `critical_power.watts` returned a float from the Stryd CP API; now rounded to integer at the wire boundary.
 - Swim workout steps silently dropped by intervals.icu: pace format changed from `/100mtr Pace` to `/100m Pace` (intervals.icu only recognises `/100m` as a pace denominator)
