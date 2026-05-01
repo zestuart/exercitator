@@ -279,10 +279,6 @@ function renderCard(
 			<div class="card-header">
 				<div class="card-header-top">
 					<span class="sport-tag">${sportTag}</span>
-					<div class="readiness-block">
-						<div class="readiness-score">${suggestion.readiness_score}</div>
-						<div class="readiness-label">readiness</div>
-					</div>
 				</div>
 				<h2 class="card-title">${escapeHtml(suggestion.title)}</h2>
 				<div class="card-meta">
@@ -432,6 +428,18 @@ export function renderPage(data: RenderData): string {
 	const titleSuffix = profile.id === "ze" ? "" : ` &middot; ${escapeHtml(profile.displayName)}`;
 	const cardsClass = singleCard ? "cards cards-single" : "cards";
 
+	// Readiness is the same value on both cards (whole-athlete metric, not
+	// sport-specific) — render it once in the page header. Prefer run, fall
+	// back to swim when an athlete only has one sport configured.
+	const headerReadiness = data.run?.readiness_score ?? data.swim?.readiness_score ?? null;
+	const readinessBlock =
+		headerReadiness != null
+			? `<div class="page-readiness">
+					<div class="page-readiness-score">${headerReadiness}</div>
+					<div class="page-readiness-label">readiness</div>
+				</div>`
+			: "";
+
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -450,6 +458,7 @@ export function renderPage(data: RenderData): string {
 			<span class="header-date">${dateStr} &middot; ${day}</span>
 			<button class="refresh-btn" id="refresh-btn" title="Regenerate prescriptions">&#x21bb;</button>
 		</div>
+		${readinessBlock}
 	</header>
 
 	${dataSourceBlock}
@@ -692,21 +701,25 @@ body {
 
 /* --- Readiness --- */
 
-.readiness-block {
+/* Page-header readiness — single source of truth (whole-athlete metric).
+   Replaces the old per-card readiness-block (readiness was identical on
+   both cards). */
+.page-readiness {
 	display: flex;
 	flex-direction: column;
-	align-items: flex-end;
+	align-items: center;
+	margin-top: 0.75rem;
 }
 
-.readiness-score {
+.page-readiness-score {
 	font-family: var(--font-display);
 	font-size: 2.4rem;
 	font-weight: 600;
 	line-height: 1;
-	color: var(--card-accent);
+	color: var(--gold);
 }
 
-.readiness-label {
+.page-readiness-label {
 	font-size: 0.65rem;
 	color: var(--text-dim);
 	text-transform: uppercase;
@@ -1055,7 +1068,7 @@ body {
 	.page-header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
 	.card-body { padding: 1.2rem 1rem 1rem; }
 	.card-title { font-size: 1.2rem; }
-	.readiness-score { font-size: 2rem; }
+	.page-readiness-score { font-size: 2rem; }
 	.cards { padding: 0 1rem; margin: 1.5rem auto; }
 	.send-buttons { flex-direction: column; }
 }

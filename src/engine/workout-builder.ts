@@ -821,6 +821,7 @@ export function buildWorkout(
 }
 
 function buildRationale(category: WorkoutCategory, _readiness: number, sport: string): string {
+	const isRun = sport === "Run";
 	switch (category) {
 		case "rest":
 			return "Full rest is recommended to allow recovery.";
@@ -829,13 +830,21 @@ function buildRationale(category: WorkoutCategory, _readiness: number, sport: st
 		case "base":
 			return `Building aerobic base with steady-state ${sport.toLowerCase()}.`;
 		case "progression":
-			return "Aerobic build that climbs through Stryd Z1 Easy into low Z2 Moderate over thirds — endurance work with a productive sting at the end.";
+			return isRun
+				? "Aerobic build that climbs through Stryd Z1 Easy into low Z2 Moderate over thirds — endurance work with a productive sting at the end."
+				: "Aerobic build that progresses from easy to moderate effort over the session.";
 		case "tempo":
-			return "Sweet-spot tempo (Stryd Z2 Moderate) — sub-LT sustained work to lift threshold without the cost of true threshold.";
+			return isRun
+				? "Sweet-spot tempo (Stryd Z2 Moderate) — sub-LT sustained work to lift threshold without the cost of true threshold."
+				: "Threshold-paced sets to lift lactate clearance and pace tolerance.";
 		case "threshold":
-			return "Threshold intervals at Stryd Z3 (Intensive Threshold Stimulus) — sustained 15-min reps at lactate threshold.";
+			return isRun
+				? "Threshold intervals at Stryd Z3 (Intensive Threshold Stimulus) — sustained 15-min reps at lactate threshold."
+				: "Sustained threshold sets at lactate threshold.";
 		case "intervals":
-			return "High-intensity intervals at Stryd Z4 to build VO2max and running economy.";
+			return isRun
+				? "High-intensity intervals at Stryd Z4 to build VO2max and running economy."
+				: "High-intensity intervals to build VO2max and speed.";
 		case "long":
 			return `No long session this week. Extended ${sport.toLowerCase()} for endurance.`;
 	}
