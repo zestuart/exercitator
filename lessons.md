@@ -3,6 +3,31 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-05-01 — MCP/Praescriptor disagreed on FTP, plus stale Stryd CP under-prescribed
+
+**What happened**: User ran the prescribed sweet-spot tempo (2 × 6 min Stryd Z2) at avg 235–241 W with HR 128–134 (cap was 153) and reported RPE 1 — breathing unaffected, legs unaware. Calibration interview surfaced two distinct issues that compounded:
+
+1. **MCP `suggest_workout` and Praescriptor were rendering different watt targets for the same prescription on the same day.** MCP said the work intervals were 252–284 W (FTP 315). Praescriptor's UI said 219–247 W (FTP 274). User screenshotted the UI — the two surfaces were silently disagreeing.
+2. **Stryd Critical Power was 274 W, last updated 2026-04-07** — almost a month stale, after a layoff with only 2 runs in 14 days. Even when running on plan, the sweet-spot band was actually upper Z1 / low Z2 in absolute terms because CP hadn't seen any hard efforts to revise upward. Athletes' lived experience: "should be one zone higher" — i.e. CP is one zone-width too low.
+
+**Root cause** (the disagreement): `suggestWorkout` (engine entry, MCP path) called `suggestWorkoutFromData(... undefined ...)` for the `strydCp` slot. Praescriptor (`generatePrescriptions`) and the HTTP API handlers (`status`, `dashboard`, `workouts`) all fetched Stryd CP and passed it through. The MCP path therefore fell back to `detectPowerSource()`'s `icu_rolling_ftp` (315 W), while the others got the real Stryd CP (274 W) — same data, two prescriptions. Tool fan-out around the engine never ratcheted the MCP path forward.
+
+**Root cause** (the stale CP): The override always trusted Stryd CP even after a long layoff. Stryd's CP estimator is anchored on recent hard efforts; absent those, it just sits. intervals.icu's rolling FTP is recomputed from each new activity's NP/intensity factor, so it adapts faster after a return-to-training. We were trusting the slower, more authoritative signal *as if it were always current*.
+
+**Fix**:
+- New `StrydCpInput = { cp, ageDays }` shape. `getLatestCriticalPower()` now returns `{ criticalPower, createdAt }` so callers can compute age. New shared helper `fetchStrydCpInput(strydClient, now)` used by all four prescription paths (MCP, Praescriptor, HTTP API status, HTTP API workouts/dashboard) — single resolution point.
+- `suggestWorkoutFromData` staleness override: when CP is older than `STRYD_CP_STALE_DAYS` (30) **and** intervals.icu's rolling FTP exceeds it by `STRYD_CP_STALE_OVERRIDE_RATIO` (1.05), use rolling FTP and warn loudly with both numbers and the age. Stale CP without a higher inferred FTP keeps Stryd CP but emits a softer "consider a fresh CP test" warning.
+- MCP entry `suggestWorkout` now accepts an optional `StrydClient`; `src/index.ts` constructs one from `STRYD_EMAIL`/`STRYD_PASSWORD` at startup and passes it through `registerSuggestTools`.
+- HTTP API `critical_power.updated_at` now reports the real Stryd CP creation timestamp instead of `now()` — clients can detect staleness without a separate API call.
+- `criticalPowerFromContext` (HTTP API payload) flipped precedence to prefer `powerContext.ftp` over the raw `strydCp` argument: when the staleness override fires, the engine has chosen the inferred FTP and the API must report that — otherwise `watts` would still announce the stale Stryd value while segment targets are derived from a different number. Wire `source` keeps reporting `stryd_direct` (we did query Stryd); the override reason lives in `power_context.warnings`.
+
+**Prevention**:
+1. Two engine entries with overlapping responsibility (`suggestWorkoutFromData` and `suggestWorkout`) must take the same FTP-resolution path. Adding tests that pin the MCP wire output against a fixture-with-stryd-CP would have caught this immediately. The unit test `suggestWorkout integration > overrides FTP with Stryd CP when provided` only exercised `suggestWorkoutFromData` directly, never the MCP entry — that's how the disagreement persisted.
+2. Authoritative-source flags ("Stryd is the source of truth") must come with a freshness contract. Any time the engine prefers one signal over another, log when that decision was made under stale data so the staleness becomes visible.
+3. When two surfaces (MCP, web UI, HTTP API) compute the same logical value, route them through one helper. Three of the four CP fetches were structurally identical try/catch blocks around `getLatestCriticalPower()` — copy-paste invited drift.
+
+**Tests added**: 3 new cases in `tests/engine/suggest.test.ts` cover (a) stale CP overridden by higher rolling FTP with warning, (b) stale CP kept when rolling FTP is not materially higher, (c) fresh CP used as-is even when rolling FTP is higher.
+
 ## 2026-04-29 — Run zones realigned to Stryd's 5-zone model + threshold/progression categories
 
 **What happened**: User flagged that the morning's run-power tune (Z2 base 70–80% CP) was still "barely above a brisk walk" and asked for the engine bands to map onto Stryd's published 5-zone model directly. Stryd's bands at CP=274W: Z1 Easy 65–80%, Z2 Moderate 80–90%, Z3 Threshold 90–100%, Z4 Interval 100–115%, Z5 Repetition 115–130%.

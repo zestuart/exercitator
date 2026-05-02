@@ -7,7 +7,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
-import { fetchTrainingData } from "../../engine/suggest.js";
+import { fetchStrydCpInput, fetchTrainingData } from "../../engine/suggest.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
 import { cacheGet, cacheSet } from "../cache.js";
@@ -21,20 +21,6 @@ import {
 } from "../payload.js";
 import type { UserContext } from "../router.js";
 import type { StatusResponse } from "../types.js";
-
-async function fetchStrydCp(
-	user: UserContext,
-): Promise<{ watts: number | null; updatedAt: string | null }> {
-	if (!user.stryd) return { watts: null, updatedAt: null };
-	try {
-		if (!user.stryd.isAuthenticated) await user.stryd.login();
-		const watts = await user.stryd.getLatestCriticalPower();
-		return { watts: watts ?? null, updatedAt: watts != null ? new Date().toISOString() : null };
-	} catch (err) {
-		console.error("Stryd CP fetch failed:", err);
-		return { watts: null, updatedAt: null };
-	}
-}
 
 export async function handleStatus(
 	_req: IncomingMessage,
@@ -53,7 +39,19 @@ export async function handleStatus(
 		const now = new Date();
 		const powerContext = detectPowerSource(data.activities);
 		const readiness = computeReadiness(data.wellness, data.activities, now);
-		const strydCp = await fetchStrydCp(user);
+		const strydCp = await fetchStrydCpInput(user.stryd ?? null, now);
+		// Convert the engine-shape CP into the API DTO shape — `updatedAt` is
+		// the real Stryd CP creation timestamp (not now()), letting clients
+		// detect stale CP without a separate API call.
+		const strydCpForApi = strydCp
+			? {
+					watts: strydCp.cp,
+					updatedAt:
+						strydCp.ageDays != null
+							? new Date(now.getTime() - strydCp.ageDays * 86_400_000).toISOString()
+							: null,
+				}
+			: { watts: null as number | null, updatedAt: null as string | null };
 
 		const isRunSport = user.profile.sports.includes("Run");
 		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now) : null;
@@ -74,7 +72,11 @@ export async function handleStatus(
 			athlete_id: user.intervals.athleteId,
 			readiness: readinessFromEngine(readiness.score, data.wellness, data.wellness.length >= 3),
 			injury_warning: injuryWarningFromVigil(vigil),
-			critical_power: criticalPowerFromContext(powerContext, strydCp.watts, strydCp.updatedAt),
+			critical_power: criticalPowerFromContext(
+				powerContext,
+				strydCpForApi.watts,
+				strydCpForApi.updatedAt,
+			),
 			training_load: trainingLoadFromActivities(data.wellness, data.activities, now),
 			last_workout: lastWorkoutFromActivities(data.activities),
 		};

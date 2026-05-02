@@ -31,7 +31,12 @@ async function main() {
 	console.log("Authenticated OK");
 
 	const cp = await client.getLatestCriticalPower();
-	console.log(`Critical Power: ${cp ? `${cp.toFixed(1)}W` : "unavailable"}`);
+	if (cp) {
+		const ageDays = Math.floor((Date.now() / 1000 - cp.createdAt) / 86_400);
+		console.log(`Critical Power: ${cp.criticalPower.toFixed(1)}W (${ageDays}d old)`);
+	} else {
+		console.log("Critical Power: unavailable");
+	}
 
 	console.log("\nListing activities (last 14 days)...");
 	const activities = await client.listActivities(14);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { cacheGet } from "../db.js";
 import { suggestWorkout } from "../engine/suggest.js";
 import type { IntervalsClient } from "../intervals.js";
+import type { StrydClient } from "../stryd/client.js";
 
 /** Resolve the athlete's IANA timezone from the cached profile, or fetch + cache it. */
 async function getAthleteTz(client: IntervalsClient): Promise<string> {
@@ -18,7 +19,11 @@ async function getAthleteTz(client: IntervalsClient): Promise<string> {
 	}
 }
 
-export function registerSuggestTools(server: McpServer, client: IntervalsClient): void {
+export function registerSuggestTools(
+	server: McpServer,
+	client: IntervalsClient,
+	strydClient?: StrydClient | null,
+): void {
 	server.tool(
 		"suggest_workout",
 		"Generate a personalised daily workout suggestion based on recent training load, " +
@@ -32,7 +37,7 @@ export function registerSuggestTools(server: McpServer, client: IntervalsClient)
 		{},
 		async () => {
 			const tz = await getAthleteTz(client);
-			const suggestion = await suggestWorkout(client, tz);
+			const suggestion = await suggestWorkout(client, tz, strydClient ?? null);
 			return {
 				content: [{ type: "text", text: JSON.stringify(suggestion, null, 2) }],
 			};
