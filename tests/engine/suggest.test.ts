@@ -110,10 +110,73 @@ describe("suggestWorkout integration", () => {
 		const withoutCp = suggestWorkoutFromData(data as never, "Run");
 		expect(withoutCp.power_context.ftp).toBe(322);
 
-		// With CP override — uses Stryd CP
-		const withCp = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, 279.45);
+		// With fresh CP override — uses Stryd CP
+		const withCp = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, {
+			cp: 279.45,
+			ageDays: 5,
+		});
 		expect(withCp.power_context.ftp).toBe(279);
 		expect(withCp.power_context.rolling_ftp).toBe(279);
 		expect(withCp.power_context.source).toBe("stryd");
+	});
+
+	it("falls back to intervals.icu rolling FTP when Stryd CP is stale and lower", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+
+		// intervals.icu rolling FTP = 322 W; Stryd CP = 274 W and 60 days old.
+		// 322 > 274 × 1.05 → engine should override with 322 and warn.
+		const result = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, {
+			cp: 274,
+			ageDays: 60,
+		});
+		expect(result.power_context.ftp).toBe(322);
+		expect(
+			result.power_context.warnings.some((w) => w.includes("overridden") && w.includes("60d old")),
+		).toBe(true);
+	});
+
+	it("keeps Stryd CP when stale but inferred FTP is not materially higher", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+
+		// intervals.icu rolling FTP = 322; Stryd CP = 320, stale.
+		// 322 < 320 × 1.05 (= 336) → keep Stryd CP, soft warning only.
+		const result = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, {
+			cp: 320,
+			ageDays: 45,
+		});
+		expect(result.power_context.ftp).toBe(320);
+		expect(result.power_context.warnings.some((w) => w.includes("Stryd CP is 45 days old"))).toBe(
+			true,
+		);
+	});
+
+	it("uses fresh Stryd CP without warning even if lower than intervals FTP", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+
+		// Stryd CP = 274 W, fresh (5 days). Even though intervals FTP is higher,
+		// fresh Stryd is authoritative — no override, no warning.
+		const result = suggestWorkoutFromData(data as never, "Run", new Date(), undefined, {
+			cp: 274,
+			ageDays: 5,
+		});
+		expect(result.power_context.ftp).toBe(274);
+		expect(
+			result.power_context.warnings.some((w) => w.includes("overridden") || w.includes("days old")),
+		).toBe(false);
 	});
 });

@@ -9,6 +9,7 @@
 
 import { getVigilMetrics } from "../db.js";
 import type { IntervalsClient } from "../intervals.js";
+import type { StrydClient } from "../stryd/client.js";
 import {
 	type CrossTrainingStrain,
 	assessCrossTrainingStrain,
@@ -35,6 +36,24 @@ import { selectWorkoutCategory } from "./workout-selector.js";
 
 // Re-export for Praescriptor consumption
 export type { VigilResult } from "./vigil/index.js";
+
+/** Stryd Critical Power input for the engine. ageDays = null means unknown
+ *  age (treated as fresh). The engine uses ageDays to detect stale CP and
+ *  optionally fall back to intervals.icu's rolling FTP after a layoff. */
+export interface StrydCpInput {
+	cp: number;
+	ageDays: number | null;
+}
+
+/** Stryd CP older than this is considered stale: a recently-fit athlete who
+ *  hasn't run hard in this window may have a CP estimate that hasn't kept up
+ *  with their actual fitness. */
+export const STRYD_CP_STALE_DAYS = 30;
+
+/** When Stryd CP is stale, fall back to intervals.icu rolling FTP only if it
+ *  exceeds Stryd CP by at least this ratio. Avoids flipping FTP back and
+ *  forth on noise. */
+export const STRYD_CP_STALE_OVERRIDE_RATIO = 1.05;
 
 const DEFAULT_SPORT_SETTINGS: Omit<SportSettings, "type"> = {
 	ftp: null,
@@ -136,7 +155,7 @@ export function suggestWorkoutFromData(
 	sport: "Run" | "Swim",
 	now: Date = new Date(),
 	sportSelectionReason?: string,
-	strydCp?: number | null,
+	strydCp?: StrydCpInput | null,
 	athleteId = "0",
 	tz?: string,
 ): WorkoutSuggestion {
@@ -150,8 +169,25 @@ export function suggestWorkoutFromData(
 	// with just Apple Watch), upgrade the source to "stryd" — the CP API
 	// only returns a value if the athlete IS a Stryd user.
 	if (strydCp != null) {
-		powerContext.ftp = Math.round(strydCp);
-		powerContext.rolling_ftp = Math.round(strydCp);
+		const inferredFtp = powerContext.rolling_ftp ?? powerContext.ftp;
+		const isStale = strydCp.ageDays != null && strydCp.ageDays > STRYD_CP_STALE_DAYS;
+		const inferredHigher =
+			inferredFtp != null && inferredFtp > strydCp.cp * STRYD_CP_STALE_OVERRIDE_RATIO;
+
+		let chosenFtp = Math.round(strydCp.cp);
+		if (isStale && inferredHigher && inferredFtp != null) {
+			chosenFtp = Math.round(inferredFtp);
+			powerContext.warnings.push(
+				`Stryd CP (${Math.round(strydCp.cp)} W, ${strydCp.ageDays}d old) overridden by higher intervals.icu rolling FTP (${chosenFtp} W). Consider a fresh Stryd CP test to recalibrate zones.`,
+			);
+		} else if (isStale) {
+			powerContext.warnings.push(
+				`Stryd CP is ${strydCp.ageDays} days old \u2014 consider a fresh CP test if fitness has changed.`,
+			);
+		}
+
+		powerContext.ftp = chosenFtp;
+		powerContext.rolling_ftp = chosenFtp;
 		if (powerContext.source === "none") {
 			powerContext.source = "stryd";
 			powerContext.confidence = "low";
@@ -307,9 +343,12 @@ export async function suggestWorkoutForSport(
 export async function suggestWorkout(
 	client: IntervalsClient,
 	tz?: string,
+	strydClient?: StrydClient | null,
 ): Promise<WorkoutSuggestion> {
 	const data = await fetchTrainingData(client, tz);
 	const now = new Date();
+
+	const strydCp = await fetchStrydCpInput(strydClient ?? null, now);
 
 	const powerContext = detectPowerSource(data.activities);
 	const readiness = computeReadiness(data.wellness, data.activities, now);
@@ -320,8 +359,29 @@ export async function suggestWorkout(
 		sportSelection.sport,
 		now,
 		sportSelection.reason,
-		undefined,
+		strydCp,
 		"0",
 		tz,
 	);
+}
+
+/** Resolve Stryd CP and its age in days, or null if unavailable. Shared by
+ *  the MCP entry, Praescriptor, and the HTTP API so they all compute
+ *  staleness against the same age basis. Failures are swallowed (logged) so
+ *  a Stryd outage never breaks workout generation. */
+export async function fetchStrydCpInput(
+	strydClient: StrydClient | null,
+	now: Date = new Date(),
+): Promise<StrydCpInput | null> {
+	if (!strydClient) return null;
+	try {
+		if (!strydClient.isAuthenticated) await strydClient.login();
+		const result = await strydClient.getLatestCriticalPower();
+		if (!result) return null;
+		const ageDays = Math.floor((now.getTime() / 1000 - result.createdAt) / 86_400);
+		return { cp: result.criticalPower, ageDays };
+	} catch (err) {
+		console.error("Stryd CP fetch failed:", err);
+		return null;
+	}
 }

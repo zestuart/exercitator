@@ -11,7 +11,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { localDateStr } from "../../engine/date-utils.js";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
-import { fetchTrainingData, suggestWorkoutFromData } from "../../engine/suggest.js";
+import {
+	fetchStrydCpInput,
+	fetchTrainingData,
+	suggestWorkoutFromData,
+} from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
@@ -63,17 +67,12 @@ export async function handleDashboard(
 		// Status block
 		const powerContext = detectPowerSource(data.activities);
 		const readiness = computeReadiness(data.wellness, data.activities, now);
-		let strydCp: number | null = null;
-		let strydCpUpdatedAt: string | null = null;
-		if (user.stryd) {
-			try {
-				if (!user.stryd.isAuthenticated) await user.stryd.login();
-				strydCp = (await user.stryd.getLatestCriticalPower()) ?? null;
-				strydCpUpdatedAt = strydCp != null ? now.toISOString() : null;
-			} catch {
-				strydCp = null;
-			}
-		}
+		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
+		const strydCp = strydCpInput?.cp ?? null;
+		const strydCpUpdatedAt =
+			strydCpInput?.ageDays != null
+				? new Date(now.getTime() - strydCpInput.ageDays * 86_400_000).toISOString()
+				: null;
 		const isRunSport = user.profile.sports.includes("Run");
 		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now, tz) : null;
 		if (user.profile.stryd) {
@@ -146,7 +145,7 @@ export async function handleDashboard(
 				user.profile.sports[0] ?? "Run",
 				now,
 				undefined,
-				strydCp,
+				strydCpInput,
 				user.profile.id,
 				tz,
 			);

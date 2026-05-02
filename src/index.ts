@@ -14,6 +14,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { startApiServer } from "./api/server.js";
 import { authEnabled, createOAuthHandler, validateBearer } from "./auth.js";
 import { IntervalsClient } from "./intervals.js";
+import { StrydClient } from "./stryd/client.js";
 import { registerActivityTools } from "./tools/activities.js";
 import { registerAthleteTools } from "./tools/athlete.js";
 import { registerComplianceTools } from "./tools/compliance.js";
@@ -38,6 +39,16 @@ if (!API_KEY) {
 
 const intervalsClient = new IntervalsClient({ apiKey: API_KEY });
 
+// Optional: Stryd client for the MCP suggest_workout tool. Without this the
+// MCP path falls back to intervals.icu's inferred FTP and disagrees with
+// Praescriptor — see lessons.md (CP source mismatch, 2026-05-01).
+const STRYD_EMAIL = process.env.STRYD_EMAIL;
+const STRYD_PASSWORD = process.env.STRYD_PASSWORD;
+const strydClient =
+	STRYD_EMAIL && STRYD_PASSWORD
+		? new StrydClient({ email: STRYD_EMAIL, password: STRYD_PASSWORD })
+		: null;
+
 // ---------------------------------------------------------------------------
 // Server factory — each connection gets its own McpServer instance
 // ---------------------------------------------------------------------------
@@ -52,7 +63,7 @@ function createMcpServer(): McpServer {
 	registerActivityTools(server, intervalsClient);
 	registerWellnessTools(server, intervalsClient);
 	registerEventTools(server, intervalsClient);
-	registerSuggestTools(server, intervalsClient);
+	registerSuggestTools(server, intervalsClient, strydClient);
 	registerComplianceTools(server);
 
 	return server;

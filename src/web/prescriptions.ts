@@ -5,7 +5,12 @@
 
 import { persistPrescription } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
-import { type TrainingData, fetchTrainingData, suggestWorkoutFromData } from "../engine/suggest.js";
+import {
+	type TrainingData,
+	fetchStrydCpInput,
+	fetchTrainingData,
+	suggestWorkoutFromData,
+} from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
 import type { IntervalsClient } from "../intervals.js";
@@ -78,10 +83,12 @@ export async function generatePrescriptions(
 		await runVigilBackfillIfNeeded(strydClient ?? null, profile.id);
 	}
 
-	// Fetch authoritative critical power from Stryd (used as run FTP)
-	const strydCp = profile.stryd ? await fetchStrydCp(strydClient ?? null) : null;
-
 	const now = new Date();
+
+	// Fetch authoritative critical power from Stryd (used as run FTP).
+	// Engine handles staleness override against intervals.icu rolling FTP.
+	const strydCp = profile.stryd ? await fetchStrydCpInput(strydClient ?? null, now) : null;
+
 	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);
 
 	const run = hasSport("Run")
@@ -99,7 +106,14 @@ export async function generatePrescriptions(
 		);
 	}
 
-	const dataSource = buildDataSource(data, strydEnriched, strydCp, run?.vigil ?? null);
+	const dataSource = buildDataSource(
+		data,
+		strydEnriched,
+		// dataSource exposes the raw Stryd CP (independent of any staleness override)
+		// so the UI/data-source pill keeps showing where the value originated.
+		strydCp?.cp ?? null,
+		run?.vigil ?? null,
+	);
 	const prescription: Prescription = {
 		run,
 		swim,
@@ -129,17 +143,6 @@ export function invalidateCache(userId?: string): void {
 		cache.delete(userId);
 	} else {
 		cache.clear();
-	}
-}
-
-async function fetchStrydCp(strydClient: StrydClient | null): Promise<number | null> {
-	if (!strydClient) return null;
-	try {
-		if (!strydClient.isAuthenticated) await strydClient.login();
-		return await strydClient.getLatestCriticalPower();
-	} catch (err) {
-		console.error("Stryd CP fetch failed:", err);
-		return null;
 	}
 }
 

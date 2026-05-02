@@ -64,10 +64,25 @@ describe("criticalPowerFromContext", () => {
 		warnings: [],
 	};
 
-	it("stryd_direct when strydCp is present", () => {
-		const cp = criticalPowerFromContext(pcStryd, 312, "2026-04-20T00:00:00Z");
+	it("stryd_direct when strydCp is present; watts come from the engine's chosen FTP", () => {
+		// powerContext.ftp = strydCp in the no-override case (engine override applied
+		// upstream sets them equal). Use matching values here.
+		const cp = criticalPowerFromContext({ ...pcStryd, ftp: 312 }, 312, "2026-04-20T00:00:00Z");
 		expect(cp.source).toBe("stryd_direct");
 		expect(cp.watts).toBe(312);
+	});
+
+	it("reports the engine's overridden FTP, not the raw stale Stryd CP", () => {
+		// Engine staleness override fires: stale Stryd CP = 274, engine chose
+		// inferred FTP = 322. Wire source still says stryd_direct (we fetched Stryd),
+		// but watts must reflect what was actually prescribed against (322).
+		const cp = criticalPowerFromContext(
+			{ ...pcStryd, ftp: 322, rolling_ftp: 322 },
+			274,
+			"2026-04-07T00:00:00Z",
+		);
+		expect(cp.source).toBe("stryd_direct");
+		expect(cp.watts).toBe(322);
 	});
 
 	it("stryd_intervals when power context is stryd but no direct CP", () => {
@@ -87,8 +102,13 @@ describe("criticalPowerFromContext", () => {
 		expect(cp.watts).toBeNull();
 	});
 
-	it("rounds float watts from Stryd CP API to integer", () => {
-		const cp = criticalPowerFromContext(pcStryd, 273.84478, "2026-04-20T00:00:00Z");
+	it("rounds float watts to integer", () => {
+		// Engine sets powerContext.ftp = strydCp when fresh; both are 273.84478.
+		const cp = criticalPowerFromContext(
+			{ ...pcStryd, ftp: 273.84478, rolling_ftp: 273.84478 },
+			273.84478,
+			"2026-04-20T00:00:00Z",
+		);
 		expect(cp.watts).toBe(274);
 	});
 });

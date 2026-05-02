@@ -73,6 +73,13 @@ export interface StrydCalendarEntry {
 	distance: number;
 }
 
+export interface StrydCpResult {
+	/** Critical Power in watts. */
+	criticalPower: number;
+	/** Unix timestamp (seconds) when this CP value was created/updated in Stryd. */
+	createdAt: number;
+}
+
 export interface StrydActivity {
 	id: number;
 	timestamp: number;
@@ -193,9 +200,10 @@ export class StrydClient {
 		return Buffer.from(arrayBuffer);
 	}
 
-	/** Fetch the most recent critical power value (watts) from CP history.
-	 *  Returns null if no CP data is available. */
-	async getLatestCriticalPower(): Promise<number | null> {
+	/** Fetch the most recent critical power entry from CP history along with the
+	 *  timestamp it was created. Returns null if no CP data is available.
+	 *  The createdAt lets callers detect stale CP after a layoff. */
+	async getLatestCriticalPower(): Promise<StrydCpResult | null> {
 		if (!this.userId) throw new Error("StrydClient: not authenticated");
 
 		const end = new Date();
@@ -220,7 +228,7 @@ export class StrydClient {
 		if (valid.length === 0) return null;
 
 		const latest = valid.reduce((a, b) => (b.created > a.created ? b : a));
-		return latest.critical_power;
+		return { criticalPower: latest.critical_power, createdAt: latest.created };
 	}
 
 	/** Create a structured workout in the user's Stryd library.

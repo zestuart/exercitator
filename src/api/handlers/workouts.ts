@@ -10,7 +10,11 @@ import { isValidTimezone, localDateStr } from "../../engine/date-utils.js";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { selectSport } from "../../engine/sport-selector.js";
-import { fetchTrainingData, suggestWorkoutFromData } from "../../engine/suggest.js";
+import {
+	fetchStrydCpInput,
+	fetchTrainingData,
+	suggestWorkoutFromData,
+} from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { cacheGet, cacheSet } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -191,15 +195,9 @@ export async function handleWorkoutsSuggested(
 
 		// Authoritative CP from Stryd's foot pod when credentials are present —
 		// drives the stryd_direct wire enum and overrides intervals.icu's FTP.
-		let strydCp: number | null = null;
-		if (user.stryd) {
-			try {
-				if (!user.stryd.isAuthenticated) await user.stryd.login();
-				strydCp = (await user.stryd.getLatestCriticalPower()) ?? null;
-			} catch (err) {
-				console.error("workouts/suggested: Stryd CP fetch failed:", err);
-			}
-		}
+		// Engine handles staleness override against intervals.icu rolling FTP.
+		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
+		const strydCp = strydCpInput?.cp ?? null;
 
 		let sport: "Run" | "Swim";
 		let sportSelectionReason: string | undefined;
@@ -218,7 +216,7 @@ export async function handleWorkoutsSuggested(
 			sport,
 			now,
 			sportSelectionReason,
-			strydCp,
+			strydCpInput,
 			user.profile.id,
 			tz,
 		);

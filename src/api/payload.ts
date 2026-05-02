@@ -152,9 +152,15 @@ export function criticalPowerFromContext(
 	strydCp: number | null,
 	strydCpUpdatedAt: string | null,
 ): CriticalPowerBlock {
-	const rawWatts = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
+	// `watts` reports the FTP the engine actually prescribed against, not the
+	// raw Stryd CP. After the staleness override (engine.suggestWorkoutFromData)
+	// these can diverge: when Stryd CP is stale and intervals.icu rolling FTP
+	// is materially higher, the engine sets `powerContext.ftp` to the inferred
+	// value. The wire `source` still says `stryd_direct` (we did query Stryd);
+	// the warning in `power_context.warnings` carries the override reason.
+	const chosenFtp = powerContext.ftp > 0 ? powerContext.ftp : strydCp;
 	return {
-		watts: rawWatts != null ? Math.round(rawWatts) : null,
+		watts: chosenFtp != null ? Math.round(chosenFtp) : null,
 		source: mapWirePowerSource(powerContext.source, strydCp != null),
 		updated_at: strydCpUpdatedAt,
 		confidence: powerContext.confidence === "high" ? "high" : "low",
