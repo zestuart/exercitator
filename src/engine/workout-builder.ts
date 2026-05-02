@@ -491,9 +491,11 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Build swim pace description. intervals.icu stores threshold_pace in secs/metre.
- * Convert to secs/100m, apply zone offset + staleness buffer, format as mm:ss/100m.
- * When hrOnly is true, pace targets are suppressed.
+ * Build swim pace description. intervals.icu stores threshold_pace in metres
+ * per second (matching activity.average_speed and pace_zones percent-of-speed
+ * semantics). Convert to seconds per 100 m via 100/x, then apply zone offset
+ * and staleness buffer, format as mm:ss/100m. When hrOnly is true, pace
+ * targets are suppressed.
  */
 function swimPaceDesc(
 	settings: SportSettings,
@@ -503,8 +505,8 @@ function swimPaceDesc(
 	hrOnly = false,
 ): string {
 	if (hrOnly) return label;
-	if (settings.threshold_pace) {
-		const cssPer100m = settings.threshold_pace * 100;
+	if (settings.threshold_pace && settings.threshold_pace > 0) {
+		const cssPer100m = 100 / settings.threshold_pace;
 		const pace = cssPer100m + zoneOffsetSecs + paceBufferSecs;
 		return `${label} ${formatPace(pace, "100m")}`;
 	}

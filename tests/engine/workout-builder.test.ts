@@ -26,10 +26,24 @@ const swimSettings: SportSettings = {
 	type: "Swim",
 	ftp: null,
 	lthr: 163,
-	threshold_pace: 0.97, // 0.97 secs/m = 97 secs/100m = 1:37/100m (intervals.icu format)
+	// intervals.icu stores threshold_pace in m/s. 1.0309 m/s = 100/1.0309 = 97 s/100m = 1:37/100m.
+	threshold_pace: 1.0309278,
 	hr_zones: [137, 145, 155, 163, 172],
 	pace_zones: null,
 	power_zones: null,
+};
+
+// Slower swimmer fixture — verifies the unit conversion across a full second band.
+const slowSwimSettings: SportSettings = {
+	...{
+		type: "Swim" as const,
+		ftp: null,
+		lthr: 163,
+		hr_zones: [137, 145, 155, 163, 172],
+		pace_zones: null,
+		power_zones: null,
+	},
+	threshold_pace: 0.94, // 100/0.94 ≈ 106.38 s/100m = 1:46/100m
 };
 
 const strydCtx: PowerContext = {
@@ -171,13 +185,42 @@ describe("buildWorkout", () => {
 		const result = buildWorkout("tempo", "Swim", swimSettings, 65, 50);
 		const threshold = result.segments.find((s) => s.name === "Threshold set");
 		expect(threshold).toBeDefined();
-		// CSS = 0.97 s/m = 97 s/100m. Z3 offset = 0 → 97s = 1:37/100m
+		// threshold_pace = 1.0309 m/s → 100/1.0309 = 97 s/100m. Z3 offset = 0 → 1:37/100m.
 		expect(threshold?.target_description).toContain("1:37/100m");
 
 		const speed = result.segments.find((s) => s.name === "Speed set");
 		expect(speed).toBeDefined();
-		// Z4 offset = -6 → 91s = 1:31/100m
+		// Z4 offset = -6 → 91 s/100m = 1:31/100m.
 		expect(speed?.target_description).toContain("1:31/100m");
+	});
+
+	it("converts threshold_pace from m/s to s/100m correctly for slower swimmer", () => {
+		// Regression: pre-fix, the engine multiplied threshold_pace by 100, treating
+		// it as s/m. For a slower swimmer this produced a faster prescribed pace
+		// rather than slower. With threshold_pace = 0.94 m/s, true pace per 100m is
+		// 100/0.94 ≈ 106.38 s = 1:46/100m. Buggy formula produced 0.94 × 100 = 94 s
+		// = 1:34/100m — diverges in the wrong direction.
+		const result = buildWorkout("tempo", "Swim", slowSwimSettings, 65, 50);
+		const threshold = result.segments.find((s) => s.name === "Threshold set");
+		expect(threshold).toBeDefined();
+		expect(threshold?.target_description).toContain("1:46/100m");
+
+		const speed = result.segments.find((s) => s.name === "Speed set");
+		expect(speed).toBeDefined();
+		// Z4 offset = -6 → 100.38 s/100m → rounds to 1:40/100m.
+		expect(speed?.target_description).toContain("1:40/100m");
+	});
+
+	it("returns label only when threshold_pace is null or zero", () => {
+		const noPace: SportSettings = { ...swimSettings, threshold_pace: null };
+		const r1 = buildWorkout("tempo", "Swim", noPace, 65, 50);
+		const t1 = r1.segments.find((s) => s.name === "Threshold set");
+		expect(t1?.target_description).not.toContain("/100m");
+
+		const zeroPace: SportSettings = { ...swimSettings, threshold_pace: 0 };
+		const r2 = buildWorkout("tempo", "Swim", zeroPace, 65, 50);
+		const t2 = r2.segments.find((s) => s.name === "Threshold set");
+		expect(t2?.target_description).not.toContain("/100m");
 	});
 
 	it("scales duration by CTL", () => {
