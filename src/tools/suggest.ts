@@ -50,7 +50,15 @@ export function registerSuggestTools(
 			"Use this when suggest_workout returns status 'awaiting_input'. " +
 			"After submission, call suggest_workout again for an updated prescription.",
 		{
-			activityId: z.string().describe("The intervals.icu activity ID"),
+			// Same allowlist as the HTTP API (`isValidIntervalsId`). Belt-and-
+			// braces with `encodeURIComponent`: blocks path-traversal characters
+			// at the request boundary so a crafted Claude-supplied id can't
+			// reach `IntervalsClient.request` via SSRF, even if the URL
+			// construction in `src/intervals.ts` ever changes.
+			activityId: z
+				.string()
+				.regex(/^[A-Za-z0-9_-]{1,64}$/, "Invalid activity ID format")
+				.describe("The intervals.icu activity ID"),
 			rpe: z.number().min(1).max(10).describe("RPE on 1–10 scale"),
 		},
 		async ({ activityId, rpe }) => {

@@ -3,6 +3,32 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-05-03 — v0.3 deploy (push-to-stryd + form-text) blocked twice by pre-existing SAST findings
+
+**What happened**: Routine deploy of two new HTTP API endpoints (`POST /api/users/:userId/push-to-stryd` and `GET /api/users/:userId/form-text`) for the Excubitor/Nunc iPhone client. Lint, typecheck, and 399/399 tests all green. `--mode diff` SAST scan blocked the deploy twice in succession on two pre-existing High findings that were brought into scope by the changed files:
+
+1. **DoS via unvalidated `tz` on `/dashboard`** — the dashboard handler used a weak `q?.includes("/")` check that admitted crafted IANA-shaped strings (e.g. `?tz=a/a`) which then reached `Intl.DateTimeFormat` inside `localDateStr` → `RangeError` → process crash. The `workouts.ts` handler had been correctly using `isValidTimezone` from day one; the dashboard handler had drifted.
+2. **SSRF / path-traversal via crafted `activityId` in MCP `submit_cross_training_rpe`** — `encodeURIComponent` already neutralised the immediate vector, but the HTTP API equivalent had a regex allowlist (`isValidIntervalsId` = `^[A-Za-z0-9_-]{1,64}$`) as documented defence-in-depth, and the MCP tool didn't.
+
+**Root cause**:
+
+1. (Dashboard) The `tz` resolver was duplicated across `workouts.ts` and `dashboard.ts` as separate-but-similar functions. `workouts.ts` evolved to use `isValidTimezone` after the previous SAST cleanup; `dashboard.ts` kept the older `q?.includes("/")` pattern. Two implementations of the same security-critical decision drifted apart.
+2. (MCP tool) The HTTP API's `cross-training` handler and the MCP tool both submit RPE for an activity, but they were independently authored. The HTTP API got the regex allowlist as a documented step in the previous SAST cleanup; the MCP tool wasn't part of that cleanup's diff scope, so its Zod schema kept `z.string()` without a regex.
+
+**Fix**:
+
+- Extracted the canonical `resolveTz(user, url)` to `src/api/tz.ts`. Both `dashboard.ts` and `workouts.ts` now import it; the new `push-to-stryd.ts` and `form-text.ts` handlers consume it from day one. Single source of truth — a future handler that forgets to validate `tz` is impossible by construction (the helper is the only sanctioned path).
+- Added `z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Invalid activity ID format")` to the Zod schema in `src/tools/suggest.ts`. Same pattern as `src/api/validate.ts:isValidIntervalsId`.
+- Crafted-tz security tests added to both new handler test files (`tests/api/handlers/push-to-stryd.test.ts`, `tests/api/handlers/form-text.test.ts`): a request with `?tz=a/a` must drop to `"UTC"` instead of crashing.
+
+**Prevention**:
+
+1. **Centralise security-critical decisions on the first duplication, not the second.** The drift between `workouts.ts` and `dashboard.ts` would not have happened if `resolveTz` had been extracted at the moment a second handler needed it. The lesson: when copy-pasting a request-boundary validator, extract immediately.
+2. **Keep MCP and HTTP API surfaces aligned on input validation.** Any time the HTTP API gains a new validator at the request boundary (regex, allowlist, tz check), audit the MCP tool that exposes the same operation. They share an upstream and therefore share the threat model. A grep for the field name (`activityId`) catches this in seconds.
+3. **`--mode diff` SAST is a feature, not a chore.** Both findings were pre-existing — neither was introduced by the v0.3 work — but the diff scan correctly flagged them when files in the same blast radius changed. Treating diff-scan failures as "not my finding" would have shipped a known-vulnerable container. Philosophy #1 ("security non-negotiable") plus the deploy gate caught it. Re-baseline on the next deploy commit so the SAST signal stays sharp.
+
+**Tests added**: 2 crafted-tz cases in the new handler test files. 399/399 green after fixes.
+
 ## 2026-05-01 — MCP/Praescriptor disagreed on FTP, plus stale Stryd CP under-prescribed
 
 **What happened**: User ran the prescribed sweet-spot tempo (2 × 6 min Stryd Z2) at avg 235–241 W with HR 128–134 (cap was 153) and reported RPE 1 — breathing unaffected, legs unaware. Calibration interview surfaced two distinct issues that compounded:

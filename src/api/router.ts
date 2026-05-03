@@ -143,5 +143,17 @@ export async function handleApiRequest(
 		return;
 	}
 
+	if (req.method === "POST" && subPath === "/push-to-stryd") {
+		const { handlePushToStryd } = await import("./handlers/push-to-stryd.js");
+		await handlePushToStryd(req, res, user, url);
+		return;
+	}
+
+	if (req.method === "GET" && subPath === "/form-text") {
+		const { handleFormText } = await import("./handlers/form-text.js");
+		await handleFormText(req, res, user, url);
+		return;
+	}
+
 	apiError(res, 404, "not found");
 }

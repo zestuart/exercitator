@@ -37,19 +37,7 @@ import type {
 	TodayResponse,
 	TodayScheduledWorkout,
 } from "../types.js";
-
-async function resolveTz(user: UserContext, url: URL): Promise<string> {
-	const q = url.searchParams.get("tz");
-	if (q?.includes("/")) return q;
-	try {
-		const profile = await user.intervals.get<{ timezone?: string }>(
-			`/athlete/${user.intervals.athleteId}`,
-		);
-		return profile.timezone ?? "UTC";
-	} catch {
-		return "UTC";
-	}
-}
+import { resolveTz } from "../tz.js";
 
 export async function handleDashboard(
 	_req: IncomingMessage,

@@ -22,12 +22,25 @@
 - **Praescriptor security headers**: Every response carries HSTS (`max-age=63072000; includeSubDomains`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`. HTML responses additionally carry CSP allowing inline styles/scripts and Google Fonts only, with `frame-ancestors 'none'`.
 - **Stryd credentials**: Optional `STRYD_*` (and `STRYD_*_PAM`) in `.env`, used server-side only for FIT enrichment, Vigil baselines, and direct CP fetch. Tokens are short-lived, held only in memory during enrichment. Never exposed via HTTP API, MCP, or web UI.
 - **Praescriptor access**: Tailnet-only via `tailscale serve` (no funnel). No app-level auth — Tailscale provides device-level access control.
+- **Shared `tz` resolver**: All HTTP API handlers consume `?tz` via `src/api/tz.ts:resolveTz`, which validates against `Intl.DateTimeFormat` before any downstream use. A future handler that forgets to validate is impossible by construction (the helper is the only sanctioned path).
+- **MCP path-traversal allowlist**: The `submit_cross_training_rpe` tool now applies the same `^[A-Za-z0-9_-]{1,64}$` allowlist to `activityId` as the HTTP API equivalent (via Zod regex). Belt-and-braces with `encodeURIComponent` against SSRF.
 
 ## Outstanding
 
 _No outstanding findings._
 
 ## Remediated
+
+### 2026-05-03 — SAST cleanup (round 3)
+
+The 2026-05-03 v0.3 deploy (push-to-stryd + form-text endpoints for Excubitor/Nunc) initially blocked twice on `--mode diff` SAST scans. Both findings were pre-existing — neither was introduced by the v0.3 work — but the diff scan flagged them as the changed files brought them into scope. Closed in the same session.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 20 | High | DoS via unvalidated `tz` query on `/dashboard` — `q?.includes("/")` let crafted IANA-shaped strings (e.g. `?tz=a/a`) reach `Intl.DateTimeFormat` → RangeError → process crash | Extracted shared `resolveTz` helper to `src/api/tz.ts` using strict `isValidTimezone`; replaced the weak check in `dashboard.ts` and the duplicate in `workouts.ts`; new `push-to-stryd.ts` and `form-text.ts` consume it from day one. Crafted-tz security test added to both new handler test files. |
+| 21 | High | SSRF / path-traversal via crafted `activityId` in MCP `submit_cross_training_rpe` — `encodeURIComponent` already neutralised the immediate vector but the HTTP API equivalent had a regex allowlist as defence-in-depth that the MCP tool lacked | Added `z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)` to the Zod schema in `src/tools/suggest.ts`. Same pattern as `src/api/validate.ts:isValidIntervalsId`. |
+
+Third SAST run after these fixes: `NO_FINDINGS`. Re-baseline pending on the next commit.
 
 ### 2026-03-23 — SAST scan (Gemini 2.5 Pro, full mode)
 

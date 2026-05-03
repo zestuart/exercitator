@@ -6,7 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getPrescription } from "../../compliance/persist.js";
-import { isValidTimezone, localDateStr } from "../../engine/date-utils.js";
+import { localDateStr } from "../../engine/date-utils.js";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { selectSport } from "../../engine/sport-selector.js";
@@ -26,28 +26,8 @@ import type {
 	TodayResponse,
 	TodayScheduledWorkout,
 } from "../types.js";
+import { resolveTz } from "../tz.js";
 import { isValidIntervalsId } from "../validate.js";
-
-// ---------------------------------------------------------------------------
-// TZ resolution — mirror Praescriptor's strategy
-// ---------------------------------------------------------------------------
-
-async function resolveTz(user: UserContext, url: URL): Promise<string> {
-	// Strict IANA validation — `tz` flows into both the response cache key
-	// and `localDateStr`. A crafted value (`?tz=a/a`, `?tz=a/b`, ...) without
-	// validation would either explode the cache or raise a RangeError 500.
-	const q = url.searchParams.get("tz");
-	if (isValidTimezone(q)) return q;
-	try {
-		const profile = await user.intervals.get<{ timezone?: string }>(
-			`/athlete/${user.intervals.athleteId}`,
-		);
-		const profileTz = profile.timezone;
-		return isValidTimezone(profileTz) ? profileTz : "UTC";
-	} catch {
-		return "UTC";
-	}
-}
 
 // ---------------------------------------------------------------------------
 // /workouts/today

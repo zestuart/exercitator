@@ -92,6 +92,7 @@ src/
     payload.ts          — engine → DTO mappers (readiness bands, polymorphic segment targets, Vigil → injury_warning)
     cache.ts            — per-user response cache: Map<userId, Map<key, Entry>> with each inner map LRU-bounded at EXERCITATOR_API_CACHE_MAX_ENTRIES (default 64); 60s background prune sweeps expired entries; per-user buckets isolate cross-user cache flooding
     validate.ts         — input validators (`isValidIntervalsId` allowlist for activity IDs reaching path-interpolated upstream URLs)
+    tz.ts               — shared `resolveTz(user, url)` — strict IANA validation of `?tz` (via `isValidTimezone`) → athlete profile timezone fallback → "UTC". Used by every handler that consumes `tz`, so a crafted query value can't reach `localDateStr` and DoS the listener via RangeError.
     handlers/
       health.ts         — GET /api/health (unauthenticated, 60s-cached upstream probe)
       status.ts         — GET /api/users/:userId/status (readiness, CP, fitness/fatigue/form)
@@ -99,6 +100,8 @@ src/
       compliance.ts     — GET /compliance/{summary,detail}
       dashboard.ts      — GET /dashboard (status + today + suggested aggregate)
       cross-training.ts — POST /cross-training/:activityId/rpe (unblocks 409 awaiting_input)
+      push-to-stryd.ts  — POST /push-to-stryd (bearer-scoped wrapper around `sendToStryd`; per-day dedup; `?force=true` override) — Excubitor / Nunc parity with Praescriptor's button
+      form-text.ts      — GET /form-text (today's swim prescription rendered as FORM-goggles Script `text/plain` via `buildFormDescription`)
   rate-limit.ts         — shared in-memory token-bucket rate limiter (per userId + scope: read 60/min, write 10/min by default; 0 disables; 5-min idle bucket eviction). Used by both the HTTP API router and Praescriptor routes.
 ```
 
@@ -306,11 +309,11 @@ reads `GEMINI_API_KEY` from `.env` or environment.
 - **HTTP API body size**: POST bodies (cross-training RPE) are capped at 1 KiB; the listener also enforces a 1 MiB global body cap.
 - **HTTP API response cache** (`src/api/cache.ts`): Per-user buckets (`Map<userId, Map<key, Entry>>`) capped at `EXERCITATOR_API_CACHE_MAX_ENTRIES` (default 64) with LRU eviction; 60s background prune sweeps expired entries. One user spamming distinct keys cannot evict another user's entries.
 - **Rate limiting** (`src/rate-limit.ts`): Per-user token-bucket on Praescriptor and the HTTP API — 60 reads/min, 10 writes/min by default; configurable via `EXERCITATOR_RATE_LIMIT_READ` / `_WRITE` (set to `0` to disable for tests). Returns 429 with `Retry-After` and a JSON envelope. Read and write buckets independent.
-- **Activity ID allowlist** (`src/api/validate.ts`): User-supplied IDs reaching `POST /api/compliance/confirm`, `POST /api/users/:userId/cross-training/:activityId/rpe`, and `GET /api/users/:userId/workouts/iv-:id` are matched against `^[A-Za-z0-9_-]{1,64}$` before path-interpolation. Belt-and-braces with `encodeURIComponent` against protocol-relative SSRF.
-- **Timezone validation** (`src/engine/date-utils.ts` `isValidTimezone`): `tz` from cookies and query params is validated against `Intl.DateTimeFormat` before reaching `localDateStr` or any cache key. Closes a Medium cache-flooding vector via crafted `tz` values and a Low DoS where a malformed cookie raised `RangeError` 500.
+- **Activity ID allowlist** (`src/api/validate.ts`): User-supplied IDs reaching `POST /api/compliance/confirm`, `POST /api/users/:userId/cross-training/:activityId/rpe`, `GET /api/users/:userId/workouts/iv-:id`, **and the MCP `submit_cross_training_rpe` tool** are matched against `^[A-Za-z0-9_-]{1,64}$` before path-interpolation. The MCP tool enforces it via Zod regex; the HTTP API enforces it in the handler. Belt-and-braces with `encodeURIComponent` against protocol-relative SSRF.
+- **Timezone validation** (`src/engine/date-utils.ts` `isValidTimezone` + `src/api/tz.ts` `resolveTz`): `tz` from cookies and query params is validated against `Intl.DateTimeFormat` before reaching `localDateStr` or any cache key. The HTTP API now centralises the resolver in `src/api/tz.ts` so every handler consumes the same chain (validated query → athlete profile → "UTC"); a future handler that forgets to validate `tz` is impossible by construction. Closes a Medium cache-flooding vector via crafted `tz` values, a Low DoS where a malformed cookie raised `RangeError` 500, and a 2026-05-03 High DoS regression on `/dashboard` that bypassed the validator with a weak `q?.includes("/")` check.
 - **Compliance backfill clamp**: `?days=` on `POST /api/compliance/backfill` and `GET /api/compliance/trending` is clamped to `[1, 730]` (≈2 years) — backfill issues one upstream call per day with a send event, so an unbounded value let an authenticated tailnet caller burn intervals.icu quota.
 - **Praescriptor security headers** (`src/web/security-headers.ts`): Every response carries HSTS (max-age=63072000; includeSubDomains), X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy same-origin. HTML responses additionally carry CSP allowing inline styles/scripts and Google Fonts only, with `frame-ancestors 'none'`.
-- **SAST baseline**: Tagged `sast-baseline-2026-04-29-c` on commit `25db117`. `python3 scripts/sast_scan.py --mode diff` scans only files changed since the baseline. Re-baseline immediately after each accepted-risk deploy.
+- **SAST baseline**: Last clean tag is `sast-baseline-2026-04-29-c` on commit `25db117`. The 2026-05-03 deploy passed a clean `--mode diff` scan after closing two High findings (DoS via crafted `tz` on `/dashboard`, SSRF via path-traversal in MCP `submit_cross_training_rpe`); re-baseline on the next deploy commit. `python3 scripts/sast_scan.py --mode diff` scans only files changed since the baseline. Re-baseline immediately after each accepted-risk deploy.
 
 ## Testing
 
