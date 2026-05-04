@@ -32,10 +32,11 @@ export async function sendToStryd(
 		const existing = getSendEvent(profile.id, today, "Run", "stryd");
 		if (!force && existing) {
 			const meta = existing.externalMeta ? JSON.parse(existing.externalMeta) : {};
+			// external_id is stored as TEXT (generic across targets); the wire contract is numeric for parity with the 200 path.
 			jsonResponse(res, 409, {
 				success: false,
 				duplicate: true,
-				workout_id: existing.externalId,
+				workout_id: existing.externalId ? Number(existing.externalId) : null,
 				calendar_id: meta.calendarId,
 				message: "Already sent to Stryd today \u2014 send again?",
 			});

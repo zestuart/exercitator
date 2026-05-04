@@ -54,8 +54,8 @@ Body: empty.
 ```json
 {
   "success": true,
-  "workout_id": "abc123",
-  "calendar_id": "cal456",
+  "workout_id": 12345,
+  "calendar_id": 67890,
   "stress": 68,
   "duration_mins": 62,
   "distance_m": 12000
@@ -70,11 +70,25 @@ Body: empty.
 {
   "success": false,
   "duplicate": true,
-  "workout_id": "abc123",
-  "calendar_id": "cal456",
+  "workout_id": 12345,
+  "calendar_id": 67890,
   "message": "Already sent to Stryd today — send again?"
 }
 ```
+
+Both `workout_id` and `calendar_id` are numeric on both 200 and 409 paths from v0.3 onwards (parity ratified 2026-05-03).
+
+| Field | JSON type | Notes |
+|---|---|---|
+| `success` | bool | `true` on 200; `false` on 409. |
+| `workout_id` | number \| null | Stryd's workout id. Numeric integer. Present on 200 and 409. |
+| `calendar_id` | number \| null | Stryd's calendar-entry id. Numeric integer. Present on 200 and 409. |
+| `stress` | number \| null | TSS for the prescribed workout. May be fractional; do not assume integer. |
+| `duration_mins` | number \| null | Integer (server applies `Math.round`). |
+| `distance_m` | number \| null | Integer (server applies `Math.round`). |
+| `duplicate` | bool \| null | Present only on 409 conflict bodies. |
+| `message` | string \| null | Present only on 409 conflict bodies. |
+| `error` | string \| null | Present on 4xx / 5xx error bodies (existing convention). |
 
 #### 2.1.4 Status codes
 
