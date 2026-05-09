@@ -334,3 +334,22 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 **Fix**: `src/web/send-stryd.ts:38` — coerce on read-back: `workout_id: existing.externalId ? Number(existing.externalId) : null`. Spec §2.1.3 corrected to numeric on both paths plus typed field table.
 
 **Prevention**: New vitest covering the type contract on both 200 and 409 paths of the push-to-stryd endpoint. Future re-stringification regresses with a failing assertion. General lesson: storage-format coercion at write time should always be reversed at the response boundary, or the storage layer should hold the canonical type and downstream callers convert at the edges only. The 200/409 type-drift smell ("two response paths construct overlapping fields from different sources") deserves a checklist item in any new endpoint review.
+
+## 2026-05-08 — Run prescriptions emitting %FTP and HR fallback instead of absolute watts
+
+**What happened**: Today's tempo prescription pushed to intervals.icu rendered as `- 6m40s 72-82% HR` for warmup, `- 6m 80-90%` for main work, `- 3m 50%` for inter-rep recovery, `- 3m20s 50-72% HR` for cooldown. The user wanted absolute watts everywhere (e.g. `- 6m 229-257W`, recovery `- 3m 186-229W`). Separately the user reported that the dashes "wouldn't render" until they manually replaced them in the intervals.icu web UI — initially read as a unicode bug in our formatter.
+
+**Root cause**: Two issues, one in our code and one not.
+1. `formatRunTarget` (`src/web/intervals-format.ts`) emitted `${lowPct}-${highPct}%` whenever an explicit power band was set, falling back to HR when the segment lacked `target_power_low/high` (warm-up and cool-down in `workout-builder.ts` only carry `target_hr_zone`). The repeat-block recovery line was hard-coded to `50%`. So the natural code path produced exactly the mixed-unit format the user complained about.
+2. The em-dash claim turned out to be unrelated. Hex-dumping the stored description directly from intervals.icu's API showed all bytes were ASCII (every dash was `0x2D`). The auto-correct happens in intervals.icu's web editor when a human edits the description — typing or pasting a hyphen there can be silently converted to en/em-dash, which then breaks the parser. Programmatic writes from `sendToIntervals` are unaffected.
+
+**Fix**: `src/web/intervals-format.ts` (commit `7d575b2`):
+- `formatRunTarget` now returns `${low}-${high}W` from `target_power_low/high` whenever `power.source !== "none" && power.ftp > 0`.
+- Segments without explicit watts but with FTP available synthesise a Stryd Z1 Easy 65–80% CP band via a new `easyZ1Watts(ftp)` helper — covers warm-up / cool-down.
+- New `formatRunRestTarget(power)` produces the same Z1 Easy band for inter-rep recovery; `50%` remains the no-FTP fallback.
+- HR fallback retained when `power.source === "none"`.
+
+**Prevention**:
+- New vitest case `tests/web/intervals-format.test.ts` pins the canonical tempo workout output line-for-line (`Warm-up`, `- 6m40s 163-200W`, `2x`, `- 6m 200-225W`, `- 3m 163-200W`, …) plus an explicit ASCII-only assertion: `expect(text.charCodeAt(i)).toBeLessThanOrEqual(0x7f)` over every byte of the description. Any future stray en/em-dash, smart quote, or NBSP introduced by code changes fails the assertion immediately.
+- Memory note added in `reference_intervals_icu.md` documenting the intervals.icu UI auto-correct so the next debugging session doesn't repeat the "is our formatter outputting unicode?" goose chase. The diagnostic move is to fetch the stored description over the API and check the bytes — never trust a paste-back, which may itself be normalised by the terminal or shell.
+- General lesson: when a user reports a rendering bug in someone else's UI, dump the bytes our system actually sent before assuming our system is at fault. Hex evidence settles it in one tool call.
