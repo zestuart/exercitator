@@ -24,22 +24,41 @@ function formatDuration(secs: number): string {
 	return `${m}m${s}s`;
 }
 
+/**
+ * Stryd Z1 Easy lower band (65–80% CP). Used as a synthesised target for
+ * warm-up / cool-down / recovery segments that lack explicit power bands but
+ * run alongside a known FTP — keeps the intervals.icu chart in watts end-to-end.
+ */
+function easyZ1Watts(ftp: number): { low: number; high: number } {
+	return { low: Math.round(ftp * 0.65), high: Math.round(ftp * 0.8) };
+}
+
 function formatRunTarget(seg: WorkoutSegment, power: PowerContext): string {
-	// Power targets (running with power source)
-	if (
-		power.source !== "none" &&
-		power.ftp > 0 &&
-		seg.target_power_low != null &&
-		seg.target_power_high != null
-	) {
-		const lowPct = Math.round((seg.target_power_low / power.ftp) * 100);
-		const highPct = Math.round((seg.target_power_high / power.ftp) * 100);
-		if (lowPct === 0) return `${highPct}%`;
-		return `${lowPct}-${highPct}%`;
+	const hasPower = power.source !== "none" && power.ftp > 0;
+
+	// Explicit power band on the segment → emit absolute watts.
+	if (hasPower && seg.target_power_low != null && seg.target_power_high != null) {
+		return `${seg.target_power_low}-${seg.target_power_high}W`;
 	}
 
-	// HR zone fallback
+	// No explicit band but FTP known → synthesise Stryd Z1 Easy 65–80% CP so
+	// warm-up / cool-down / recovery segments still render as watts.
+	if (hasPower) {
+		const z1 = easyZ1Watts(power.ftp);
+		return `${z1.low}-${z1.high}W`;
+	}
+
+	// HR zone fallback (no power source / FTP unknown).
 	return formatHrTarget(seg);
+}
+
+/** Recovery target between repeats — Stryd Z1 Easy watts when FTP known, else 50%. */
+function formatRunRestTarget(power: PowerContext): string {
+	if (power.source !== "none" && power.ftp > 0) {
+		const z1 = easyZ1Watts(power.ftp);
+		return `${z1.low}-${z1.high}W`;
+	}
+	return "50%";
 }
 
 function formatHrTarget(seg: WorkoutSegment): string {
@@ -167,7 +186,8 @@ export function buildIntervalsDescription(suggestion: WorkoutSuggestion): string
 				const workTarget = target || "";
 				lines.push(`- ${formatDuration(seg.work_duration_secs)} ${workTarget}`.trimEnd());
 				if (seg.rest_duration_secs) {
-					lines.push(`- ${formatDuration(seg.rest_duration_secs)} 50%`);
+					const restTarget = formatRunRestTarget(suggestion.power_context);
+					lines.push(`- ${formatDuration(seg.rest_duration_secs)} ${restTarget}`);
 				}
 				lines.push("");
 			} else {
