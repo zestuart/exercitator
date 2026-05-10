@@ -152,12 +152,14 @@ export function criticalPowerFromContext(
 	strydCp: number | null,
 	strydCpUpdatedAt: string | null,
 ): CriticalPowerBlock {
-	// `watts` is the FTP the engine prescribed against. When Stryd CP is
-	// available (`strydCp != null`) the engine sets `powerContext.ftp` to the
-	// rounded Stryd CP, so the two values agree by construction. When no
-	// Stryd creds are configured, fall back to whichever side has a non-zero
-	// number (issue #31 — closed by removing the staleness override).
-	const chosenFtp = powerContext.ftp > 0 ? powerContext.ftp : strydCp;
+	// `watts` is the authoritative critical-power figure for the wire.
+	// Stryd CP wins when present, full stop — `/status` and `/dashboard`
+	// build their `powerContext` directly from `detectPowerSource()` and
+	// never route through `suggestWorkoutFromData`'s engine-level override,
+	// so the function itself must enforce the precedence (regression of
+	// #31, fixed in #32). Fall through to `powerContext.ftp` (intervals.icu
+	// rolling FTP) only when no Stryd CP is available.
+	const chosenFtp = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
 	return {
 		watts: chosenFtp != null ? Math.round(chosenFtp) : null,
 		source: mapWirePowerSource(powerContext.source, strydCp != null),

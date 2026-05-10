@@ -73,20 +73,20 @@ describe("criticalPowerFromContext", () => {
 		expect(cp.watts).toBe(312);
 	});
 
-	it("defensively prefers powerContext.ftp over strydCp when they disagree", () => {
-		// Engine no longer produces this input shape (issue #31 removed the
-		// staleness override that could set ftp != strydCp on the Stryd path).
-		// Kept as a unit test of the function's argument precedence — if a
-		// future engine change ever reintroduces divergence, the wire `watts`
-		// must mirror what was actually prescribed against, not the raw Stryd
-		// number. Wire source stays stryd_direct because we did query Stryd.
+	it("Stryd CP wins when powerContext.ftp differs (dashboard/status regression #32)", () => {
+		// /status and /dashboard build powerContext from detectPowerSource()
+		// directly and never route through suggestWorkoutFromData, so the
+		// engine-level Stryd override never fires on this wire CP block.
+		// criticalPowerFromContext must enforce Stryd-wins itself or the wire
+		// emits intervals.icu rolling FTP under a `stryd_direct` label —
+		// exactly the divergence #31 was supposed to close.
 		const cp = criticalPowerFromContext(
-			{ ...pcStryd, ftp: 322, rolling_ftp: 322 },
-			274,
-			"2026-04-07T00:00:00Z",
+			{ ...pcStryd, ftp: 315, rolling_ftp: 315 },
+			286,
+			"2026-04-20T00:00:00Z",
 		);
 		expect(cp.source).toBe("stryd_direct");
-		expect(cp.watts).toBe(322);
+		expect(cp.watts).toBe(286);
 	});
 
 	it("stryd_intervals when power context is stryd but no direct CP", () => {

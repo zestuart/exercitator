@@ -3,6 +3,29 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-05-09 — Issue #31 close was wrong: `watts !== strydCp` regression on `/status` and `/dashboard` (issue #32)
+
+**What happened**: Hours after closing #31 with the claim "`critical_power.watts === Math.round(strydCp.cp)` whenever Stryd creds are configured, by construction", Excubitor's iOS Nunc card showed 315 W (intervals.icu rolling FTP) under a `source: "stryd_direct"` label while Praescriptor's data-source row showed the correct 286 W (raw Stryd CP from the same `fetchStrydCpInput` call). The exact divergence #31 was supposed to close, on the same wire field, on the same deploy day.
+
+**Root cause**: I reasoned about *one* engine path (`suggestWorkoutFromData`) and treated the wire CP block as if it always flowed through that path. It doesn't. `/status` (`src/api/handlers/status.ts:40`) and `/dashboard` (`src/api/handlers/dashboard.ts:56`) build `powerContext` directly from `detectPowerSource(data.activities)` and pass that straight into `criticalPowerFromContext`, never calling `suggestWorkoutFromData`. The engine-level Stryd override at `src/engine/suggest.ts:170` (`powerContext.ftp = Math.round(strydCp.cp)`) only runs on the *suggestion* path. On status/dashboard, `powerContext.ftp` was whatever intervals.icu rolling FTP `detectPowerSource` produced (315 W). `criticalPowerFromContext`'s precedence (`powerContext.ftp > 0 ? powerContext.ftp : strydCp`) then picked the rolling FTP. The defensive unit test I wrote during the doc-sync hours later (`defensively prefers powerContext.ftp over strydCp when they disagree`) actively *pinned* the bug — I had renamed it from a stale-comment cleanup, with rationale that read like sound engineering and was structurally wrong.
+
+**Fix**: Single-line precedence flip at `src/api/payload.ts:161`:
+
+```ts
+const chosenFtp = strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null);
+```
+
+Now Stryd CP wins whenever present, *inside the function itself* — independent of whether the caller routed through the suggestion engine. Stryd-less users (Garmin / intervals.icu only) still get the rolling-FTP fallback. The defensive-precedence test was rewritten as a regression test that pins the exact dashboard/status input shape (`ftp=315, strydCp=286 → watts=286`).
+
+**Prevention**:
+
+1. **"By construction" is a load-bearing claim — earn it before saying it.** When I closed #31 I hadn't traced every call site of `criticalPowerFromContext`. The function had three call sites (`status.ts`, `dashboard.ts`, plus the suggestion-block embedding); only one of them upstream-applied the override. A two-minute `rg criticalPowerFromContext` would have shown the missing path. Lesson: when claiming structural impossibility, list the call sites explicitly in the close note. If the list isn't short and obvious, the claim is wrong.
+2. **Push security/correctness invariants into the function, not the caller.** The 2026-05-01 entry's prevention #3 ("when two surfaces compute the same logical value, route them through one helper") covered FTP fetching (`fetchStrydCpInput`) but not the precedence decision. Three handlers fetched Stryd CP through one helper, then independently composed `(powerContext, strydCp)` and passed the pair to a function whose precedence didn't enforce the invariant. The fix moves the invariant *inside* `criticalPowerFromContext` so any future handler that calls it inherits the right semantics by default.
+3. **Defensive tests must defend the right thing.** The "defensively prefers powerContext.ftp over strydCp" test I kept hours earlier was protecting an invariant that didn't exist. Rationale-by-comment is not a substitute for tracing the actual call graph. When a test's name and rationale start describing a hypothetical future code path, ask whether you're really defending current behaviour or just inventing a constraint.
+4. **A doc-sync that touches a test comment without reading the test's call sites is dangerous.** During the same-day doc-sync, I rewrote the test's comment on the basis of `git grep STRYD_CP_STALE` results. I never grep'd for callers of `criticalPowerFromContext`. The audit was thorough on the *removed-symbol* axis and blind on the *path-coverage* axis.
+
+**Tests changed**: `defensively prefers powerContext.ftp over strydCp when they disagree` (added during 2026-05-09 doc-sync) → replaced with `Stryd CP wins when powerContext.ftp differs (dashboard/status regression #32)`. Same input shape, inverted expectation. 401/401 green.
+
 ## 2026-05-09 — Reverted Stryd CP staleness override (issue #31)
 
 **What happened**: Excubitor (Nunc) iPhone client surfaced a `critical_power.watts` value on its Exercitatio "Critical Power" card that disagreed with both the Stryd PowerCenter app and Praescriptor's web header. All three nominally referenced the same `stryd_direct` source. Filed as issue #31 with a recommended additive `stryd_cp_w` field on `CriticalPowerBlock` so clients could choose between "engine's prescribing FTP" (`watts`) and "raw Stryd authority" (`stryd_cp_w`).
