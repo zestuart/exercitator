@@ -37,23 +37,16 @@ import { selectWorkoutCategory } from "./workout-selector.js";
 // Re-export for Praescriptor consumption
 export type { VigilResult } from "./vigil/index.js";
 
-/** Stryd Critical Power input for the engine. ageDays = null means unknown
- *  age (treated as fresh). The engine uses ageDays to detect stale CP and
- *  optionally fall back to intervals.icu's rolling FTP after a layoff. */
+/** Stryd Critical Power input for the engine. `ageDays` = null means unknown
+ *  age. The engine treats Stryd CP as authoritative when present regardless
+ *  of age — keeping CP fresh is the athlete's responsibility (book a CP test
+ *  when fitness has materially shifted). `ageDays` is still surfaced on the
+ *  HTTP API `critical_power.updated_at` and Praescriptor's data-source row so
+ *  staleness is visible to the human in the loop. */
 export interface StrydCpInput {
 	cp: number;
 	ageDays: number | null;
 }
-
-/** Stryd CP older than this is considered stale: a recently-fit athlete who
- *  hasn't run hard in this window may have a CP estimate that hasn't kept up
- *  with their actual fitness. */
-export const STRYD_CP_STALE_DAYS = 30;
-
-/** When Stryd CP is stale, fall back to intervals.icu rolling FTP only if it
- *  exceeds Stryd CP by at least this ratio. Avoids flipping FTP back and
- *  forth on noise. */
-export const STRYD_CP_STALE_OVERRIDE_RATIO = 1.05;
 
 const DEFAULT_SPORT_SETTINGS: Omit<SportSettings, "type"> = {
 	ftp: null,
@@ -163,39 +156,27 @@ export function suggestWorkoutFromData(
 
 	const powerContext = detectPowerSource(activities);
 
-	// Override FTP with Stryd critical power when available — authoritative
-	// source directly from the foot pod, not inferred by intervals.icu.
+	// Use Stryd critical power as FTP when available — authoritative source
+	// directly from the foot pod, not inferred by intervals.icu. No staleness
+	// override against rolling FTP: Stryd's CP estimate may stall after a
+	// layoff (it's anchored on recent hard efforts), but second-guessing it
+	// from intervals.icu's NP-derived FTP produced its own failure modes
+	// (engine and Praescriptor disagreed; HTTP API `watts` and `source` could
+	// disagree on which engine produced the headline number — issue #31).
+	// Athlete is on the hook to book a fresh CP test when fitness shifts.
 	// If the athlete has a valid CP but no recent Stryd run data (e.g. ran
 	// with just Apple Watch), upgrade the source to "stryd" — the CP API
 	// only returns a value if the athlete IS a Stryd user.
 	if (strydCp != null) {
-		const inferredFtp = powerContext.rolling_ftp ?? powerContext.ftp;
-		const isStale = strydCp.ageDays != null && strydCp.ageDays > STRYD_CP_STALE_DAYS;
-		const inferredHigher =
-			inferredFtp != null && inferredFtp > strydCp.cp * STRYD_CP_STALE_OVERRIDE_RATIO;
-
-		let chosenFtp = Math.round(strydCp.cp);
-		if (isStale && inferredHigher && inferredFtp != null) {
-			chosenFtp = Math.round(inferredFtp);
-			powerContext.warnings.push(
-				`Stryd CP (${Math.round(strydCp.cp)} W, ${strydCp.ageDays}d old) overridden by higher intervals.icu rolling FTP (${chosenFtp} W). Consider a fresh Stryd CP test to recalibrate zones.`,
-			);
-		} else if (isStale) {
-			powerContext.warnings.push(
-				`Stryd CP is ${strydCp.ageDays} days old \u2014 consider a fresh CP test if fitness has changed.`,
-			);
-		}
-
+		const chosenFtp = Math.round(strydCp.cp);
 		powerContext.ftp = chosenFtp;
 		powerContext.rolling_ftp = chosenFtp;
 		if (powerContext.source === "none") {
 			powerContext.source = "stryd";
 			powerContext.confidence = "low";
-			if (!powerContext.warnings.some((w) => w.includes("Stryd"))) {
-				powerContext.warnings.push(
-					"FTP set from Stryd critical power API \u2014 no recent Stryd run data",
-				);
-			}
+			powerContext.warnings.push(
+				"FTP set from Stryd critical power API \u2014 no recent Stryd run data",
+			);
 		}
 	}
 	const readiness = computeReadiness(wellness, activities, now);

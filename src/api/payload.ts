@@ -152,12 +152,11 @@ export function criticalPowerFromContext(
 	strydCp: number | null,
 	strydCpUpdatedAt: string | null,
 ): CriticalPowerBlock {
-	// `watts` reports the FTP the engine actually prescribed against, not the
-	// raw Stryd CP. After the staleness override (engine.suggestWorkoutFromData)
-	// these can diverge: when Stryd CP is stale and intervals.icu rolling FTP
-	// is materially higher, the engine sets `powerContext.ftp` to the inferred
-	// value. The wire `source` still says `stryd_direct` (we did query Stryd);
-	// the warning in `power_context.warnings` carries the override reason.
+	// `watts` is the FTP the engine prescribed against. When Stryd CP is
+	// available (`strydCp != null`) the engine sets `powerContext.ftp` to the
+	// rounded Stryd CP, so the two values agree by construction. When no
+	// Stryd creds are configured, fall back to whichever side has a non-zero
+	// number (issue #31 — closed by removing the staleness override).
 	const chosenFtp = powerContext.ftp > 0 ? powerContext.ftp : strydCp;
 	return {
 		watts: chosenFtp != null ? Math.round(chosenFtp) : null,

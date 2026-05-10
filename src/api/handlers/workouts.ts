@@ -175,7 +175,7 @@ export async function handleWorkoutsSuggested(
 
 		// Authoritative CP from Stryd's foot pod when credentials are present —
 		// drives the stryd_direct wire enum and overrides intervals.icu's FTP.
-		// Engine handles staleness override against intervals.icu rolling FTP.
+		// Stryd CP is trusted regardless of age (no rolling-FTP fallback).
 		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
 		const strydCp = strydCpInput?.cp ?? null;
 

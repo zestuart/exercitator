@@ -86,7 +86,8 @@ export async function generatePrescriptions(
 	const now = new Date();
 
 	// Fetch authoritative critical power from Stryd (used as run FTP).
-	// Engine handles staleness override against intervals.icu rolling FTP.
+	// Stryd CP is trusted regardless of age — athlete's responsibility to
+	// book a fresh CP test when fitness shifts (no rolling-FTP override).
 	const strydCp = profile.stryd ? await fetchStrydCpInput(strydClient ?? null, now) : null;
 
 	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);

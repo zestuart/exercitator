@@ -3,6 +3,22 @@
 Chronological log of bugs, failures, surprises, and insights. Claude maintains this
 proactively. Entries are append-only — never edit or remove past entries.
 
+## 2026-05-09 — Reverted Stryd CP staleness override (issue #31)
+
+**What happened**: Excubitor (Nunc) iPhone client surfaced a `critical_power.watts` value on its Exercitatio "Critical Power" card that disagreed with both the Stryd PowerCenter app and Praescriptor's web header. All three nominally referenced the same `stryd_direct` source. Filed as issue #31 with a recommended additive `stryd_cp_w` field on `CriticalPowerBlock` so clients could choose between "engine's prescribing FTP" (`watts`) and "raw Stryd authority" (`stryd_cp_w`).
+
+**Root cause**: The 2026-05-01 staleness override (lessons.md entry "MCP/Praescriptor disagreed on FTP, plus stale Stryd CP under-prescribed", commit `d744097`) protected against a real failure mode — post-layoff Stryd CP sits on pre-layoff hard efforts and under-prescribes by a zone — but it created a new failure mode by design: when the override fired, `powerContext.ftp` flipped to intervals.icu rolling FTP while `mapWirePowerSource` still emitted `stryd_direct` (the wire enum branched on "did we query Stryd?", not "did we use Stryd's number?"). Wire `watts` and `source` could disagree on which engine produced the headline number, with no signal on `/status` (the override warning rode only on `/workouts/suggested`'s `power_context.warnings`).
+
+**Fix**: User chose to remove the override entirely rather than ship the additive `stryd_cp_w` field. Trade-off accepted: simpler model (Stryd CP is authoritative when present, full stop) at the cost of pushing CP-freshness responsibility onto the athlete (book a fresh CP test when fitness shifts). Removed `STRYD_CP_STALE_DAYS` and `STRYD_CP_STALE_OVERRIDE_RATIO` constants, the `inferredFtp/isStale/inferredHigher` block in `suggestWorkoutFromData`, and both warning strings. `StrydCpInput.ageDays` retained because the HTTP API `critical_power.updated_at` and Praescriptor's data-source row still surface CP age to the human in the loop — the *information* is preserved, only the *automatic action* is dropped.
+
+**Prevention**:
+
+1. **Authoritative-source decisions are a one-way door, not a tunable.** The 2026-05-01 entry's "Authoritative-source flags must come with a freshness contract" guidance was technically followed (we logged the override) but the engine still made the override automatic. The user-facing failure (Excubitor showing wrong number) was harder to debug than the original under-prescription would have been. Lesson: when the source-of-truth is also the user's mental model, don't let the engine silently substitute. Surface the staleness, let the human act.
+2. **Wire-enum semantics must reflect the value, not the *intent*.** `mapWirePowerSource` returning `stryd_direct` based on "we queried Stryd" was a defensible-on-paper choice that broke the moment the engine diverged from the Stryd value. If we ever re-introduce an override, the wire enum must change with it (e.g. a fourth `stryd_overridden` value), not just rely on a warning attached to a sibling endpoint.
+3. **Reverting prior protective code is legitimate, but check the lesson it produced.** The 2026-05-01 entry remains canonical for the original failure mode — if the athlete returns from a layoff with a stale CP and runs the prescription at RPE 1, the engine won't catch it now. That's an explicit acceptance, not a regression.
+
+**Tests changed**: Two override-specific tests removed (`falls back to intervals.icu rolling FTP when Stryd CP is stale and lower`, `keeps Stryd CP when stale but inferred FTP is not materially higher`); third test (`uses fresh Stryd CP without warning even if lower than intervals FTP`) replaced with `trusts Stryd CP regardless of age — no rolling-FTP override` covering both stale and fresh paths. 401/401 green.
+
 ## 2026-05-03 — v0.3 deploy (push-to-stryd + form-text) blocked twice by pre-existing SAST findings
 
 **What happened**: Routine deploy of two new HTTP API endpoints (`POST /api/users/:userId/push-to-stryd` and `GET /api/users/:userId/form-text`) for the Excubitor/Nunc iPhone client. Lint, typecheck, and 399/399 tests all green. `--mode diff` SAST scan blocked the deploy twice in succession on two pre-existing High findings that were brought into scope by the changed files:
