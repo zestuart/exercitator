@@ -64,18 +64,22 @@ describe("criticalPowerFromContext", () => {
 		warnings: [],
 	};
 
-	it("stryd_direct when strydCp is present; watts come from the engine's chosen FTP", () => {
-		// powerContext.ftp = strydCp in the no-override case (engine override applied
-		// upstream sets them equal). Use matching values here.
+	it("stryd_direct when strydCp is present; watts come from powerContext.ftp", () => {
+		// Post-#31: the engine sets powerContext.ftp = Math.round(strydCp.cp)
+		// when Stryd CP is present, so the two arguments always agree on the
+		// Stryd path. Test with matching values to mirror real engine output.
 		const cp = criticalPowerFromContext({ ...pcStryd, ftp: 312 }, 312, "2026-04-20T00:00:00Z");
 		expect(cp.source).toBe("stryd_direct");
 		expect(cp.watts).toBe(312);
 	});
 
-	it("reports the engine's overridden FTP, not the raw stale Stryd CP", () => {
-		// Engine staleness override fires: stale Stryd CP = 274, engine chose
-		// inferred FTP = 322. Wire source still says stryd_direct (we fetched Stryd),
-		// but watts must reflect what was actually prescribed against (322).
+	it("defensively prefers powerContext.ftp over strydCp when they disagree", () => {
+		// Engine no longer produces this input shape (issue #31 removed the
+		// staleness override that could set ftp != strydCp on the Stryd path).
+		// Kept as a unit test of the function's argument precedence — if a
+		// future engine change ever reintroduces divergence, the wire `watts`
+		// must mirror what was actually prescribed against, not the raw Stryd
+		// number. Wire source stays stryd_direct because we did query Stryd.
 		const cp = criticalPowerFromContext(
 			{ ...pcStryd, ftp: 322, rolling_ftp: 322 },
 			274,

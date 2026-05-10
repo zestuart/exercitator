@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 **Name**: Exercitator + Praescriptor
-**Description**: MCP bridge for Claude to access the intervals.icu API, plus a web UI serving daily workout prescriptions. Hosted on Arca Ingens via Docker and Tailscale.
+**Description**: MCP bridge for Claude to access the intervals.icu API, plus a web UI serving daily workout prescriptions. Hosted on Cogitator (Mac Mini M4 Pro) via Docker and Tailscale (migrated from Arca Ingens 2026-04-04).
 **Domains**: `exercitator.tail7ab379.ts.net` (MCP, funnel — public) · `praescriptor.tail7ab379.ts.net` (web UI, serve — tailnet only)
 **Repository**: https://github.com/zestuart/exercitator
 
@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Type checking**: `tsc --noEmit`
 - **Test runner**: Vitest
 - **Containerisation**: Docker + Docker Compose
-- **Networking**: Tailscale funnel (MCP, public) + Tailscale serve (Praescriptor + HTTP API, tailnet-only) on Arca Ingens
+- **Networking**: Tailscale funnel (MCP, public) + Tailscale serve (Praescriptor + HTTP API, tailnet-only) on Cogitator
 - **External API**: [intervals.icu](https://intervals.icu) REST API
 - **HTTP API**: bearer-scoped REST surface for native clients (Excubitor iOS/watchOS) — port 8643, tailnet-only
 
@@ -276,7 +276,8 @@ STRYD_EMAIL=<your-stryd-email>                    # Optional: Ze's Stryd FIT enr
 STRYD_PASSWORD=<your-stryd-password>              # Optional: Ze's Stryd FIT enrichment
 STRYD_EMAIL_PAM=<pam-stryd-email>                 # Optional: Pam's Stryd FIT enrichment
 STRYD_PASSWORD_PAM=<pam-stryd-password>           # Optional: Pam's Stryd FIT enrichment
-QNAP_PASSWORD=<arca-ingens-password>              # SSH to Arca Ingens (dominus@192.168.4.180:2022)
+cogitatorPass=<cogitator-password>                # SSH to Cogitator password fallback (dominus@cogitator.tail7ab379.ts.net) — key auth preferred via ~/.ssh/id_ed25519
+QNAP_PASSWORD=<arca-ingens-password>              # Legacy: Arca Ingens decommissioned 2026-04-04; retained for any one-off historical access
 ```
 
 ### SAST scanning
