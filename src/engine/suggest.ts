@@ -179,7 +179,10 @@ export function suggestWorkoutFromData(
 			);
 		}
 	}
-	const readiness = computeReadiness(wellness, activities, now);
+	const readiness = computeReadiness(wellness, activities, now, {
+		ftp: powerContext.ftp > 0 ? powerContext.ftp : undefined,
+		sport,
+	});
 	const staleness = computeStaleness(activities, sport, now);
 
 	// Vigil: biomechanical deviation alert (running sports only, requires Stryd metrics in DB)

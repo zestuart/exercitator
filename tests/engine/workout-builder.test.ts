@@ -281,6 +281,38 @@ describe("buildWorkout", () => {
 		}
 	});
 
+	it("caps every running warm-up at 6 minutes regardless of CTL", () => {
+		// User feedback: by 6 min they're warm; further warm-up is just the
+		// watch nagging them to slow down. WARMUP_MAX_SECS = 360 should hold
+		// across all CTL values and all run categories.
+		for (const cat of [
+			"recovery",
+			"base",
+			"progression",
+			"tempo",
+			"threshold",
+			"intervals",
+			"long",
+		] as const) {
+			for (const ctl of [10, 25, 50, 75, 100]) {
+				const result = buildWorkout(cat, "Run", runSettings, 70, ctl, strydCtx);
+				const warmup = result.segments.find((s) => s.name === "Warm-up");
+				expect(
+					warmup?.duration_secs ?? 0,
+					`${cat} @ CTL ${ctl} warm-up should be ≤ 360s`,
+				).toBeLessThanOrEqual(360);
+			}
+		}
+	});
+
+	it("threshold warm-up shrinks from 9 min to 6 min after cap", () => {
+		// Pre-fix: scaled(900, 0.6) = 540s = 9:00 at low CTL.
+		// Post-fix: capped at 360s = 6:00.
+		const lowCtl = buildWorkout("threshold", "Run", runSettings, 70, 20, strydCtx);
+		const warmup = lowCtl.segments.find((s) => s.name === "Warm-up");
+		expect(warmup?.duration_secs).toBe(360);
+	});
+
 	it("every running warm-up sits at Stryd Z1 Easy", () => {
 		// User explicitly aligned warm-ups to Stryd's published warmup band
 		// (65–80% CP). Every run category's warm-up segment should carry

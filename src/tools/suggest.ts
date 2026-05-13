@@ -47,7 +47,9 @@ export function registerSuggestTools(
 	server.tool(
 		"submit_cross_training_rpe",
 		"Submit RPE (1–10) for a cross-training activity that lacks strain data. " +
-			"Use this when suggest_workout returns status 'awaiting_input'. " +
+			"Accepts any recent cross-training activity ID (not just today's). " +
+			"Use when suggest_workout returns status 'awaiting_input', or proactively for a " +
+			"prior-day weights / climbing session whose strain the engine couldn't classify. " +
 			"After submission, call suggest_workout again for an updated prescription.",
 		{
 			// Same allowlist as the HTTP API (`isValidIntervalsId`). Belt-and-
@@ -69,11 +71,16 @@ export function registerSuggestTools(
 			const activity = await client.get<{ id: string; moving_time: number }>(
 				`/activity/${encodedId}`,
 			);
-			const syntheticSessionRpe = rpe * activity.moving_time;
+			const syntheticSessionRpe = Math.round(rpe * activity.moving_time);
 
-			// Write RPE back to intervals.icu
+			// Write both fields. The cross-training strain cascade reads
+			// session_rpe; perceived_exertion provides a separate signal used
+			// by isHardSession() for run prescriptions. intervals.icu doesn't
+			// auto-derive session_rpe from perceived_exertion, so we set it
+			// explicitly here as RPE × moving_time (Foster's session-RPE).
 			await client.put(`/activity/${encodedId}`, {
 				perceived_exertion: rpe,
+				session_rpe: syntheticSessionRpe,
 			});
 
 			return {
@@ -84,7 +91,7 @@ export function registerSuggestTools(
 							success: true,
 							activityId,
 							rpe,
-							syntheticSessionRpe: Math.round(syntheticSessionRpe),
+							syntheticSessionRpe,
 							message: `RPE ${rpe} recorded for activity ${activityId}. Call suggest_workout again for updated prescription.`,
 						}),
 					},

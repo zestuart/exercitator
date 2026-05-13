@@ -5,11 +5,36 @@
 
 import type { ActivitySummary, WellnessRecord } from "./types.js";
 
+const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
+const SWIM_TYPES = ["Swim", "OpenWaterSwim", "VirtualSwim"];
+
+/** Rebuild detection: low chronic load + intact power capacity. An athlete
+ *  returning to training after a layoff has CTL trailing real fitness; the
+ *  TSB-vs-CTL signal flags them as suppressed when they aren't. We lift the
+ *  TSB component floor when CTL < 30 AND FTP/CTL > 12 W per CTL-point — the
+ *  threshold roughly corresponds to "trained athlete in rebuild" vs "true
+ *  beginner at the same CTL". */
+const REBUILD_CTL_CEILING = 30;
+const REBUILD_FTP_PER_CTL = 12;
+const REBUILD_TSB_FLOOR = 60;
+
+export interface ReadinessOptions {
+	/** Athlete's current FTP/CP in watts. When provided alongside CTL,
+	 *  the rebuild detection can lift the TSB component floor. */
+	ftp?: number;
+	/** Target sport for the prescription. When provided, recency filters to
+	 *  same-sport activities only — a cross-sport activity shouldn't suppress
+	 *  readiness for a different prescription. */
+	sport?: "Run" | "Swim";
+}
+
 export interface ReadinessResult {
 	score: number;
 	warnings: string[];
 	/** When true, 3+ recent nights of poor sleep detected — should cap intensity. */
 	sleepDebt: boolean;
+	/** When true, the TSB floor was applied (low CTL + intact FTP). */
+	rebuild: boolean;
 	components: {
 		tsb: number;
 		sleep: number;
@@ -30,14 +55,30 @@ function lerp(value: number, inMin: number, inMax: number, outMin: number, outMa
 	return outMin + t * (outMax - outMin);
 }
 
-/** TSB component: CTL - ATL, normalised. TSB +20 → 100, TSB -20 → 0. */
-function computeTsb(wellness: WellnessRecord[]): number | null {
+/** TSB component: CTL - ATL, normalised. TSB +20 → 100, TSB -20 → 0.
+ *  Returns { score, rebuild } where rebuild=true indicates the floor was applied. */
+function computeTsb(
+	wellness: WellnessRecord[],
+	ftp?: number,
+): { score: number; rebuild: boolean } | null {
 	// Use most recent wellness record with CTL and ATL
 	for (let i = wellness.length - 1; i >= 0; i--) {
 		const w = wellness[i];
 		if (w.ctl != null && w.atl != null) {
 			const tsb = w.ctl - w.atl;
-			return clamp(lerp(tsb, -20, 20, 0, 100), 0, 100);
+			let score = clamp(lerp(tsb, -20, 20, 0, 100), 0, 100);
+			let rebuild = false;
+			if (
+				ftp != null &&
+				ftp > 0 &&
+				w.ctl > 0 &&
+				w.ctl < REBUILD_CTL_CEILING &&
+				ftp / w.ctl > REBUILD_FTP_PER_CTL
+			) {
+				rebuild = true;
+				if (score < REBUILD_TSB_FLOOR) score = REBUILD_TSB_FLOOR;
+			}
+			return { score, rebuild };
 		}
 	}
 	return null;
@@ -79,20 +120,40 @@ function computeHrv(wellness: WellnessRecord[]): number | null {
 	return 0;
 }
 
-/** Recency component: hours since last activity. Sigmoid around 24h. */
-function computeRecency(activities: ActivitySummary[], now: Date): number | null {
+/** Recency component: hours since last activity. Sigmoid around 24h.
+ *
+ *  Without `sport`: returns null when no activities at all (no data signal).
+ *  With `sport`: only same-sport activities count; returns 100 (fully rested
+ *  for this sport) when no same-sport activity exists in the window. A swim or
+ *  ride shouldn't suppress readiness for a Run prescription. */
+function computeRecency(
+	activities: ActivitySummary[],
+	now: Date,
+	sport?: "Run" | "Swim",
+): number | null {
 	if (activities.length === 0) return null;
 
-	// Find most recent activity by start_date_local + moving_time
+	if (sport) {
+		const sportTypes = sport === "Run" ? RUN_TYPES : SWIM_TYPES;
+		let latestEnd = 0;
+		for (const a of activities) {
+			if (!sportTypes.includes(a.type)) continue;
+			const start = new Date(a.start_date_local).getTime();
+			const end = start + a.moving_time * 1000;
+			if (end > latestEnd) latestEnd = end;
+		}
+		if (latestEnd === 0) return 100; // No same-sport activity → fully rested for this sport
+		const hoursSince = (now.getTime() - latestEnd) / (1000 * 3600);
+		return 100 / (1 + Math.exp(-0.15 * (hoursSince - 24)));
+	}
+
 	let latestEnd = 0;
 	for (const a of activities) {
 		const start = new Date(a.start_date_local).getTime();
 		const end = start + a.moving_time * 1000;
 		if (end > latestEnd) latestEnd = end;
 	}
-
 	const hoursSince = (now.getTime() - latestEnd) / (1000 * 3600);
-	// Sigmoid: 100 / (1 + exp(-0.15 * (hours - 24)))
 	return 100 / (1 + Math.exp(-0.15 * (hoursSince - 24)));
 }
 
@@ -121,17 +182,26 @@ function computeSubjective(wellness: WellnessRecord[]): number | null {
 
 const NEUTRAL = 50;
 
+const WEIGHT_TSB = 0.3;
+const WEIGHT_SLEEP = 0.2;
+const WEIGHT_HRV = 0.2;
+const WEIGHT_RECENCY = 0.15;
+const WEIGHT_SUBJECTIVE = 0.15;
+
 export function computeReadiness(
 	wellness: WellnessRecord[],
 	activities: ActivitySummary[],
 	now: Date = new Date(),
+	options: ReadinessOptions = {},
 ): ReadinessResult {
 	const warnings: string[] = [];
 
-	const tsb = computeTsb(wellness);
+	const tsbResult = computeTsb(wellness, options.ftp);
+	const tsb = tsbResult?.score ?? null;
+	const rebuild = tsbResult?.rebuild ?? false;
 	const sleep = computeSleep(wellness);
 	const hrv = computeHrv(wellness);
-	const recency = computeRecency(activities, now);
+	const recency = computeRecency(activities, now, options.sport);
 	const subjective = computeSubjective(wellness);
 
 	const components = {
@@ -148,17 +218,39 @@ export function computeReadiness(
 		warnings.push("Limited wellness data — suggestion may be less accurate");
 	}
 
-	const score = clamp(
-		Math.round(
-			components.tsb * 0.3 +
-				components.sleep * 0.2 +
-				components.hrv * 0.2 +
-				components.recency * 0.15 +
-				components.subjective * 0.15,
-		),
-		0,
-		100,
-	);
+	// Weighted aggregation. With ≥ 3 real components, renormalise across present
+	// components — a missing component (e.g. subjective when no RPE logged)
+	// shouldn't silently drag readiness toward 50. With < 3, fall back to NEUTRAL
+	// defaults so a thin-data score stays conservative.
+	let score: number;
+	if (realCount >= 3) {
+		const parts: Array<[number | null, number]> = [
+			[tsb, WEIGHT_TSB],
+			[sleep, WEIGHT_SLEEP],
+			[hrv, WEIGHT_HRV],
+			[recency, WEIGHT_RECENCY],
+			[subjective, WEIGHT_SUBJECTIVE],
+		];
+		const presentParts = parts.filter(([v]) => v != null) as Array<[number, number]>;
+		const totalWeight = presentParts.reduce((s, [, w]) => s + w, 0);
+		score = clamp(
+			Math.round(presentParts.reduce((s, [v, w]) => s + v * w, 0) / totalWeight),
+			0,
+			100,
+		);
+	} else {
+		score = clamp(
+			Math.round(
+				components.tsb * WEIGHT_TSB +
+					components.sleep * WEIGHT_SLEEP +
+					components.hrv * WEIGHT_HRV +
+					components.recency * WEIGHT_RECENCY +
+					components.subjective * WEIGHT_SUBJECTIVE,
+			),
+			0,
+			100,
+		);
+	}
 
 	// ── Advisory warnings for individual components ──────────────────
 	// These do not change the score or workout selection — they are
@@ -217,5 +309,5 @@ export function computeReadiness(
 		warnings.push("Self-reported fatigue or soreness is elevated");
 	}
 
-	return { score, warnings, sleepDebt, components };
+	return { score, warnings, sleepDebt, rebuild, components };
 }

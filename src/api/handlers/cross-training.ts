@@ -92,9 +92,16 @@ export async function handleCrossTrainingRpe(
 		return;
 	}
 
+	const sessionRpe = Math.round(rpe * activity.moving_time);
+
 	try {
+		// Write both fields. The strain cascade reads session_rpe; intervals.icu
+		// doesn't auto-derive it from perceived_exertion, so we set it as
+		// Foster's RPE × moving_time. perceived_exertion is consumed separately
+		// by isHardSession() for run prescriptions.
 		await user.intervals.put(`/activity/${encodeURIComponent(activityId)}`, {
 			perceived_exertion: rpe,
+			session_rpe: sessionRpe,
 		});
 	} catch (err) {
 		console.error("RPE write failed:", err);
@@ -102,7 +109,6 @@ export async function handleCrossTrainingRpe(
 		return;
 	}
 
-	const sessionRpe = rpe * activity.moving_time;
 	const tier = strainTier(sessionRpe);
 
 	// Invalidate the cached suggestion so the next call regenerates.

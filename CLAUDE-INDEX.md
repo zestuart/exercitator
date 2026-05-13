@@ -4,7 +4,9 @@ Index of all subsidiary documentation files. See `CLAUDE.md` for core rules, wor
 
 | File | Description |
 |------|-------------|
-| `CLAUDE.md` | Core rules, architecture, workflow, conventions, security |
+| `CLAUDE.md` | Core rules, workflow, conventions — slim operating manual with pointers |
+| `architecture.md` | File map, module responsibilities, key patterns (extracted from CLAUDE.md 2026-05-12) |
+| `deployment.md` | Cogitator deploy procedure, networking, container/volume layout (extracted from CLAUDE.md 2026-05-12) |
 | `CHANGELOG.md` | Keep a Changelog format, all user-visible changes |
 | `lessons.md` | Chronological post-mortem log (append-only) |
 | `SECURITY.md` | Security surfaces, outstanding findings, remediation history |

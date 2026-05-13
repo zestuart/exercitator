@@ -29,100 +29,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-```
-src/
-  index.ts              — entry point, transport selection, session management, HTTP API listener wiring
-  intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
-  auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
-  users.ts              — shared user profile registry (ze, pam) consumed by Praescriptor + HTTP API
-  db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines + compliance tables (better-sqlite3, WAL mode)
-  compliance/
-    types.ts            — compliance tracking type definitions
-    assess.ts           — segment-to-lap matching, binary compliance scoring
-    persist.ts          — DB read/write for prescriptions, send events, assessments, aggregates
-    aggregate.ts        — weekly/monthly rollup computation, trending queries
-  stryd/
-    client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT, post-run report fields, create/schedule/delete workouts)
-    enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
-  tools/
-    athlete.ts          — get_athlete_profile, get_sport_settings
-    activities.ts       — list_activities, get_activity, get_activity_streams, get_power_curve
-    wellness.ts         — get_wellness, update_wellness
-    events.ts           — list_events, create_event
-    suggest.ts          — suggest_workout, submit_cross_training_rpe (DSW engine + RPE submission)
-    compliance.ts       — get_compliance_summary, get_compliance_detail
-  engine/
-    types.ts            — shared TypeScript interfaces
-    date-utils.ts       — timezone-aware date string utility (localDateStr)
-    readiness.ts        — readiness score (0–100) from wellness + activity data
-    power-source.ts     — Stryd vs Garmin vs HR-only detection, load metric selection
-    sport-selector.ts   — Run vs Swim selection from load deficit + monotony rules
-    staleness.ts        — sport-specific threshold staleness detection + category ceiling
-    cross-training-strain.ts — cross-training classification, three-tier strain cascade (HRV/session_rpe/unknown)
-    workout-selector.ts — category selection (rest/recovery/base/progression/tempo/threshold/intervals/long) + cross-training guard + same-day cap
-    terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
-    workout-builder.ts  — structured segment generation per sport × category
-    suggest.ts          — top-level orchestrator: fetchTrainingData, suggestWorkoutFromData, suggestWorkoutForSport, suggestWorkout
-    vigil/
-      types.ts          — Vigil interfaces, metric weights, Stryd FIT field constants
-      fit-parser.ts     — FIT file parsing, Stryd developer field extraction, per-activity metric computation
-      metrics.ts        — scoreable metric extraction from VigilMetrics, field-to-metric-name mapping
-      baseline.ts       — 30-day rolling mean + stddev (metric window), 7-day acute window, min activity thresholds. The "building" gate counts over a wider 60-day window so an athlete who runs ~4×/month doesn't stay stuck at 4/5 activities indefinitely.
-      scorer.ts         — z-score deviation scoring, directional concern mapping, composite severity 0–3
-      index.ts          — pipeline orchestrator: check data → baselines → score → alert
-      backfill.ts       — 90-day Stryd FIT backfill + incremental per-activity processing
-  web/
-    server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
-    routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
-    prescriptions.ts    — per-user prescription generator with day-level cache
-    send.ts             — push workout to intervals.icu calendar with per-user dedup
-    send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup)
-    stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets)
-    intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
-    form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text
-    invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
-    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim).
-    security-headers.ts — defence-in-depth headers for every Praescriptor response (HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy) + CSP for HTML responses
-  api/
-    server.ts           — HTTP API listener (port 8643, co-resident with MCP; started only when EXERCITATOR_API_KEYS set)
-    router.ts           — dispatch /api/users/:userId/* to handlers with bearer-userId scoping
-    auth.ts             — bearer middleware (<client>:<userId>:<token> constant-time compare)
-    errors.ts           — JSON error envelope + jsonResponse helper
-    types.ts            — wire DTOs (independent of engine internals)
-    payload.ts          — engine → DTO mappers (readiness bands, polymorphic segment targets, Vigil → injury_warning)
-    cache.ts            — per-user response cache: Map<userId, Map<key, Entry>> with each inner map LRU-bounded at EXERCITATOR_API_CACHE_MAX_ENTRIES (default 64); 60s background prune sweeps expired entries; per-user buckets isolate cross-user cache flooding
-    validate.ts         — input validators (`isValidIntervalsId` allowlist for activity IDs reaching path-interpolated upstream URLs)
-    tz.ts               — shared `resolveTz(user, url)` — strict IANA validation of `?tz` (via `isValidTimezone`) → athlete profile timezone fallback → "UTC". Used by every handler that consumes `tz`, so a crafted query value can't reach `localDateStr` and DoS the listener via RangeError.
-    handlers/
-      health.ts         — GET /api/health (unauthenticated, 60s-cached upstream probe)
-      status.ts         — GET /api/users/:userId/status (readiness, CP, fitness/fatigue/form)
-      workouts.ts       — GET /workouts/{today,suggested,:id} (engine-backed, polymorphic targets)
-      compliance.ts     — GET /compliance/{summary,detail}
-      dashboard.ts      — GET /dashboard (status + today + suggested aggregate)
-      cross-training.ts — POST /cross-training/:activityId/rpe (unblocks 409 awaiting_input)
-      push-to-stryd.ts  — POST /push-to-stryd (bearer-scoped wrapper around `sendToStryd`; per-day dedup; `?force=true` override) — Excubitor / Nunc parity with Praescriptor's button
-      form-text.ts      — GET /form-text (today's swim prescription rendered as FORM-goggles Script `text/plain` via `buildFormDescription`)
-  rate-limit.ts         — shared in-memory token-bucket rate limiter (per userId + scope: read 60/min, write 10/min by default; 0 disables; 5-min idle bucket eviction). Used by both the HTTP API router and Praescriptor routes.
-```
+Two co-located containers off the same codebase: **Exercitator** (MCP server + HTTP API) and **Praescriptor** (web UI). The DSW (Daily Suggested Workout) engine lives under `src/engine/` and is imported by all three surfaces — no network calls between containers. Vigil (biomechanical injury warning) hangs off `src/engine/vigil/`. Compliance tracking persists prescriptions and grades execution under `src/compliance/`.
 
-### Key patterns
-
-- **Per-session McpServer**: The MCP SDK allows only one transport per `McpServer`. In streamable-http mode, each session gets its own `McpServer` + `StreamableHTTPServerTransport` instance, tracked in a session map. Sessions are capped at 100 and pruned after 5 minutes idle.
-- **Dual transport**: `MCP_TRANSPORT=stdio` for local dev (`claude mcp add`), `MCP_TRANSPORT=streamable-http` for Docker/funnel production.
-- **OAuth middleware** (`src/auth.ts`): RFC-compliant (9728, 8414, 7591). PKCE S256 (SHA-256 hash, not HMAC) + client_credentials grants. Passphrase-gated authorisation. Self-validating HMAC-SHA256 signed tokens with version-based revocation. Per-IP rate limiting and lockout. Redirect URIs validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, `http://localhost`, `http://127.0.0.1`). Request body capped at 64 KiB. Registration returns `token_endpoint_auth_method: "none"` for browser-based auth_code flow.
-- **Claude Desktop compatibility**: OAuth endpoints accept both `/oauth/*` and `/*` paths (e.g. `/authorize` and `/oauth/authorize`). The MCP handler accepts both `/` and `/mcp` — Claude Desktop POSTs to `/` after OAuth.
-- **Tool registration**: Each tool module exports a `register*Tools(server, client)` function. Tools use Zod schemas for input validation. Date parameters enforce `YYYY-MM-DD` regex. Date-only strings are appended with `T00:00:00` before forwarding to intervals.icu (which requires datetime format).
-- **DSW engine** (`src/engine/`): Pure computation over JSON — no external dependencies. Pipeline: power source detection → Stryd CP override (if available) → readiness scoring → cross-training strain assessment → sport selection → staleness check → workout category (with cross-training guard + same-day cap + staleness ceiling + HRV guard + sleep debt cap) → terrain selection → structured segments with dual-target prescription (power + HR cap). **Workout categories** align to Stryd's published 5-zone model (Run): `recovery` (Stryd Z1 Easy 65–75% CP), `base` (Z1 Easy 65–80%), `progression` (Z1→Z2 thirds 65/72/80–87%), `tempo` (Z2 Moderate sweet-spot 80–90%), `threshold` (Z3 Threshold 90–100%, 3×15min sustained), `intervals` (Z4 Interval 100–115% VO2max), `long` (Z1 Easy with optional Z2 pickup). Selector ladder by readiness: ≤20 rest, 21–35 recovery, 36–50 base, 51–65 tempo (rested ≥2d) else base, 66–80 threshold (rested ≥2d) else base, 81+ intervals (≥3d) → threshold (≥2d) → tempo (yesterday). Each segment carries `target_hr_zone` (HR safety cap) AND `stryd_zone` (1–5, Stryd power-zone export) — they don't always align under the new mapping. Staleness tiers (normal/moderate/severe) apply pace buffers and can force HR-only targets for return-to-sport safety. Staleness also requires ≥ 3 sessions in the 14-day window to consider an athlete "current" — a single session after a long break gets moderate tier (return-to-sport). Sleep debt (3+ recent poor nights) caps category at base regardless of readiness score. All date computations use `localDateStr(date, tz)` for per-user timezone awareness — "today" is correct regardless of server UTC offset. Testable in isolation with fixture data.
-- **Power source detection** (`src/engine/power-source.ts`): Supports three ecosystems: Stryd CIQ (Garmin, `power_field: "Power"`), Stryd native (Apple Watch via HealthFit, `power_field: "power"` with `external_id` containing "Stryd"), and Garmin native. Non-Garmin detection uses `device_name` pattern (`/^Watch\d/` for Apple Watch, `"STRYD"` for enriched uploads) + case-insensitive `external_id` containing "stryd" to avoid false Garmin correction. `getActivityLoad()` correctly uses `power_load` for both CIQ and native Stryd recordings. **FTP source**: when Stryd credentials are available, FTP is queried directly from Stryd's CP history API (`/cp/history`) — this is the authoritative value from the foot pod. Without Stryd credentials, FTP falls back to `icu_rolling_ftp` or `icu_ftp` from intervals.icu activity data.
-- **Hard session detection** (`src/engine/workout-selector.ts`): Multi-signal `isHardSession()` — RPE ≥ 7 (including Stryd RPE augmented from vigil_metrics), `icu_intensity > 85` (normalised power as % of FTP), HR Z4+ > 25% of session time, load > 0.7 × sportCtl. Multiple signals prevent back-to-back intense prescriptions when individual metrics are missing. A `hardSessionGuard` flag prevents HR zone distribution rebalancing from overriding the protective category downshift.
-- **Cross-training strain** (`src/engine/cross-training-strain.ts`): Three-tier cascade for weight training and climbing activities (WeightTraining, RockClimbing, IndoorClimbing). Tier 1: in-session HRV (RMSSD from R-R intervals vs rolling baseline; lower RMSSD = harder). Tier 2: `session_rpe` (duration × RPE from Garmin) vs rolling 10-activity baseline with absolute fallback (>200 moderate, >400 hard). Tier 3: unknown → prescription blocked until user provides RPE. Feeds into `selectWorkoutCategory()` via two mechanisms: cross-training hard-session guard (moderate/hard weight session in last 2 days prevents intensity) and same-day cap (hard → recovery, moderate → base). Prescription gating: if any same-day cross-training has unknown strain, `suggestWorkoutFromData()` returns early with `status: 'awaiting_input'` and the `submit_cross_training_rpe` MCP tool allows the user to unblock it.
-- **Stryd FIT enrichment** (`src/stryd/`): Optional pipeline that detects low-fidelity Apple Watch + Stryd activities (missing CIQ developer fields), downloads the full FIT from Stryd PowerCenter API, uploads to intervals.icu, and deletes the original HealthFit activity (deletion prevents duplicate load and analysis pipeline confusion). Runs before prescription generation. Tracked in SQLite (`stryd_enrichments` table) to prevent re-processing. Graceful degradation: skipped entirely if `STRYD_EMAIL`/`STRYD_PASSWORD` not set. Failures never break prescriptions.
-- **Stryd critical power as FTP** (`src/stryd/client.ts`, `src/engine/suggest.ts`): When Stryd credentials are available, the latest CP from `/cp/history` is used as FTP for running prescriptions, replacing intervals.icu's inferred FTP. `getLatestCriticalPower()` returns `{ criticalPower, createdAt }`; `StrydCpInput.ageDays` carries that age through to the prescription. **Stryd CP is trusted regardless of age** — keeping CP fresh (book a CP test when fitness shifts) is the athlete's responsibility. The earlier 2026-05-01 staleness override (rolling-FTP fallback when CP > 30d old AND inferred FTP ≥ 5% higher) was removed 2026-05-09 because it allowed `critical_power.watts` to disagree with `critical_power.source` over wire (issue #31) — `mapWirePowerSource` reported `stryd_direct` whenever the Stryd query succeeded regardless of which value won. Age is still surfaced on the HTTP API `critical_power.updated_at` and Praescriptor's data-source row so staleness is visible to the human. All four prescription paths (MCP `suggest_workout`, Praescriptor, HTTP API `/status`, HTTP API `/workouts/suggested` + `/dashboard`) resolve CP through the shared `fetchStrydCpInput()` helper. The `/status` and `/dashboard` handlers build `powerContext` directly from `detectPowerSource()` and never route through `suggestWorkoutFromData`, so `criticalPowerFromContext` enforces Stryd-wins precedence inside the function itself (`strydCp ?? (powerContext.ftp > 0 ? powerContext.ftp : null)`) — issue #32 was filed when this function-level enforcement was missing and the wire `critical_power.watts` shipped intervals.icu rolling FTP under a `stryd_direct` label. Swim FTP is unaffected.
-- **Vigil** (`src/engine/vigil/`): Biomechanical injury warning system. Detects abnormal deviations in Stryd running metrics from the athlete's personal 30-day baseline using z-score deviation scoring. Data sourced directly from Stryd FIT files (not intervals.icu streams API) — avoids rate limits and provides access to all developer fields. 90-day deep backfill on first run, then incremental per-activity extraction. **Two windows**: the metric baseline computes statistics over the most recent 30 days (the deviation-detection horizon); the "building" gate counts activities over a wider 60-day window so an athlete who runs ~4×/month doesn't get stuck at "4/5 activities" while their baseline is statistically usable. Metric weights reflect shoe-mounted IMU reliability: GCT/LSS 1.0, Form Power Ratio 0.8, ILR 0.5 (noisier from foot mount), drift metrics 0.8–1.0. Composite-only alerting: severity 0–3 requiring 2+ metrics to deviate simultaneously. Severity ≥ 2 triggers protective downshift in workout-selector; severity ≥ 2 writes to intervals.icu wellness `injury` field (2=Niggle, 3=Poor, never 4=Injured automatically). Runs for all running sport types (Run, TrailRun, VirtualRun, Treadmill) — normalises to "Run" for Stryd queries since Stryd stores all activities as "Run" regardless of intervals.icu classification. `StrydActivity` extended with `rpe`, `feel`, `surface_type` from post-run reports. **Stryd Duo**: bilateral data arrives as balance percentages (left foot share, 50% = symmetric), not separate L/R streams. Fields: `Leg Spring Stiffness Balance`, `Vertical Oscillation Balance`, `Impact Loading Rate Balance`, `stance_time_balance`. Asymmetry = `|balance - 50| × 2`. Mixed-pod handling: bilateral baselines computed from Duo activities only (min 5); unilateral baselines from all activities. Stored in SQLite: `vigil_metrics` (per-activity summaries with bilateral columns) + `vigil_baselines` (rolling 30d + 7d acute windows). Full spec: `phase2/injury-warning-spec.md`.
-- **Stale session handling**: POSTs with an unknown `mcp-session-id` return HTTP 404 with a JSON-RPC error. This prevents the SDK from creating a fresh transport for non-initialize requests after container restarts.
-- **Compliance tracking** (`src/compliance/`): Compares prescribed workouts against actual execution. Prescriptions and send events are persisted to SQLite on generation/send. Assessment uses intervals.icu lap data matched sequentially to flattened prescription segments. Binary pass/fail per metric (HR zone, power, pace — no tolerance; duration has 15% tolerance for lap timing). Traffic light UI (green/amber/red dots) on Praescriptor segments. Confirmation buttons for yesterday's sent prescriptions. Aggregated trends (weekly/monthly) answer: compliance over time, deviation by category, consistent overshoot patterns. MCP tools: `get_compliance_summary`, `get_compliance_detail`. Long-term goal: self-correcting prescriptions from systematic deviation data.
-- **SQLite cache**: TTL-based cache in `data/exercitator.db`. Used for infrequently-changing data (athlete profile), Stryd enrichment tracking, Vigil biomechanical metrics/baselines, and compliance tracking. WAL mode for concurrent reads. DB path configurable via `EXERCITATOR_DB_PATH` env var (supports `:memory:` for tests).
-- **Praescriptor** (`src/web/`): Separate container, same codebase. Multi-user via URL-based routing: `/:userId/` (e.g. `/ze/`, `/pam/`). User profiles (`src/web/users.ts`) define per-user sports, deity invocations, Stryd enrichment, and API key env var. Per-user `IntervalsClient`, prescription cache, and send dedup. Users without a configured API key get 503. `GET /` redirects to default user (`/ze/`). Imports the DSW engine directly — no network calls between containers. **Timezone**: resolved per request — browser `tz` cookie (set via `Intl.DateTimeFormat`) → intervals.icu athlete profile → UTC fallback. Deity invocations generated via Anthropic API with static fallbacks (or plain text for non-deity users). Opening invocation per card, Apollo's closing rendered once at page bottom (centred). "Send to intervals.icu" with server-side dedup. "Copy FORM Text" on swim cards copies a FORM goggles Script-compatible workout description to the clipboard (stroke abbreviations, effort levels, rest intervals — no zones or pace targets). Every segment shows a zone guide: watts for running (derived from FTP zones), HR bpm for swimming (from intervals.icu HR zones). Z1 uses `<` threshold format, higher zones show ranges. Warnings shared between both prescriptions (e.g. HRV alerts) rendered once above cards; sport-specific warnings remain per card. Single-card layout when a user has only one sport. Mediterranean light theme ("Andalucían"): warm off-white `#f4efe6` background, white `#fffcf7` card surface with soft shadow, sport-coloured accent stripe + left-bordered segments, metadata as pill badges, readiness score top-right. CSS custom property `--card-accent` per card drives segment borders, duration colour, sport tag fill, and button accents. **intervals.icu workout format**: swim workouts use `mtr` for metres (not `m` which means minutes), `/100m` for pace denominators (not `/100mtr` — only bare distances use `mtr`), `Pace` suffix on pace targets, blank lines around repeat blocks, `50%` for rest steps. Swim steps with pace targets also include HR targets so the chart renders in any view mode. Rest steps (`20s 50%`) rendered between non-repeat swim segments. Swim warm-ups broken into individual 100m drill steps (free, kick, pull) with 10s rest gaps. **Run workouts** emit absolute watts end-to-end when a power source is configured: explicit `target_power_low/high` bands render as `{low}-{high}W`; warm-up / cool-down / inter-rep recovery without explicit watts synthesise a Stryd Z1 Easy 65–80% CP band from FTP via `easyZ1Watts()` in `intervals-format.ts`. HR fallback (`{low}-{high}% HR`) only when `power.source === "none"` or FTP unknown; the hard-coded `50%` recovery target is the no-power fallback only. Verified ASCII-only output (no en/em-dashes) — any em-dash a user sees in the intervals.icu UI text input is a client-side editor auto-correct, not from us.
+Full file map, module responsibilities, and key patterns: see **`architecture.md`**.
 
 ## Philosophy
 
@@ -149,11 +58,10 @@ guidelines — they are constraints.
 
 5. **Never commit secrets.** API keys, tokens, passwords, and credentials live in
    `.env` and nowhere else. Not in source code, not in commit messages, not in
-   comments, not in documentation. The `.env` file is never committed. This matters
-   because secrets in git history are effectively public — they persist in every
-   clone, every fork, every backup, forever. Even "private" repositories get shared,
-   transferred, and compromised. One leaked key can mean unauthorised access,
-   unexpected bills, or a full breach.
+   comments, not in documentation. The `.env` file is never committed. Secrets in
+   git history are effectively public — they persist in every clone, fork, and
+   backup, forever. One leaked key can mean unauthorised access, unexpected bills,
+   or a full breach.
 
 ## Development Workflow
 
@@ -173,8 +81,7 @@ any code reaches production. If you are not deploying, still run `/test` after c
 - **Subsidiary files**: When a CLAUDE.md section exceeds ~50 lines, split it into a
   subsidiary file and link it from the index. Use your judgement — the goal is
   efficient retrieval, not arbitrary size limits.
-- **CHANGELOG.md**: Every user-visible change, every deploy. Follow Keep a Changelog
-  format (see below).
+- **CHANGELOG.md**: Every user-visible change, every deploy. [Keep a Changelog](https://keepachangelog.com/) format with [Semantic Versioning](https://semver.org/). Security changes are always documented, even when internal-only.
 - **User-facing docs**: README, API docs, guides — update them as part of the change,
   not as a separate task.
 - **lessons.md**: After every bug, failed deploy, unexpected behaviour, security
@@ -184,53 +91,18 @@ any code reaches production. If you are not deploying, still run `/test` after c
 
 ### The blooming pattern
 
-This CLAUDE.md starts small. As the project grows, sections will need more detail
-than fits comfortably in one file. When that happens, split the section into its own
-file and replace the section content with a link.
+Sections that exceed comfortable inline reading get extracted to their own files.
+`CLAUDE-INDEX.md` is the index of subsidiary files. Current layout:
 
-Maintain an index file (`CLAUDE-INDEX.md`) listing all subsidiary files with one-line
-descriptions. This index serves both Claude and human developers.
-
-Example structure after blooming:
 ```
-CLAUDE.md              — core rules, workflow, conventions (this file)
-CLAUDE-INDEX.md        — index of all subsidiary files
-architecture.md        — file map, module responsibilities, data flow
-decisions.md           — architectural and technical decisions with rationale
-lessons.md             — post-mortem log (auto-maintained)
-security.md            — security surfaces, acknowledged risks, remediation history
+CLAUDE.md         — core rules, workflow, conventions (this file)
+CLAUDE-INDEX.md   — index of all subsidiary files
+architecture.md   — file map, module responsibilities, key patterns
+deployment.md     — Cogitator deploy procedure, networking, volumes
+SECURITY.md       — security surfaces, outstanding findings, remediation history
+lessons.md        — chronological post-mortem log (append-only)
+CHANGELOG.md      — user-visible changes per release
 ```
-
-### Changelog
-
-Maintain `CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/) format
-with [Semantic Versioning](https://semver.org/):
-
-```markdown
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
-
-### Added
-- New features
-
-### Changed
-- Changes to existing features
-
-### Fixed
-- Bug fixes
-
-### Security
-- Security-related changes (always document these)
-
-### Removed
-- Removed features
-```
-
-Move `[Unreleased]` items to a versioned section on each release. Security changes
-are always documented, even if they are internal refactors with no user-visible effect.
 
 ### Lessons learned
 
@@ -251,70 +123,13 @@ This file is append-only. Do not edit or remove past entries.
 
 ## Security
 
-### Credential management
+All credentials live in `.env` at the project root: gitignored, never logged or echoed, the single source of truth for API keys, tokens, and secrets. A committed `.env.example` documents required variables with placeholder values and is kept in sync with `.env`.
 
-All credentials live in `.env` at the project root. This file is:
-- Listed in `.gitignore` (verified by /init)
-- Never committed, logged, or echoed
-- The single source of truth for all API keys, tokens, and secrets
+Every deployment includes a SAST scan via Gemini 2.5 Pro (different model family from Claude, independent review). `scripts/sast_scan.py` is zero-dependency (Python stdlib) and reads `GEMINI_API_KEY` from `.env` or environment. Diff mode during deploys (changes since last baseline), full mode on demand via `/sast`. Clean scans tag as `sast-baseline-YYYY-MM-DD`. Findings block deployment — fix or explicitly accept.
 
-A `.env.example` file documents required variables with placeholder values. This file
-IS committed and kept in sync with `.env`.
+**Current baseline**: `sast-baseline-2026-05-09-b` on commit `4ed3b5b` (issue #32 fix). `python3 scripts/sast_scan.py --mode diff` scans only files changed since this tag. Re-baseline immediately after each clean deploy or accepted-risk deploy.
 
-```bash
-# .env.example — commit this, not .env
-GEMINI_API_KEY=your-gemini-api-key-here          # Required for SAST scans
-INTERVALS_ICU_API_KEY=your-intervals-icu-api-key  # Required for intervals.icu access (Ze)
-INTERVALS_ICU_API_KEY_PAM=pam-api-key-here       # Optional: Pam's intervals.icu access
-TAILSCALE_AUTH_KEY=your-tailscale-auth-key         # Required for Docker deployment
-MCP_OAUTH_CLIENT_ID=exercitator                   # OAuth client ID
-MCP_OAUTH_CLIENT_SECRET=<openssl rand -hex 32>    # OAuth token signing secret
-MCP_OAUTH_AUTHORIZE_PASSPHRASE=<your passphrase>  # Human-memorable auth gate
-MCP_TOKEN_VERSION=1                               # Increment to revoke all tokens
-ANTHROPIC_API_KEY=<your-anthropic-api-key>         # Optional: deity invocations in Praescriptor
-STRYD_EMAIL=<your-stryd-email>                    # Optional: Ze's Stryd FIT enrichment
-STRYD_PASSWORD=<your-stryd-password>              # Optional: Ze's Stryd FIT enrichment
-STRYD_EMAIL_PAM=<pam-stryd-email>                 # Optional: Pam's Stryd FIT enrichment
-STRYD_PASSWORD_PAM=<pam-stryd-password>           # Optional: Pam's Stryd FIT enrichment
-cogitatorPass=<cogitator-password>                # SSH to Cogitator password fallback (dominus@cogitator.tail7ab379.ts.net) — key auth preferred via ~/.ssh/id_ed25519
-QNAP_PASSWORD=<arca-ingens-password>              # Legacy: Arca Ingens decommissioned 2026-04-04; retained for any one-off historical access
-```
-
-### SAST scanning
-
-Every deployment includes a SAST scan using Gemini 2.5 Pro (a different model family
-from Claude, providing independent security review). The scan:
-
-- Runs in `diff` mode during deploys (only changes since last baseline)
-- Runs in `full` mode on demand via `/sast`
-- Tags clean scans as `sast-baseline-YYYY-MM-DD` for incremental tracking
-- **Blocks deployment on findings** — findings must be fixed or explicitly accepted
-
-The SAST scanner (`scripts/sast_scan.py`) is zero-dependency (Python stdlib only) and
-reads `GEMINI_API_KEY` from `.env` or environment.
-
-### Security surfaces
-
-- **intervals.icu API key**: Stored in `.env`, used server-side only. Leaking it grants read/write access to the user's training data.
-- **Tailscale funnel exposure**: The MCP server is publicly reachable via the funnel. All endpoints must validate requests — no open proxy behaviour.
-- **SQLite injection**: Any user-supplied parameters used in SQL queries must be parameterised.
-- **MCP tool input validation**: All tool parameters received from Claude must be validated before forwarding to intervals.icu.
-- **Anthropic API key**: Optional, used server-side only by Praescriptor for deity invocations. Never sent to the client. Stored in `.env`.
-- **Praescriptor access**: Tailnet-only via `tailscale serve` (no funnel). No authentication layer — Tailscale provides device-level access control.
-- **Stryd credentials**: Optional `STRYD_EMAIL`/`STRYD_PASSWORD` in `.env`, used server-side only by Praescriptor for FIT enrichment. Token is short-lived and held only in memory during enrichment. Never exposed via web UI or MCP tools.
-- **Docker secrets**: Container environment variables must not be logged or exposed via health/debug endpoints.
-- **OAuth redirect URI**: Validated against allowlist (`https://claude.ai/api/mcp/auth_callback`, localhost). Do not add arbitrary URIs.
-- **Session exhaustion**: HTTP sessions are capped at 100 with 5-minute idle timeout to prevent memory exhaustion DoS.
-- **Request body size**: OAuth endpoints limit request bodies to 64 KiB.
-- **HTTP API bearer keys**: `EXERCITATOR_API_KEYS` holds `<client>:<userId>:<token>` triples. **All three components** are compared in constant time (every configured key receives the same comparison work regardless of bearer shape, so timing can't reveal whether a `(client, userId)` pair is configured). Each key is scoped to one userId — cross-user reads return 403 before the user profile is loaded. Tailnet-only exposure means only tailnet members can reach the listener at all.
-- **HTTP API body size**: POST bodies (cross-training RPE) are capped at 1 KiB; the listener also enforces a 1 MiB global body cap.
-- **HTTP API response cache** (`src/api/cache.ts`): Per-user buckets (`Map<userId, Map<key, Entry>>`) capped at `EXERCITATOR_API_CACHE_MAX_ENTRIES` (default 64) with LRU eviction; 60s background prune sweeps expired entries. One user spamming distinct keys cannot evict another user's entries.
-- **Rate limiting** (`src/rate-limit.ts`): Per-user token-bucket on Praescriptor and the HTTP API — 60 reads/min, 10 writes/min by default; configurable via `EXERCITATOR_RATE_LIMIT_READ` / `_WRITE` (set to `0` to disable for tests). Returns 429 with `Retry-After` and a JSON envelope. Read and write buckets independent.
-- **Activity ID allowlist** (`src/api/validate.ts`): User-supplied IDs reaching `POST /api/compliance/confirm`, `POST /api/users/:userId/cross-training/:activityId/rpe`, `GET /api/users/:userId/workouts/iv-:id`, **and the MCP `submit_cross_training_rpe` tool** are matched against `^[A-Za-z0-9_-]{1,64}$` before path-interpolation. The MCP tool enforces it via Zod regex; the HTTP API enforces it in the handler. Belt-and-braces with `encodeURIComponent` against protocol-relative SSRF.
-- **Timezone validation** (`src/engine/date-utils.ts` `isValidTimezone` + `src/api/tz.ts` `resolveTz`): `tz` from cookies and query params is validated against `Intl.DateTimeFormat` before reaching `localDateStr` or any cache key. The HTTP API now centralises the resolver in `src/api/tz.ts` so every handler consumes the same chain (validated query → athlete profile → "UTC"); a future handler that forgets to validate `tz` is impossible by construction. Closes a Medium cache-flooding vector via crafted `tz` values, a Low DoS where a malformed cookie raised `RangeError` 500, and a 2026-05-03 High DoS regression on `/dashboard` that bypassed the validator with a weak `q?.includes("/")` check.
-- **Compliance backfill clamp**: `?days=` on `POST /api/compliance/backfill` and `GET /api/compliance/trending` is clamped to `[1, 730]` (≈2 years) — backfill issues one upstream call per day with a send event, so an unbounded value let an authenticated tailnet caller burn intervals.icu quota.
-- **Praescriptor security headers** (`src/web/security-headers.ts`): Every response carries HSTS (max-age=63072000; includeSubDomains), X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy same-origin. HTML responses additionally carry CSP allowing inline styles/scripts and Google Fonts only, with `frame-ancestors 'none'`.
-- **SAST baseline**: Last clean tag is `sast-baseline-2026-05-09-b` on commit `4ed3b5b` (2026-05-09 deploy fixing the `criticalPowerFromContext` precedence regression — issue #32). Earlier baselines: `sast-baseline-2026-05-09` (`0ff5171`, removed staleness override — issue #31), `sast-baseline-2026-05-08` (`7d575b2`, run-watts format fix), `sast-baseline-2026-04-29-c` (`25db117`, before the two High findings were closed in the 2026-05-03 deploy). `python3 scripts/sast_scan.py --mode diff` scans only files changed since the latest baseline. Re-baseline immediately after each clean deploy or accepted-risk deploy.
+Full inventory of security surfaces, outstanding findings, and remediation history: see **`SECURITY.md`**.
 
 ## Testing
 
@@ -345,56 +160,9 @@ When a deployment or production issue occurs:
 
 ## Deployment
 
-- **Target**: Cogitator (Mac Mini M4 Pro) — `dominus@cogitator.tail7ab379.ts.net` (tailnet) or `dominus@192.168.4.192` (LAN). Key auth via `~/.ssh/id_ed25519`; password fallback in `.env` as `cogitatorPass`. Services migrated from Arca Ingens 2026-04-04.
-- **Path on server**: `~/Container/exercitator/` (i.e. `/Users/dominus/Container/exercitator/`). `.env` lives here and is managed out-of-band.
-- **Docker**: Colima VM, `DOCKER_HOST=unix:///Users/dominus/.colima/docker.sock`. Non-interactive SSH does not source `~/.zshrc` — wrap docker commands in `zsh -ic "..."`. Only `$HOME` is mounted into the VM; don't use `/tmp` for bind mounts or build contexts.
-- **Method**: Tarball upload + `docker compose up -d --build`. Same pattern as Arca Ingens, different host/port/path.
-- **Networking**: Tailscale serve (`exercitator.tail7ab379.ts.net`, funnel-enabled) → `exercitator-mcp:8642`; Tailscale serve (`praescriptor.tail7ab379.ts.net`, tailnet-only) → `praescriptor-web:3847`; Tailscale serve (`exercitator-api.tail7ab379.ts.net`, tailnet-only) → `exercitator-mcp:8643` (HTTP API, co-resident with MCP).
-- **Branch**: `main` — deploy from main only.
-- **Containers**: `exercitator-mcp` (MCP server + HTTP API on 8643) + `tailscale-exercitator` (funnel sidecar) + `praescriptor-web` (web UI) + `tailscale-praescriptor` (serve sidecar) + `exercitator-api-ts` (serve sidecar for HTTP API).
-- **Volumes**: `exercitator-data` (SQLite), `exercitator-tailscale-state` (external), `praescriptor-tailscale-state` (external), `exercitator-api-tailscale-state` (external). Do not delete external volumes — Tailscale node identity lives in them. Pre-create the new API state volume on Cogitator once: `ssh dominus@cogitator.tail7ab379.ts.net 'zsh -ic "docker volume create exercitator-api-tailscale-state"'`.
-- **Tailscale auth key**: exercitator family — reusable, preauthorised; works for all three sidecars. The key value lives only in `.env` and `praefectura/docs/tailscale.md` — never echo it (or any prefix of it) into source-controlled docs.
-- **Operations reference**: full Cogitator conventions in `github.com/zestuart/praefectura` (`docs/cogitator-operations.md`, `docs/exercitator.md`, `docs/tailscale.md`).
+Tarball upload + `docker compose up -d --build` against Cogitator (`dominus@cogitator.tail7ab379.ts.net`), three Tailscale-fronted services on the `tail7ab379.ts.net` tailnet. Deploy from `main` only.
 
-### Deploy procedure
-
-```bash
-# 1. Load cogitator password (only needed if key auth fails)
-CP=$(grep '^cogitatorPass=' .env | cut -d= -f2-)
-
-# 2. Tarball (exclude git, node_modules, .env, data, dist, phase2)
-tar czf /tmp/exercitator.tar.gz --exclude='.git' --exclude='node_modules' \
-  --exclude='dist' --exclude='data' --exclude='.env' --exclude='phase2' \
-  --exclude='.claude/settings.local.json' .
-
-# 3. Upload and extract (key auth)
-scp /tmp/exercitator.tar.gz dominus@cogitator.tail7ab379.ts.net:~/Container/exercitator/
-ssh dominus@cogitator.tail7ab379.ts.net \
-  'cd ~/Container/exercitator && tar xzf exercitator.tar.gz && rm exercitator.tar.gz'
-
-# 4. Unlock keychain, then rebuild (non-interactive SSH needs zsh -ic for docker)
-ssh dominus@cogitator.tail7ab379.ts.net "security unlock-keychain -p '$CP' ~/Library/Keychains/login.keychain-db && \
-  cd ~/Container/exercitator && zsh -ic 'docker compose up -d --build exercitator praescriptor'"
-
-# 5. Verify services
-curl -s https://exercitator.tail7ab379.ts.net/health
-curl -s https://praescriptor.tail7ab379.ts.net/health
-curl -s https://exercitator-api.tail7ab379.ts.net/api/health
-
-# 6. Clean up
-rm -f /tmp/exercitator.tar.gz
-```
-
-### Pre-flight sequence (enforced by /deploy)
-
-1. **Lint + type check** — language-appropriate static analysis
-2. **Test suite** — all tests must pass
-3. **Secret scan** — verify no credentials in staged files
-4. **SAST scan** — Gemini security review of changed files
-5. **Documentation check** — CHANGELOG.md updated, docs current
-6. **Commit** — descriptive message with co-author attribution
-7. **Push** — to configured branch/remote
-8. **Monitor** — verify deployment status (if CI/CD configured)
+Full target details, networking, container/volume layout, deploy procedure, and pre-flight sequence: see **`deployment.md`**. Wider home-lab conventions live in `github.com/zestuart/praefectura`.
 
 ## Conventions
 
@@ -415,10 +183,10 @@ rm -f /tmp/exercitator.tar.gz
 
 ## graphify
 
-This project has a graphify knowledge graph at graphify-out/.
+This project has a graphify knowledge graph at `graphify-out/`.
 
 Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes and community structure
+- If `graphify-out/wiki/index.md` exists, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
 - After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

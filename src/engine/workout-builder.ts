@@ -22,6 +22,15 @@ function scaled(baseSecs: number, scale: number): number {
 	return Math.round(baseSecs * scale);
 }
 
+/** Hard cap on run warm-up duration. Past 6 minutes the athlete is warm and
+ *  the watch nagging them to slow down is just an irritant. Applies after
+ *  CTL-scaling. Swim warm-ups are handled separately (multi-drill structure). */
+const WARMUP_MAX_SECS = 360;
+
+function scaledRunWarmup(baseSecs: number, scale: number): number {
+	return Math.min(scaled(baseSecs, scale), WARMUP_MAX_SECS);
+}
+
 /** Intensity factors for estimated load calculation. */
 const INTENSITY_FACTOR: Record<WorkoutCategory, number> = {
 	rest: 0,
@@ -127,7 +136,7 @@ function buildRunRecovery(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(300, scale),
+			duration_secs: scaledRunWarmup(300, scale),
 			target_description: "Easy walk to gentle jog",
 			target_hr_zone: 1,
 			stryd_zone: 1,
@@ -174,7 +183,7 @@ function buildRunBase(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(600, scale),
+			duration_secs: scaledRunWarmup(600, scale),
 			target_description: "Progressive walk to easy run",
 			target_hr_zone: 1,
 			stryd_zone: 1,
@@ -235,7 +244,7 @@ function buildRunProgression(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(600, scale),
+			duration_secs: scaledRunWarmup(600, scale),
 			target_description: "Progressive walk to easy run",
 			target_hr_zone: 1,
 			stryd_zone: 1,
@@ -303,7 +312,7 @@ function buildRunTempo(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(600, scale),
+			duration_secs: scaledRunWarmup(600, scale),
 			target_description: "Progressive build through Stryd Z1 Easy",
 			target_hr_zone: 2,
 			stryd_zone: 1,
@@ -358,7 +367,7 @@ function buildRunThreshold(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(900, scale),
+			duration_secs: scaledRunWarmup(900, scale),
 			target_description: "Progressive build through Stryd Z1 Easy → Z2 Moderate",
 			target_hr_zone: 2,
 			stryd_zone: 1,
@@ -412,7 +421,7 @@ function buildRunIntervals(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(600, scale),
+			duration_secs: scaledRunWarmup(600, scale),
 			target_description: "Progressive build through Stryd Z1 Easy → Z2 Moderate",
 			target_hr_zone: 2,
 			stryd_zone: 1,
@@ -464,7 +473,7 @@ function buildRunLong(ctx: BuildContext): WorkoutSegment[] {
 	return [
 		{
 			name: "Warm-up",
-			duration_secs: scaled(600, scale),
+			duration_secs: scaledRunWarmup(600, scale),
 			target_description: "Progressive warm-up",
 			target_hr_zone: 1,
 			stryd_zone: 1,
@@ -796,13 +805,22 @@ export function buildWorkout(
 	const builder = BUILDERS[sport][category];
 	const segments = builder(ctx);
 
-	// Enforce minimum session duration — scale all segments up proportionally
+	// Enforce minimum session duration — uplift non-warm-up segments to reach the
+	// floor. Warm-ups are excluded so the WARMUP_MAX_SECS cap survives the
+	// min-duration enforcement; the main set and cool-down absorb the uplift.
 	const rawTotal = segments.reduce((s, seg) => s + seg.duration_secs, 0);
 	const minDuration = MIN_DURATION[category][sport];
 	if (rawTotal > 0 && rawTotal < minDuration) {
-		const uplift = minDuration / rawTotal;
+		const warmupTotal = segments
+			.filter((s) => s.name === "Warm-up")
+			.reduce((sum, s) => sum + s.duration_secs, 0);
+		const nonWarmupTotal = rawTotal - warmupTotal;
+		const targetNonWarmup = Math.max(minDuration - warmupTotal, nonWarmupTotal);
+		const uplift = nonWarmupTotal > 0 ? targetNonWarmup / nonWarmupTotal : 1;
 		for (const seg of segments) {
-			seg.duration_secs = Math.round(seg.duration_secs * uplift);
+			if (seg.name !== "Warm-up") {
+				seg.duration_secs = Math.round(seg.duration_secs * uplift);
+			}
 		}
 	}
 
