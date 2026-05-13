@@ -86,3 +86,7 @@ A post-deploy SAST diff surfaced two more findings rooted in pre-existing weak v
 | 19 | Medium | `?days=` on compliance backfill / trending unbounded — backfill issues one upstream call per day with a send event | Clamp to `[1, 730]` (`src/web/routes.ts`) |
 
 Tagged final clean state at `sast-baseline-2026-04-29-c` on commit `25db117`.
+
+### 2026-05-12 — Engine readiness + RPE-write deploy (clean)
+
+Diff-mode SAST against `sast-baseline-2026-05-09-b` over the four-fix bundle (TSB rebuild flag, sport-specific recency, subjective renormalisation, 6-min warm-up cap) + the `session_rpe` write completion across MCP tool and HTTP API handler + the doc redistribution (architecture.md, deployment.md). 13 files changed, 540/298 insertions/deletions. Returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-12` on commit `7abbb75`.
