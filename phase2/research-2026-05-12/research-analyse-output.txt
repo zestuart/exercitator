@@ -1,0 +1,163 @@
+
+==============================================================================
+PROMUS — strength sessions (last 90 days)
+==============================================================================
+Total sessions: 7
+
+Distinct exercises (by set count, all sessions):
+    11  Back Squat
+     9  Deadlift
+     9  Bench Press
+     4  High row
+     3  Leg curl
+     3  High row 
+     3  Barbell Row
+     2  Leg extension
+     1  Leg extension 
+
+Per-session breakdown:
+  7A3E6F86  start=2026-04-13T22:50:29.887000+00:00  end=2026-04-13T22:51:39.203000+00:00  dur=  1.2min  sets=  1  rpe=    7  ex=['Back Squat']
+  71CDACDE  start=2026-04-13T22:51:50.287000+00:00  end=2026-04-13T22:52:37.628000+00:00  dur=  0.8min  sets=  1  rpe=    5  ex=['Back Squat']
+  2B08CD83  start=2026-04-13T22:58:04.087000+00:00  end=2026-04-13T22:58:18.852000+00:00  dur=  0.2min  sets=  2  rpe=    4  ex=['Back Squat']
+  6A4C3647  start=2026-04-19T21:48:41.453000+00:00  end=2026-04-19T21:48:50.144000+00:00  dur=  0.1min  sets=  1  rpe= None  ex=['Back Squat']
+  BA2EAB58  start=2026-04-19T21:54:12.314000+00:00  end=2026-04-19T22:19:13.867000+00:00  dur= 25.0min  sets= 12  rpe= None  ex=['Back Squat', 'Barbell Row', 'Bench Press', 'Deadlift']
+  894A5D40  start=2026-04-26T02:40:26.759000+00:00  end=2026-04-26T03:08:27.899000+00:00  dur= 28.0min  sets= 12  rpe= None  ex=['Back Squat', 'Bench Press', 'Deadlift', 'High row ']
+  ACAEC12D  start=2026-05-12T02:56:22.879000+00:00  end=2026-05-12T03:24:38.913000+00:00  dur= 28.3min  sets= 16  rpe= None  ex=['Bench Press', 'Deadlift', 'High row', 'Leg curl', 'Leg extension', 'Leg extension ']
+
+RPE present: 3 / 7 (43%)
+
+Duration histogram (minutes):
+  [  0.1,   5.8)  ####  (4)
+  [  5.8,  11.4)    (0)
+  [ 11.4,  17.0)    (0)
+  [ 17.0,  22.6)    (0)
+  [ 22.6,  28.3)  ###  (3)
+
+==============================================================================
+INTERVALS.ICU — activities (last 60 days)
+==============================================================================
+Total activities: 54
+
+Count by type:
+   27  Ride
+    8  Run
+    7  Swim
+    6  WeightTraining
+    3  VirtualRow
+    3  TrailRun
+
+WeightTraining activities: 6
+  id=i132394917  start_local=2026-03-16T02:16:43  moving=2208s  load=26  intensity=65.12335  hr_zones=[1684, 390, 134, 1, 0, 0, 0]  rpe=None  feel=2  session_rpe=147  device='Garmin fenix 8 Pro'  source='GARMIN_CONNECT'  external_id='22189742784'
+  id=i134136103  start_local=2026-03-23T02:20:25  moving=2044s  load=17  intensity=54.758835  hr_zones=[1972, 56, 17, 0, 0, 0, 0]  rpe=None  feel=2  session_rpe=204  device='Garmin fenix 8'  source='GARMIN_CONNECT'  external_id='22269304797'
+  id=i135884771  start_local=2026-03-30T09:21:42  moving=1873s  load=9  intensity=41.602516  hr_zones=[1874, 0, 0, 0, 0, 0, 0]  rpe=None  feel=2  session_rpe=249  device='WorkOutDoors'  source='UPLOAD'  external_id='Monday Morning Strength Training.fit'
+  id=i141282265  start_local=2026-04-19T14:54:12  moving=1500s  load=10  intensity=49.006134  hr_zones=[1501, 0, 0, 0, 0, 0, 0]  rpe=None  feel=None  session_rpe=None  device='Palæstra'  source='UPLOAD'  external_id='Palaestra_20260419T215412_fixed.fit'
+  id=i142973250  start_local=2026-04-25T19:40:28  moving=1678s  load=11  intensity=48.593822  hr_zones=[1554, 118, 7, 0, 0, 0, 0]  rpe=None  feel=None  session_rpe=None  device='iPhone18,2'  source='OAUTH_CLIENT'  external_id='2026-04-25-194026-Strength Training-RunGap.fit'
+  id=i147390366  start_local=2026-05-11T19:56:03  moving=1756s  load=7  intensity=37.893238  hr_zones=[1757, 0, 0, 0, 0, 0, 0]  rpe=None  feel=3  session_rpe=None  device='SUUNTO Suunto Vertical 2'  source='SUUNTO'  external_id='6a029e70c246247f1903dd78.fit'
+
+Runs: 11
+  HARD  id=i146513227  2026-05-05T12:02:43  reasons=['intensity=94.9>85', 'Z4+ 60%>25%']
+  HARD  id=i143902899  2026-04-28T18:53:09  reasons=['intensity=89.4>85']
+  HARD  id=i142002623  2026-04-22T07:08:10  reasons=['intensity=89.7>85']
+  HARD  id=i139196287  2026-04-11T16:16:07  reasons=['intensity=89.4>85']
+  HARD  id=i135326848  2026-03-27T04:11:07  reasons=['intensity=90.1>85', 'Z4+ 34%>25%']
+  HARD  id=i133487444  2026-03-20T07:01:26  reasons=['intensity=95.9>85']
+  HARD  id=i132963404  2026-03-18T03:48:45  reasons=['intensity=103.8>85', 'Z4+ 78%>25%']
+
+Hard runs (engine heuristic): 7 / 11
+
+==============================================================================
+INTERVALS.ICU — wellness timeline
+==============================================================================
+Wellness records: 62
+date            ctl    atl sleepSc    hrv
+2026-03-13   20.155806 9.252799    86.0   82.0
+2026-03-14   20.905046 14.943397    76.0   56.0
+2026-03-15   20.413185 12.954101    87.0   69.0
+2026-03-16   19.932898 14.690798    90.0   81.0
+2026-03-17   19.463911 12.735128    89.0   73.0
+2026-03-18   20.323544 18.494638    79.0   70.0
+2026-03-19   19.845366 16.032593    73.0   57.0
+2026-03-20   20.860722 22.284992    83.0   61.0
+2026-03-21   20.369904 19.318367    73.0   66.0
+2026-03-22   20.76118 21.672184    89.0   73.0
+2026-03-23   20.272705 21.050213    73.0   59.0
+2026-03-24   20.760384 23.70597    89.0   70.0
+2026-03-25   22.46006 32.93054    90.0   61.0
+2026-03-26   21.931612 28.546755    81.0   66.0
+2026-03-27   22.568485 31.269533    81.0   75.0
+2026-03-28   22.037487 27.106867    87.0   66.0
+2026-03-29   21.518982 23.498344    79.0   75.0
+2026-03-30   21.012676 21.568295    93.0   80.0
+2026-03-31   20.518284 18.697079    78.0   74.0
+2026-04-01   20.411976 18.338037    69.0   51.0
+2026-04-02   20.119944 16.961817    65.0   66.0
+2026-04-03   19.928896 16.301289    75.0   67.0
+2026-04-04   19.460003 14.131227    72.0   74.0
+2026-04-05   19.002142 12.250048    90.0   69.0
+2026-04-06   18.555054 10.619296    81.0   53.0
+2026-04-07   19.483128 16.926714    78.0   72.0
+2026-04-08   19.18942 15.605249    83.0   61.0
+2026-04-09   18.97321 14.859067    76.0   70.0
+2026-04-10   18.526802 12.880997    85.0   67.0
+2026-04-11   19.079086 16.75738    89.0   67.0
+2026-04-12   18.630188 14.526602    84.0   68.0
+2026-04-13   18.19185 12.59279    86.0   60.0
+2026-04-14   18.610846 15.708807    77.0   69.0
+2026-04-15   20.125814 24.666752    92.0   58.0
+2026-04-16   20.028742 23.513016    81.0   68.0
+2026-04-17   19.557499 20.382914    87.0   78.0
+2026-04-18   19.70908 21.130672    90.0   74.0
+2026-04-19   19.292416 19.915178    82.0   79.0
+2026-04-20   18.838497 17.264029    69.0   60.0
+2026-04-21   18.39526 14.965805    94.0   71.0
+2026-04-22   19.021225 18.96402    83.0   65.0
+2026-04-23   18.573689 16.43949       -      -
+2026-04-24   18.724888 17.579082       -      -
+2026-04-25   18.354908 17.102627       -      -
+2026-04-26   18.323029 17.088964       -      -
+2026-04-27   18.480127 18.142097    73.0   70.0
+2026-04-28   19.43349 23.581188    83.0   63.0
+2026-04-29   19.329178 22.438843       -      -
+2026-04-30   18.874395 19.451736       -      -
+2026-05-01   19.065577 20.456577       -      -
+2026-05-02   18.71111 18.265842    81.0   77.0
+2026-05-03   19.023775 20.094162    66.0   58.0
+2026-05-04   18.576178 17.419186    86.0   61.0
+2026-05-05   19.409641 22.2889    85.0   73.0
+2026-05-06   18.952965 19.321754    77.0   60.0
+2026-05-07   19.330524 21.408875    86.0   60.0
+2026-05-08   19.910955 24.416252    82.0   58.0
+2026-05-09   21.46592 32.61441    70.0   67.0
+2026-05-10   20.960863 28.27271    86.0   56.0
+2026-05-11   20.585331 26.106453    73.0   63.0
+2026-05-12   21.724447 31.816532       -      -
+2026-05-13   21.213308 27.581049       -      -
+
+==============================================================================
+CROSS-CORRELATION — intervals WeightTraining ↔ Promus
+==============================================================================
+Matches within 10 min: 3
+  iv=i147390366  promus=ACAEC12D  delta=0.3min  sets=16  top5=[('High row', 4), ('Deadlift', 3), ('Bench Press', 3), ('Leg curl', 3), ('Leg extension', 2)]
+  iv=i142973250  promus=894A5D40  delta=0.0min  sets=12  top5=[('High row ', 3), ('Back Squat', 3), ('Bench Press', 3), ('Deadlift', 3)]
+  iv=i141282265  promus=BA2EAB58  delta=0.0min  sets=12  top5=[('Deadlift', 3), ('Back Squat', 3), ('Bench Press', 3), ('Barbell Row', 3)]
+
+Unmatched intervals.icu WeightTraining (3):
+  iv=i135884771  2026-03-30T09:21:42  source='UPLOAD'  external_id='Monday Morning Strength Training.fit'
+  iv=i134136103  2026-03-23T02:20:25  source='GARMIN_CONNECT'  external_id='22269304797'
+  iv=i132394917  2026-03-16T02:16:43  source='GARMIN_CONNECT'  external_id='22189742784'
+
+Unmatched Promus sessions (4):
+  promus=6A4C3647  start_utc=2026-04-19T21:48:41.453Z  sets=1
+  promus=2B08CD83  start_utc=2026-04-13T22:58:04.087Z  sets=2
+  promus=71CDACDE  start_utc=2026-04-13T22:51:50.287Z  sets=1
+  promus=7A3E6F86  start_utc=2026-04-13T22:50:29.887Z  sets=1
+
+==============================================================================
+CROSS-TRAINING CADENCE + ENGINE-FIRE FREQUENCY
+==============================================================================
+90-day window: 2026-02-12 → 2026-05-13 (12.9 weeks)
+Promus sessions: 7 → 0.54 / week
+Gap (days) between sessions: min=0.0 max=16.0 mean=4.7
+All gaps: [0.0, 0.0, 6.0, 0.0, 6.2, 16.0]
+
+Prescription days: 62; days where engine 2-day rule WOULD fire if RPE present: 11 (18%)
