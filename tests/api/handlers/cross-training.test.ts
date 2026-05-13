@@ -88,15 +88,16 @@ describe("handleCrossTrainingRpe", () => {
 		await handleCrossTrainingRpe(makeReq({ rpe: 6 }), res, user, "1");
 		expect(res._status).toBe(200);
 		// Writes both perceived_exertion (for run isHardSession) and session_rpe
-		// (Foster's RPE × moving_time, what the strain cascade actually reads).
+		// (Foster's RPE × duration_in_MINUTES, what the strain cascade reads).
+		// moving_time is in seconds, so 6 × 2400 / 60 = 240.
 		expect(put).toHaveBeenCalledWith("/activity/1", {
 			perceived_exertion: 6,
-			session_rpe: 14400,
+			session_rpe: 240,
 		});
 		const body = JSON.parse(res._body ?? "{}");
 		expect(body.rpe).toBe(6);
-		// session_rpe = 6 × 2400 = 14_400 → hard tier
-		expect(body.strain_tier).toBe("hard");
+		// session_rpe = 240 → > 200 → moderate tier
+		expect(body.strain_tier).toBe("moderate");
 	});
 
 	it("rejects rpe out of range", async () => {

@@ -92,13 +92,16 @@ export async function handleCrossTrainingRpe(
 		return;
 	}
 
-	const sessionRpe = Math.round(rpe * activity.moving_time);
+	// Foster's session-RPE: RPE × duration in MINUTES. intervals.icu stores
+	// moving_time in seconds, so divide by 60. The strain cascade's absolute
+	// thresholds (>200 moderate, >400 hard in `assessStrainFromSessionRpe`)
+	// assume the Foster minute-unit convention.
+	const sessionRpe = Math.round((rpe * activity.moving_time) / 60);
 
 	try {
 		// Write both fields. The strain cascade reads session_rpe; intervals.icu
-		// doesn't auto-derive it from perceived_exertion, so we set it as
-		// Foster's RPE × moving_time. perceived_exertion is consumed separately
-		// by isHardSession() for run prescriptions.
+		// doesn't auto-derive it from perceived_exertion. perceived_exertion is
+		// consumed separately by isHardSession() for run prescriptions.
 		await user.intervals.put(`/activity/${encodeURIComponent(activityId)}`, {
 			perceived_exertion: rpe,
 			session_rpe: sessionRpe,

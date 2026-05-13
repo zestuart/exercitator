@@ -71,13 +71,17 @@ export function registerSuggestTools(
 			const activity = await client.get<{ id: string; moving_time: number }>(
 				`/activity/${encodedId}`,
 			);
-			const syntheticSessionRpe = Math.round(rpe * activity.moving_time);
+			// Foster's session-RPE: RPE × duration in MINUTES. intervals.icu stores
+			// moving_time in seconds, so divide by 60. The strain cascade's absolute
+			// thresholds (>200 moderate, >400 hard in `assessStrainFromSessionRpe`)
+			// assume the Foster minute-unit convention.
+			const syntheticSessionRpe = Math.round((rpe * activity.moving_time) / 60);
 
 			// Write both fields. The cross-training strain cascade reads
 			// session_rpe; perceived_exertion provides a separate signal used
 			// by isHardSession() for run prescriptions. intervals.icu doesn't
 			// auto-derive session_rpe from perceived_exertion, so we set it
-			// explicitly here as RPE × moving_time (Foster's session-RPE).
+			// explicitly.
 			await client.put(`/activity/${encodedId}`, {
 				perceived_exertion: rpe,
 				session_rpe: syntheticSessionRpe,
