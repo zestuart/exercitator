@@ -90,3 +90,7 @@ Tagged final clean state at `sast-baseline-2026-04-29-c` on commit `25db117`.
 ### 2026-05-12 — Engine readiness + RPE-write deploy (clean)
 
 Diff-mode SAST against `sast-baseline-2026-05-09-b` over the four-fix bundle (TSB rebuild flag, sport-specific recency, subjective renormalisation, 6-min warm-up cap) + the `session_rpe` write completion across MCP tool and HTTP API handler + the doc redistribution (architecture.md, deployment.md). 13 files changed, 540/298 insertions/deletions. Returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-12` on commit `7abbb75`.
+
+### 2026-05-12 — session_rpe units fix (clean)
+
+Follow-up deploy correcting Foster's session-RPE units (seconds → minutes) in `src/tools/suggest.ts` and `src/api/handlers/cross-training.ts`. The previous baseline shipped a multiplicative-by-60 bug that would have misclassified every submitted RPE as `hard` against the strain cascade's absolute thresholds. Caught and fixed before any production RPE write landed. Diff-mode SAST against `sast-baseline-2026-05-12` returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-12-b` on commit `1cadc9e`.
