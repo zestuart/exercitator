@@ -94,3 +94,7 @@ Diff-mode SAST against `sast-baseline-2026-05-09-b` over the four-fix bundle (TS
 ### 2026-05-12 — session_rpe units fix (clean)
 
 Follow-up deploy correcting Foster's session-RPE units (seconds → minutes) in `src/tools/suggest.ts` and `src/api/handlers/cross-training.ts`. The previous baseline shipped a multiplicative-by-60 bug that would have misclassified every submitted RPE as `hard` against the strain cascade's absolute thresholds. Caught and fixed before any production RPE write landed. Diff-mode SAST against `sast-baseline-2026-05-12` returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-12-b` on commit `1cadc9e`.
+
+### 2026-05-13 — Suunto + Stryd pod power-source detection (clean)
+
+`src/engine/power-source.ts` extended to recognise Suunto-recorded runs paired with a Stryd pod as Stryd-native, closing a misclassification where the most recent Suunto-recorded activity fell into the "Garmin active + athlete has Stryd" branch and applied a bogus 0.87 correction factor to FTP. Per-device heuristic split: Apple Watch keeps the filename-based detection (so the Stryd FIT enricher's HealthFit-vs-Stryd-app distinction holds), Suunto falls back to Stryd-stream presence in `stream_types` since the watch writes opaque-UUID `external_id` values. Diff-mode SAST against `sast-baseline-2026-05-12-b` returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-13` on commit `a6aafb7`.
