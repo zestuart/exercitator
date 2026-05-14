@@ -11,6 +11,14 @@ const STRYD_POWER_FIELD = "Power";
 const GARMIN_POWER_FIELD = "power";
 const DEFAULT_GARMIN_TO_STRYD_FACTOR = 0.87;
 const APPLE_WATCH_PATTERN = /^Watch\d/;
+// "SUUNTO Suunto Vertical 2", "SUUNTO Ambit3", etc. Suunto watches pair with
+// the Stryd pod over BLE and pass through Stryd power, but the FIT export
+// carries an opaque UUID `external_id` (no "stryd" substring) and only a
+// subset of Stryd developer fields (`StrydStepLength` rather than the CIQ
+// triplet StrydLSS/FormPower/ILR). Treated as non-Garmin so the engine
+// classifies the activity as Stryd-native rather than falling through to
+// the "Garmin active + athlete has Stryd" correction-factor branch.
+const SUUNTO_PATTERN = /^SUUNTO\b/i;
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 
@@ -24,22 +32,52 @@ export function hasStrydStreams(activity: ActivitySummary): boolean {
 	return STRYD_STREAM_MARKERS.some((marker) => activity.stream_types?.includes(marker));
 }
 
-/** Stryd-native recording: Apple Watch via HealthFit, or enriched Stryd FIT upload.
- *  The power field is lowercase "power" but the power IS from Stryd — no correction needed. */
+/** Stryd-native recording: Apple Watch + Stryd app, Suunto + Stryd pod, or
+ *  enriched Stryd FIT upload. Power field is lowercase "power" but the power
+ *  comes from Stryd — no correction needed.
+ *
+ *  Per-device heuristic:
+ *    - STRYD device upload: trust the "stryd" external_id substring.
+ *    - Apple Watch: rely on the Stryd-app filename convention
+ *      (`*-Stryd.fit`). Stream-only heuristics would mis-classify
+ *      Apple-Health-relayed activities that carry Stryd developer fields
+ *      but came in via the native HealthFit pipeline (the Stryd FIT
+ *      enricher pipeline relies on this distinction).
+ *    - Suunto: `external_id` is an opaque UUID, so the filename heuristic
+ *      can't fire — fall back to "any Stryd developer field in the stream".
+ */
 export function isStrydNativeRecording(activity: ActivitySummary): boolean {
-	if (!activity.external_id) return false;
-	const extLower = activity.external_id.toLowerCase();
-	if (!extLower.includes("stryd")) return false;
-	return isNonGarminDevice(activity) || isStrydDevice(activity);
+	if (isStrydDevice(activity)) {
+		return activity.external_id?.toLowerCase().includes("stryd") ?? false;
+	}
+	if (!activity.device_name) return false;
+	if (APPLE_WATCH_PATTERN.test(activity.device_name)) {
+		return activity.external_id?.toLowerCase().includes("stryd") ?? false;
+	}
+	if (SUUNTO_PATTERN.test(activity.device_name)) {
+		if (activity.external_id?.toLowerCase().includes("stryd")) return true;
+		return hasAnyStrydStream(activity);
+	}
+	return false;
 }
 
 function isNonGarminDevice(activity: ActivitySummary): boolean {
 	if (!activity.device_name) return false;
-	return APPLE_WATCH_PATTERN.test(activity.device_name);
+	return (
+		APPLE_WATCH_PATTERN.test(activity.device_name) || SUUNTO_PATTERN.test(activity.device_name)
+	);
 }
 
 function isStrydDevice(activity: ActivitySummary): boolean {
 	return activity.device_name === "STRYD";
+}
+
+/** Any Stryd developer field present in stream_types. Broader than
+ *  `hasStrydStreams` (which requires CIQ-specific markers); used to detect
+ *  Stryd-pod-paired non-Garmin recordings where only `StrydStepLength` shows up. */
+function hasAnyStrydStream(activity: ActivitySummary): boolean {
+	if (!activity.stream_types) return false;
+	return activity.stream_types.some((s) => s.startsWith("Stryd"));
 }
 
 /**
@@ -114,10 +152,10 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 		};
 	}
 
-	// Apple Watch native power (no Stryd pod worn).
-	// Apple Watch reports power_field "power" (lowercase) just like Garmin, but the
-	// power comes from a wrist accelerometer estimate — not Stryd, not Garmin.
-	// Look past this run to find the athlete's actual Stryd power context.
+	// Non-Garmin device recording native power without a Stryd pod (Apple Watch
+	// wrist accelerometer or Suunto's built-in power estimate). power_field is
+	// lowercase "power" just like Garmin, but the value isn't Stryd-derived.
+	// Look back to find the athlete's actual Stryd power context.
 	if (
 		activePowerField === GARMIN_POWER_FIELD &&
 		isNonGarminDevice(mostRecentRun) &&
@@ -127,8 +165,7 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 		if (strydRun) {
 			const strydFtp = strydRun.icu_rolling_ftp ?? strydRun.icu_ftp;
 			warnings.push(
-				"Most recent run used Apple Watch native power (Stryd pod not detected) " +
-					"\u2014 power context from previous Stryd run",
+				`Most recent run on ${mostRecentRun.device_name} without Stryd pod \u2014 power context from previous Stryd run`,
 			);
 			return {
 				source: "stryd",
@@ -139,9 +176,9 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 				warnings,
 			};
 		}
-		// No Stryd history — Apple Watch power is unreliable for zone targets
+		// No Stryd history — wrist/watch-native power is unreliable for zone targets
 		warnings.push(
-			"Apple Watch native power detected \u2014 no Stryd baseline available, using HR-only prescription",
+			`Non-Garmin native power on ${mostRecentRun.device_name} \u2014 no Stryd baseline available, using HR-only prescription`,
 		);
 		return {
 			source: "none",

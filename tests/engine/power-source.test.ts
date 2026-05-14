@@ -220,10 +220,11 @@ describe("detectPowerSource", () => {
 
 		const result = detectPowerSource([appleWatchNative]);
 
-		// Apple Watch native power is unreliable — no Stryd baseline → none
+		// Wrist-native power is unreliable — no Stryd baseline → none
 		expect(result.source).toBe("none");
 		expect(result.ftp).toBe(0);
-		expect(result.warnings[0]).toContain("Apple Watch native power");
+		expect(result.warnings[0]).toContain("Non-Garmin native power");
+		expect(result.warnings[0]).toContain("Watch7,12");
 		expect(result.warnings[0]).toContain("no Stryd baseline");
 	});
 
@@ -257,7 +258,7 @@ describe("detectPowerSource", () => {
 		expect(result.correction_factor).toBe(1.0);
 		expect(result.confidence).toBe("low");
 		expect(result.ftp).toBe(310); // from the previous Stryd run
-		expect(result.warnings[0]).toContain("Stryd pod not detected");
+		expect(result.warnings[0]).toContain("without Stryd pod");
 	});
 
 	it("Apple Watch forgot Stryd pod — falls back to older Garmin+Stryd CIQ run", () => {
@@ -281,7 +282,7 @@ describe("detectPowerSource", () => {
 		expect(result.source).toBe("stryd");
 		expect(result.correction_factor).toBe(1.0);
 		expect(result.ftp).toBe(322); // from the Garmin+Stryd run
-		expect(result.warnings[0]).toContain("Stryd pod not detected");
+		expect(result.warnings[0]).toContain("without Stryd pod");
 	});
 
 	it("mixed history: Apple Watch + Stryd most recent, Garmin older", () => {
@@ -309,6 +310,58 @@ describe("detectPowerSource", () => {
 		expect(result.source).toBe("stryd");
 		expect(result.correction_factor).toBe(1.0);
 		expect(result.confidence).toBe("high");
+	});
+
+	it("detects Suunto + Stryd pod as Stryd native (no correction)", () => {
+		// Suunto Vertical 2 paired with Stryd pod: power_field is lowercase
+		// "power" (like Apple Watch / Garmin native), external_id is an
+		// opaque UUID with no "stryd" substring (so the AW filename heuristic
+		// doesn't catch it), and only `StrydStepLength` shows up in the
+		// stream — none of the CIQ-specific Stryd markers. The detector
+		// should still classify this as Stryd-native via the Stryd-stream
+		// marker on a non-Garmin device.
+		const suuntoStryd = makeRunActivity({
+			id: "suunto1",
+			start_date_local: "2026-05-12T19:03:42",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "cadence", "altitude", "StrydStepLength"],
+			device_name: "SUUNTO Suunto Vertical 2",
+			external_id: "6a03e5fd6a9afc122e4f2cf2.fit",
+			source: "SUUNTO",
+			icu_rolling_ftp: 286,
+			icu_ftp: 286,
+		});
+
+		const result = detectPowerSource([suuntoStryd]);
+
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.confidence).toBe("high");
+		expect(result.ftp).toBe(286);
+		// Regression: previously fired "Power field is set to Garmin native
+		// but Stryd is connected" with a bogus 0.87 correction factor.
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("falls back to HR-only for Suunto without Stryd pod", () => {
+		// Suunto's own wrist-based / accelerometer power without a Stryd pod
+		// has no Stryd developer fields in the stream. Treated like Apple
+		// Watch native — unreliable for zone targets.
+		const suuntoNoPod = makeRunActivity({
+			id: "suunto-nopod",
+			start_date_local: "2026-05-12T19:03:42",
+			power_field: "power",
+			stream_types: ["heartrate", "watts", "cadence"],
+			device_name: "SUUNTO Suunto Vertical 2",
+			external_id: "6a03e5fd6a9afc122e4f2cf2.fit",
+			source: "SUUNTO",
+		});
+
+		const result = detectPowerSource([suuntoNoPod]);
+
+		expect(result.source).toBe("none");
+		expect(result.warnings[0]).toContain("Non-Garmin native power");
+		expect(result.warnings[0]).toContain("SUUNTO Suunto Vertical 2");
 	});
 });
 
