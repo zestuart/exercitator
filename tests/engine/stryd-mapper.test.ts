@@ -17,7 +17,9 @@ function loadFixture(name: string): StrydRecommendationSet {
 }
 
 const EASY_FIXTURE: StrydRecommendationSet = loadFixture("recommendations-easy-extfalse.json");
-const WORKOUT_FIXTURE: StrydRecommendationSet = loadFixture("recommendations-workout-extfalse.json");
+const WORKOUT_FIXTURE: StrydRecommendationSet = loadFixture(
+	"recommendations-workout-extfalse.json",
+);
 
 // ---------------------------------------------------------------------------
 // mapCategoryToStrydType

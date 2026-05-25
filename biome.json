@@ -21,6 +21,14 @@
 		}
 	},
 	"files": {
-		"ignore": ["dist", "node_modules"]
+		"ignore": [
+			"dist",
+			"node_modules",
+			"tests/fixtures/stryd-recommendations/*.json",
+			".claude/settings.json",
+			".claude/settings.local.json",
+			"graphify-out",
+			"phase2"
+		]
 	}
 }
