@@ -544,13 +544,13 @@ export function renderPage(data: RenderData): string {
 	const swimOnlyWarnings = swimWarnings.filter((w) => !sharedSet.has(w));
 	const sharedWarningsBlock = renderWarnings(sharedWarnings);
 
-	// Stryd-sourced runs already live in Stryd's calendar as a recommendation;
-	// re-pushing would create a duplicate copy rather than mark the
-	// recommendation as picked. The canonical "PATCH selected_id" write-op is
-	// unverified (spec-recommendations.md §1), so for now we suppress the
-	// button on Stryd-sourced cards. Engine output (incl. fallback) keeps it.
-	const runIsStrydSourced = data.run?.prescriptionSource === "stryd";
-	const showStryd = profile.stryd && !runIsStrydSourced;
+	// Stryd-sourced runs round-trip the original Stryd workout payload back
+	// via toStrydWorkout — see stryd-format.ts. This creates a new entry on
+	// Stryd's calendar from the same block structure; the source recommendation
+	// stays in place. The canonical "PATCH selected_id" write op is still
+	// unverified (spec-recommendations.md §1) and might be a cleaner alternative
+	// in future. For now we treat Stryd-sourced and engine-built the same.
+	const showStryd = profile.stryd;
 	const runCard =
 		data.run && data.runInvocations
 			? renderCard(

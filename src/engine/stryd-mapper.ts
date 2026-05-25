@@ -264,10 +264,14 @@ export function strydWorkoutToSegments(workout: StrydWorkout, ftp: number): Work
 
 				let durationSecs: number;
 				if (seg.duration_type === "distance") {
-					// TODO: distance-based segments not yet supported (not observed
-					// in live captures or production payloads). Carry through as
-					// 0 s so downstream code can detect and either skip or render
-					// a placeholder.
+					// Stryd ships only time-based segments on our account (confirmed
+					// 2026-05-25 against the workout + easy buckets across two days
+					// of captures + production payloads — Dash & Dine and Hill Hustle
+					// fartleks/intervals are all `duration_type: "time"`). If a
+					// distance-based segment ever appears, we render 0 s so the
+					// render layer surfaces a 0min row that's obviously wrong rather
+					// than silently making up a duration. Implementation deferred
+					// until the case is observed.
 					durationSecs = 0;
 				} else {
 					durationSecs =

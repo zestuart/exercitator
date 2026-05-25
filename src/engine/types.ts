@@ -191,4 +191,15 @@ export interface WorkoutSuggestion {
 	strydWorkoutTitle?: string;
 	/** Pick rationale returned by pickStrydWorkout (when prescriptionSource is "stryd"). */
 	strydPickRationale?: string;
+	/**
+	 * The original Stryd `workout` payload from the recommendation, preserved
+	 * verbatim so the push-to-Stryd flow can round-trip the workout back to
+	 * Stryd's calendar with the original block structure (repeat + nested
+	 * segments) and exact `intensity_percent` bands intact. Without this, our
+	 * flat WorkoutSegment[] representation loses the repeat shape and the
+	 * stryd-format converter substitutes Z1 Easy bands for everything because
+	 * Stryd-sourced segments don't carry `stryd_zone`. Typed as `unknown` here
+	 * to avoid a cycle with `src/stryd/client.ts`; the swap layer narrows.
+	 */
+	strydOriginalWorkout?: unknown;
 }

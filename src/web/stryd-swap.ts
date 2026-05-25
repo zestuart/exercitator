@@ -249,6 +249,10 @@ export async function applyStrydRecommendation(
 			strydWorkoutId: strydWorkout.id,
 			strydWorkoutTitle: strydWorkout.title,
 			strydPickRationale: result.rationale,
+			// Preserve the original Stryd workout payload so push-to-Stryd can
+			// round-trip it back with the exact block + intensity structure
+			// rather than reconstructing from our flattened segments.
+			strydOriginalWorkout: strydWorkout,
 			// estimated_load left at the engine's category-based estimate. Stryd's
 			// stress field is on a different scale (Stryd Stress Score, not
 			// intervals.icu training load); recomputing here would either be wrong

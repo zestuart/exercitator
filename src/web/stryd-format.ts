@@ -17,6 +17,8 @@
 import { localDateStr } from "../engine/date-utils.js";
 import type { WorkoutSegment, WorkoutSuggestion } from "../engine/types.js";
 import type {
+	StrydRecommendedBlock,
+	StrydWorkout,
 	StrydWorkoutBlock,
 	StrydWorkoutPayload,
 	StrydWorkoutSegment,
@@ -113,8 +115,60 @@ function segmentToBlock(seg: WorkoutSegment): StrydWorkoutBlock {
 	};
 }
 
+/**
+ * Convert a Stryd recommendation segment (from `/workouts/recommendations`)
+ * into a Stryd write-API segment. Same shape modulo the `uuid` field which
+ * the write API generates fresh for the new workout.
+ */
+function reconstructWriteSegment(
+	src: StrydRecommendedBlock["segments"][number],
+): StrydWorkoutSegment {
+	return {
+		desc: src.desc,
+		desc_no_cp: src.desc_no_cp,
+		duration_type: src.duration_type,
+		duration_time: src.duration_time,
+		intensity_class: src.intensity_class,
+		intensity_type: "percentage",
+		intensity_percent: src.intensity_percent,
+		flexible: src.flexible,
+		incline: src.incline,
+		grade: src.grade,
+		distance_unit_selected: src.distance_unit_selected,
+		duration_distance: src.duration_distance,
+		pdc_target: src.pdc_target,
+		rpe_selected: src.rpe_selected,
+		zone_selected: src.zone_selected,
+		uuid: crypto.randomUUID(),
+	};
+}
+
+function reconstructWriteBlock(src: StrydRecommendedBlock): StrydWorkoutBlock {
+	return {
+		repeat: src.repeat,
+		segments: src.segments.map(reconstructWriteSegment),
+		uuid: crypto.randomUUID(),
+	};
+}
+
 /** Convert a Praescriptor workout suggestion to a Stryd workout payload. */
 export function toStrydWorkout(suggestion: WorkoutSuggestion, tz?: string): StrydWorkoutPayload {
+	// Stryd-sourced: round-trip the original Stryd workout payload verbatim
+	// (block structure, repeat counts, exact intensity_percent bands). The
+	// flattened WorkoutSegment[] would lose the repeat shape and the
+	// engine-built converter would substitute Z1 Easy for every burst because
+	// Stryd-sourced segments don't carry `stryd_zone`.
+	if (suggestion.strydOriginalWorkout) {
+		const orig = suggestion.strydOriginalWorkout as StrydWorkout;
+		return {
+			type: orig.type,
+			title: orig.title,
+			desc: orig.desc,
+			blocks: orig.blocks.map(reconstructWriteBlock),
+		};
+	}
+
+	// Engine-built (Pam, fallback, swim, rest): build from WorkoutSegment[].
 	return {
 		type: suggestion.category,
 		title: suggestion.title,
