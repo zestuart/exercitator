@@ -10,6 +10,7 @@ import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import type { UserProfile } from "../users.js";
+import { markStrydRecommendationSelected } from "./mark-stryd-selected.js";
 import { generatePrescriptions } from "./prescriptions.js";
 import { toStrydWorkout } from "./stryd-format.js";
 
@@ -83,6 +84,11 @@ export async function sendToStryd(
 			});
 		}
 
+		// Fire-and-forget: tell Stryd we picked this option. State-only
+		// side-effect; safe to ignore failures. No-op when the suggestion
+		// isn't Stryd-sourced (engine builds / fallback / Pam).
+		void markStrydRecommendationSelected(strydClient, suggestion);
+
 		jsonResponse(res, 200, {
 			success: true,
 			workout_id: workoutId,
@@ -92,6 +98,12 @@ export async function sendToStryd(
 			distance_m: Math.round(entry.distance),
 		});
 	} catch (err) {
-		jsonResponse(res, 500, { success: false, error: String(err) });
+		// Full error (incl. stack) goes to server logs; client gets a
+		// generic message so internal details don't leak over the wire.
+		console.error("sendToStryd failed:", err);
+		jsonResponse(res, 500, {
+			success: false,
+			error: "Failed to send workout to Stryd",
+		});
 	}
 }

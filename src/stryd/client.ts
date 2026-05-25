@@ -517,6 +517,61 @@ export class StrydClient {
 		return JSON.parse(text) as StrydRecommendationSet;
 	}
 
+	/**
+	 * Mark a workout in a recommendation set as the user's selection.
+	 *
+	 * Verified empirically 2026-05-25: Stryd accepts the PATCH, returns 200
+	 * with the full updated set, and the server-side `selected_id` flips
+	 * from 0 to the chosen workout id. The side effect is **state-only**:
+	 * does NOT create a calendar entry, does NOT schedule. Treat as a
+	 * preference signal for Stryd's recommendation engine — fire-and-forget
+	 * after any "user picked this workout" action (send-to-stryd,
+	 * send-to-intervals, future channels).
+	 *
+	 * See `notes/stryd-api/spec-recommendations.md` (in the retextor repo)
+	 * for the full wire contract.
+	 *
+	 * - 200 → returns void; the response body is the updated set but
+	 *   callers rarely need it.
+	 * - 401 → re-runs `login()` once and retries.
+	 * - 5xx / other → throws.
+	 */
+	async markRecommendationSelected(recommendationSetId: string, workoutId: number): Promise<void> {
+		if (!this.userId) throw new Error("StrydClient: not authenticated");
+		// The recommendation-set id arrives from the upstream Stryd response
+		// and is interpolated into the URL path. Validate it's a bare int64
+		// string ([0-9]+) before use so a compromised or buggy upstream
+		// can't inject path traversal or other URL-shape mischief.
+		if (!/^\d+$/.test(recommendationSetId)) {
+			throw new Error(
+				`StrydClient.markRecommendationSelected: invalid recommendationSetId (must be digits only)`,
+			);
+		}
+
+		const url = `${API_BASE}/users/${this.userId}/workouts/recommendations/${recommendationSetId}`;
+		const doFetch = () =>
+			fetch(url, {
+				method: "PATCH",
+				headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+				body: JSON.stringify({ selected_id: workoutId }),
+				signal: AbortSignal.timeout(API_TIMEOUT_MS),
+			});
+
+		let res = await doFetch();
+		if (res.status === 401) {
+			await this.login();
+			res = await doFetch();
+		}
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			const excerpt = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+			throw new Error(`Stryd markRecommendationSelected failed (HTTP ${res.status}): ${excerpt}`);
+		}
+		// Drain the body to free the socket. Don't parse — callers don't use it.
+		await res.text();
+	}
+
 	get isAuthenticated(): boolean {
 		return this.token !== null;
 	}

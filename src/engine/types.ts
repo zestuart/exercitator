@@ -192,6 +192,15 @@ export interface WorkoutSuggestion {
 	/** Pick rationale returned by pickStrydWorkout (when prescriptionSource is "stryd"). */
 	strydPickRationale?: string;
 	/**
+	 * The Stryd recommendation-set id this workout came from. Used by the
+	 * send-to-{stryd,intervals} flows to fire `PATCH /recommendations/{id}`
+	 * with `{selected_id: <workoutId>}` so Stryd's recommendation engine
+	 * learns that the user picked this option, regardless of which
+	 * execution channel (Stryd watch / intervals.icu) they chose.
+	 * String per the wire contract (int64 serialised as a string).
+	 */
+	strydRecommendationSetId?: string;
+	/**
 	 * The original Stryd `workout` payload from the recommendation, preserved
 	 * verbatim so the push-to-Stryd flow can round-trip the workout back to
 	 * Stryd's calendar with the original block structure (repeat + nested

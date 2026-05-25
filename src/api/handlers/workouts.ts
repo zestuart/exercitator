@@ -16,6 +16,8 @@ import {
 	suggestWorkoutFromData,
 } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
+import { emitDsw } from "../../web/promus-dsw.js";
+import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { cacheGet, cacheSet } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
 import { segmentToApi, suggestionToApi } from "../payload.js";
@@ -191,7 +193,7 @@ export async function handleWorkoutsSuggested(
 			sportSelectionReason = sel.reason;
 		}
 
-		const suggestion: WorkoutSuggestion = suggestWorkoutFromData(
+		let suggestion: WorkoutSuggestion = suggestWorkoutFromData(
 			data,
 			sport,
 			now,
@@ -205,6 +207,20 @@ export async function handleWorkoutsSuggested(
 			emitAwaitingInput(res, suggestion);
 			return;
 		}
+
+		// Apply the same Stryd-swap gating that Praescriptor uses, so this
+		// API surface returns the Stryd-sourced workout when ze's profile
+		// has runRecommendationSource: "stryd". Fire-and-forget DSW emit on
+		// the back of it (Promus dedups by user+date+sport+source).
+		const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd, strydCp);
+		suggestion = swap.suggestion;
+		void emitDsw({
+			userId: user.profile.id,
+			date: localDateStr(now, tz),
+			sport: suggestion.sport,
+			suggestion,
+			strydRecommendationSet: swap.strydRecommendationSet,
+		});
 
 		const body: SuggestedResponse = {
 			generated_at: now.toISOString(),

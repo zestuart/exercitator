@@ -21,6 +21,7 @@ import {
 } from "../engine/stryd-mapper.js";
 import type { WorkoutSuggestion } from "../engine/types.js";
 import type { StrydClient, StrydRecommendationSet } from "../stryd/client.js";
+import type { UserProfile } from "../users.js";
 
 /**
  * The result of a swap attempt. `suggestion` is always present (engine output
@@ -253,6 +254,9 @@ export async function applyStrydRecommendation(
 			// round-trip it back with the exact block + intensity structure
 			// rather than reconstructing from our flattened segments.
 			strydOriginalWorkout: strydWorkout,
+			// Recommendation-set id so the send-to-* flows can PATCH the
+			// selected_id back to Stryd as a preference signal.
+			strydRecommendationSetId: set.id,
 			// estimated_load left at the engine's category-based estimate. Stryd's
 			// stress field is on a different scale (Stryd Stress Score, not
 			// intervals.icu training load); recomputing here would either be wrong
@@ -260,6 +264,33 @@ export async function applyStrydRecommendation(
 		},
 		strydRecommendationSet: set,
 	};
+}
+
+/**
+ * Wrapper that applies `applyStrydRecommendation` only when the per-user
+ * flag + sport + status + client + CP preconditions are all met. Use this
+ * from any path that produces a Run WorkoutSuggestion (Praescriptor render,
+ * HTTP API /workouts/suggested, /dashboard, etc.) to keep the swap-gating
+ * rules centralised. Returns the original suggestion unchanged when any
+ * precondition fails. `strydRecommendationSet` is null when the swap was
+ * not attempted.
+ */
+export async function applyStrydSwapIfEnabled(
+	suggestion: WorkoutSuggestion,
+	profile: UserProfile,
+	strydClient: StrydClient | null | undefined,
+	ftp: number | null | undefined,
+): Promise<StrydSwapResult> {
+	if (
+		suggestion.sport !== "Run" ||
+		suggestion.status === "awaiting_input" ||
+		profile.runRecommendationSource !== "stryd" ||
+		!strydClient ||
+		!ftp
+	) {
+		return { suggestion, strydRecommendationSet: null };
+	}
+	return applyStrydRecommendation(suggestion, strydClient, ftp);
 }
 
 function fallback(err: unknown): {

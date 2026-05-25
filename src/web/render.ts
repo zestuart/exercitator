@@ -1404,7 +1404,7 @@ document.querySelectorAll('.compliance-confirm').forEach(el => {
 			// Auto-pick if only one match, otherwise let user pick
 			const actId = activities.length === 1
 				? activities[0].id
-				: prompt('Multiple activities found. Enter ID:\\n' + activities.map(a => a.id + ' - ' + a.name).join('\\n'));
+				: prompt('Multiple activities found. Enter ID:\\n' + activities.map(a => a.id + ' - ' + String(a.name || '').replace(/[\\r\\n]/g, ' ')).join('\\n'));
 
 			if (!actId) { this.disabled = false; this.textContent = 'I completed this'; return; }
 

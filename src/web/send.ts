@@ -7,8 +7,10 @@ import type { ServerResponse } from "node:http";
 import { getPrescription, getSendEvent, persistSendEvent } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
 import type { IntervalsClient } from "../intervals.js";
+import type { StrydClient } from "../stryd/client.js";
 import type { UserProfile } from "../users.js";
 import { buildIntervalsDescription } from "./intervals-format.js";
+import { markStrydRecommendationSelected } from "./mark-stryd-selected.js";
 import { generatePrescriptions } from "./prescriptions.js";
 
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
@@ -23,6 +25,7 @@ export async function sendToIntervals(
 	res: ServerResponse,
 	force = false,
 	tz?: string,
+	strydClient?: StrydClient | null,
 ): Promise<void> {
 	try {
 		const today = localDateStr(new Date(), tz);
@@ -68,8 +71,19 @@ export async function sendToIntervals(
 			persistSendEvent(rx.id, profile.id, today, sportKey, "intervals", result.id);
 		}
 
+		// Fire-and-forget: tell Stryd we picked this option, regardless of
+		// the chosen execution channel. State-only side-effect; safe to
+		// ignore failures. No-op when the suggestion isn't Stryd-sourced.
+		void markStrydRecommendationSelected(strydClient, suggestion);
+
 		jsonResponse(res, 200, { success: true, event_id: result.id });
 	} catch (err) {
-		jsonResponse(res, 500, { success: false, error: String(err) });
+		// Full error (incl. stack) goes to server logs; client gets a
+		// generic message so internal details don't leak over the wire.
+		console.error("sendToIntervals failed:", err);
+		jsonResponse(res, 500, {
+			success: false,
+			error: "Failed to send workout to intervals.icu",
+		});
 	}
 }

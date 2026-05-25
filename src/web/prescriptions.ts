@@ -18,7 +18,7 @@ import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
 import type { UserProfile } from "../users.js";
 import { emitDsw } from "./promus-dsw.js";
-import { applyStrydRecommendation } from "./stryd-swap.js";
+import { applyStrydSwapIfEnabled } from "./stryd-swap.js";
 
 export interface DataSource {
 	/** Number of activities in the 14-day window. */
@@ -120,23 +120,20 @@ export async function generatePrescriptions(
 		: null;
 
 	// Stryd recommendation swap (per-user flag; ze-only at the moment).
-	// Runs AFTER all engine guards (Vigil, sleep debt, cross-training, HRV,
-	// staleness) have already shaped the category. Stryd never re-decides
-	// intensity; it only supplies the workout body for the chosen category.
-	if (
-		run &&
-		run.status !== "awaiting_input" &&
-		profile.runRecommendationSource === "stryd" &&
-		strydClient &&
-		strydCp
-	) {
-		const swap = await applyStrydRecommendation(run, strydClient, strydCp.cp);
+	// Gating + application centralised in `applyStrydSwapIfEnabled` so the
+	// HTTP API handlers (/workouts/suggested, /dashboard) use the same
+	// rules. Runs AFTER all engine guards (Vigil, sleep debt, cross-training,
+	// HRV, staleness) have already shaped the category. Stryd never
+	// re-decides intensity; it only supplies the workout body for the chosen
+	// category.
+	if (run) {
+		const swap = await applyStrydSwapIfEnabled(run, profile, strydClient, strydCp?.cp);
 		run = swap.suggestion;
 
 		// Fire-and-forget DSW emission to Promus. Never blocks the
-		// prescription; logs warnings on failure. Skips internally for
-		// prescriptionSource = "exercitator" (rest days) and for
-		// suggestions that never went through the swap.
+		// prescription; logs warnings on failure. buildDswPayload returns
+		// null for engine-only / non-Stryd-attempted suggestions, so this
+		// is a true no-op when the swap didn't fire.
 		void emitDsw({
 			userId: profile.id,
 			date: today,

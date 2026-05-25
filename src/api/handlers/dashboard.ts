@@ -19,6 +19,8 @@ import {
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
+import { emitDsw } from "../../web/promus-dsw.js";
+import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { apiError, jsonResponse } from "../errors.js";
 import {
 	criticalPowerFromContext,
@@ -146,6 +148,16 @@ export async function handleDashboard(
 					prompt: suggestion.awaitingInput.prompt,
 				};
 			} else {
+				// Same Stryd-swap gating as Praescriptor / /workouts/suggested.
+				const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd, strydCp);
+				suggestion = swap.suggestion;
+				void emitDsw({
+					userId: user.profile.id,
+					date: today,
+					sport: suggestion.sport,
+					suggestion,
+					strydRecommendationSet: swap.strydRecommendationSet,
+				});
 				suggestedResp = {
 					generated_at: now.toISOString(),
 					user_id: user.profile.id,

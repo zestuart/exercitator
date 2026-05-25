@@ -188,7 +188,7 @@ export async function handleRoutes(
 				return;
 			}
 			const force = url.searchParams.get("force") === "true";
-			await sendToIntervals(client, profile, sport, res, force, tz);
+			await sendToIntervals(client, profile, sport, res, force, tz, userStryd);
 			return;
 		}
 
