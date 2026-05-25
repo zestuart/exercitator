@@ -5,6 +5,7 @@
  * of the engine's internal types.
  */
 
+import { groupPairSegments } from "../engine/segment-groups.js";
 import type {
 	ActivitySummary,
 	PowerContext,
@@ -283,6 +284,45 @@ export function segmentToApi(seg: WorkoutSegment, sport: "Run" | "Swim"): ApiSeg
 	};
 }
 
+/**
+ * Emit a pair-group (consecutive work+rest repeated N times) as a single
+ * ApiSegment with both the work and rest targets populated. This mirrors
+ * what Praescriptor's render shows for the same data — clients see one
+ * "5× Work set" entry instead of 10 flat rows.
+ *
+ * Engine-built intervals also use the `repeats / work_duration_s /
+ * rest_duration_s` shape (with rest implicit-easy), so API consumers
+ * already handle this triple — the new `rest_target` / `rest_target_description`
+ * are additive and unused by engine-built segments.
+ */
+function pairGroupToApi(
+	group: {
+		kind: "pair";
+		work: WorkoutSegment;
+		rest: WorkoutSegment;
+		repeats: number;
+	},
+	sport: "Run" | "Swim",
+): ApiSegment {
+	const work = segmentToApi(group.work, sport);
+	const rest = segmentToApi(group.rest, sport);
+	const totalSecs = group.repeats * (group.work.duration_secs + group.rest.duration_secs);
+
+	return {
+		// "Work set" matches what Praescriptor shows for the same data.
+		name: `${group.work.name} set`,
+		duration_s: totalSecs,
+		target_description: work.target_description,
+		target: work.target,
+		target_hr_zone: work.target_hr_zone,
+		repeats: group.repeats,
+		work_duration_s: group.work.duration_secs,
+		rest_duration_s: group.rest.duration_secs,
+		...(rest.target != null && { rest_target: rest.target }),
+		...(rest.target_description && { rest_target_description: rest.target_description }),
+	};
+}
+
 // ---------------------------------------------------------------------------
 // WorkoutSuggestion → SuggestedWorkoutBody
 // ---------------------------------------------------------------------------
@@ -322,7 +362,9 @@ export function suggestionToApi(
 					})),
 				}
 			: null,
-		segments: s.segments.map((seg) => segmentToApi(seg, s.sport)),
+		segments: groupPairSegments(s.segments).map((g) =>
+			g.kind === "pair" ? pairGroupToApi(g, s.sport) : segmentToApi(g.seg, s.sport),
+		),
 		...(s.prescriptionSource && { prescription_source: s.prescriptionSource }),
 		...(s.fallbackReason && { fallback_reason: s.fallbackReason }),
 		...(s.strydWorkoutId !== undefined && { stryd_workout_id: s.strydWorkoutId }),

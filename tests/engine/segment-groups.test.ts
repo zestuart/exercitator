@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { groupPairSegments } from "../../src/engine/segment-groups.js";
 import type { WorkoutSegment } from "../../src/engine/types.js";
-import { groupPairSegments } from "../../src/web/render.js";
 
 function seg(
 	name: string,

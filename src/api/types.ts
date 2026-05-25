@@ -113,6 +113,15 @@ export interface ApiSegment {
 	repeats?: number;
 	work_duration_s?: number;
 	rest_duration_s?: number;
+	/**
+	 * Power/target for the REST portion of a `repeats` block, when distinct
+	 * from sub-Z1 implicit recovery. Set by Stryd-sourced fartlek-style
+	 * pairs where Stryd specifies a particular recovery power band
+	 * (e.g. 60–70 % CP). Engine-built intervals leave these unset and the
+	 * client is expected to render the rest as easy recovery.
+	 */
+	rest_target?: SegmentTarget;
+	rest_target_description?: string;
 }
 
 export interface SuggestedWorkoutBody {
