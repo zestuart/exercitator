@@ -17,6 +17,7 @@ import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
 import type { UserProfile } from "../users.js";
+import { emitDsw } from "./promus-dsw.js";
 import { applyStrydRecommendation } from "./stryd-swap.js";
 
 export interface DataSource {
@@ -49,7 +50,25 @@ export interface Prescription {
 	generated_at: string;
 }
 
+/**
+ * Maximum entries in the per-user prescription cache. Today's user
+ * registry has 2 entries (`ze`, `pam`) hardcoded in `src/users.ts`, so
+ * the cache structurally cannot grow beyond that. The bound exists
+ * defensively for the case where user registration is added later —
+ * caps memory growth without changing observable behaviour now.
+ */
+const MAX_CACHE_ENTRIES = 100;
+
 const cache = new Map<string, { date: string; prescription: Prescription }>();
+
+function cacheSet(userId: string, entry: { date: string; prescription: Prescription }): void {
+	cache.set(userId, entry);
+	if (cache.size > MAX_CACHE_ENTRIES) {
+		// Map preserves insertion order; first key is the oldest entry.
+		const oldest = cache.keys().next().value;
+		if (oldest !== undefined) cache.delete(oldest);
+	}
+}
 
 export async function generatePrescriptions(
 	client: IntervalsClient,
@@ -111,7 +130,20 @@ export async function generatePrescriptions(
 		strydClient &&
 		strydCp
 	) {
-		run = await applyStrydRecommendation(run, strydClient, strydCp.cp);
+		const swap = await applyStrydRecommendation(run, strydClient, strydCp.cp);
+		run = swap.suggestion;
+
+		// Fire-and-forget DSW emission to Promus. Never blocks the
+		// prescription; logs warnings on failure. Skips internally for
+		// prescriptionSource = "exercitator" (rest days) and for
+		// suggestions that never went through the swap.
+		void emitDsw({
+			userId: profile.id,
+			date: today,
+			sport: "Run",
+			suggestion: run,
+			strydRecommendationSet: swap.strydRecommendationSet,
+		});
 	}
 
 	// Vigil wellness write: update injury field when severity ≥ 2 (run prescription only).
@@ -139,7 +171,7 @@ export async function generatePrescriptions(
 		generated_at: now.toISOString(),
 	};
 
-	cache.set(profile.id, { date: today, prescription });
+	cacheSet(profile.id, { date: today, prescription });
 
 	// Persist prescriptions to SQLite for compliance tracking.
 	try {

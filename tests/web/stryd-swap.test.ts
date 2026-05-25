@@ -67,7 +67,11 @@ describe("applyStrydRecommendation", () => {
 		const client = await loggedInClient();
 		const initialCalls = mockFetch.mock.calls.length;
 
-		const out = await applyStrydRecommendation(baseSuggestion({ category: "rest" }), client, FTP);
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({ category: "rest" }),
+			client,
+			FTP,
+		);
 
 		expect(out.prescriptionSource).toBe("exercitator");
 		expect(out.title).toBe("Engine base run");
@@ -77,7 +81,11 @@ describe("applyStrydRecommendation", () => {
 
 	it("Swim sport returns the engine suggestion tagged 'exercitator' (defensive guard)", async () => {
 		const client = await loggedInClient();
-		const out = await applyStrydRecommendation(baseSuggestion({ sport: "Swim" }), client, FTP);
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({ sport: "Swim" }),
+			client,
+			FTP,
+		);
 		expect(out.prescriptionSource).toBe("exercitator");
 		expect(out.sport).toBe("Swim");
 	});
@@ -88,7 +96,11 @@ describe("applyStrydRecommendation", () => {
 			jsonResponse(loadFixture("recommendations-easy-extfalse.json")),
 		);
 
-		const out = await applyStrydRecommendation(baseSuggestion({ category: "base" }), client, FTP);
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({ category: "base" }),
+			client,
+			FTP,
+		);
 
 		expect(out.prescriptionSource).toBe("stryd");
 		expect(out.title).toBe("Easy + Strides");
@@ -112,7 +124,7 @@ describe("applyStrydRecommendation", () => {
 			jsonResponse(loadFixture("recommendations-easy-extfalse.json")),
 		);
 
-		const out = await applyStrydRecommendation(
+		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "recovery" }),
 			client,
 			FTP,
@@ -129,7 +141,11 @@ describe("applyStrydRecommendation", () => {
 		const client = await loggedInClient();
 		mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-		const out = await applyStrydRecommendation(baseSuggestion({ category: "long" }), client, FTP);
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({ category: "long" }),
+			client,
+			FTP,
+		);
 
 		expect(out.prescriptionSource).toBe("exercitator-fallback");
 		expect(out.fallbackReason).toBe("204_no_content_long");
@@ -140,7 +156,7 @@ describe("applyStrydRecommendation", () => {
 		const client = await loggedInClient();
 		mockFetch.mockResolvedValueOnce(new Response("boom", { status: 500 }));
 
-		const out = await applyStrydRecommendation(
+		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "intervals" }),
 			client,
 			FTP,
@@ -154,7 +170,7 @@ describe("applyStrydRecommendation", () => {
 		const client = await loggedInClient();
 		mockFetch.mockRejectedValueOnce(new Error("fetch failed: network unreachable"));
 
-		const out = await applyStrydRecommendation(
+		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "threshold" }),
 			client,
 			FTP,
@@ -170,7 +186,7 @@ describe("applyStrydRecommendation", () => {
 			jsonResponse(loadFixture("recommendations-workout-extfalse.json")),
 		);
 
-		const out = await applyStrydRecommendation(
+		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "intervals" }),
 			client,
 			FTP,

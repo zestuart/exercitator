@@ -182,4 +182,65 @@ describe("StrydClient", () => {
 			expect(result).toBeNull();
 		});
 	});
+
+	describe("JSON response size cap", () => {
+		// Build a body that is guaranteed to exceed the 1 MB default cap. The
+		// content does not need to be valid JSON — parseBoundedJson throws on
+		// the size check before JSON.parse runs.
+		const oversizedBody = "x".repeat(2 * 1024 * 1024);
+
+		it("rejects an oversized login response before JSON.parse", async () => {
+			mockFetch.mockResolvedValueOnce(
+				new Response(oversizedBody, {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			);
+
+			const client = new StrydClient(config);
+			await expect(client.login()).rejects.toThrow(/Stryd login: response too large/);
+			expect(client.isAuthenticated).toBe(false);
+		});
+
+		it("rejects an oversized listActivities response before JSON.parse", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-123", id: "user-456" }));
+			const client = new StrydClient(config);
+			await client.login();
+
+			mockFetch.mockResolvedValueOnce(
+				new Response(oversizedBody, {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			);
+
+			await expect(client.listActivities()).rejects.toThrow(
+				/Stryd listActivities: response too large/,
+			);
+		});
+
+		it("rejects an oversized getLatestCriticalPower response before JSON.parse", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-123", id: "user-456" }));
+			const client = new StrydClient(config);
+			await client.login();
+
+			mockFetch.mockResolvedValueOnce(
+				new Response(oversizedBody, {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+			);
+
+			await expect(client.getLatestCriticalPower()).rejects.toThrow(
+				/Stryd getLatestCriticalPower: response too large/,
+			);
+		});
+
+		it("permits normal-sized responses (sentinel)", async () => {
+			mockFetch.mockResolvedValueOnce(jsonResponse({ token: "tok-abc", id: "user-xyz" }));
+			const client = new StrydClient(config);
+			await client.login();
+			expect(client.isAuthenticated).toBe(true);
+		});
+	});
 });

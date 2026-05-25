@@ -25,6 +25,34 @@ const MAX_FIT_SIZE_BYTES = 10 * 1024 * 1024;
  */
 const MAX_RECOMMENDATIONS_JSON_BYTES = 1024 * 1024;
 
+/**
+ * Default upper bound for JSON response bodies on api.stryd.com. Real
+ * payloads observed: login response ~400 B, listActivities ~1-50 KB,
+ * calendar entries ~1-10 KB, cp/history ~5-30 KB. 1 MB is generous
+ * headroom while still bounding the OOM blast radius from a hostile
+ * or buggy upstream.
+ */
+const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
+
+/**
+ * Read a fetch Response as text, enforce a size cap, then JSON.parse.
+ * Throws with a descriptive error including the method label and the
+ * observed vs allowed size, before any parsing is attempted.
+ */
+async function parseBoundedJson<T>(
+	res: Response,
+	methodLabel: string,
+	maxBytes = MAX_JSON_RESPONSE_BYTES,
+): Promise<T> {
+	const text = await res.text();
+	if (text.length > maxBytes) {
+		throw new Error(
+			`Stryd ${methodLabel}: response too large (${text.length} bytes, limit ${maxBytes})`,
+		);
+	}
+	return JSON.parse(text) as T;
+}
+
 /** Allowed hostnames for Stryd FIT download URLs. */
 const ALLOWED_FIT_HOSTS = ["storage.googleapis.com", "storage.cloud.google.com"];
 
@@ -246,7 +274,7 @@ export class StrydClient {
 			throw new Error(`Stryd login failed (HTTP ${res.status}): ${text}`);
 		}
 
-		const data = (await res.json()) as { token: string; id: string };
+		const data = await parseBoundedJson<{ token: string; id: string }>(res, "login");
 		this.token = data.token;
 		this.userId = data.id;
 	}
@@ -275,7 +303,7 @@ export class StrydClient {
 			throw new Error(`Stryd listActivities failed (HTTP ${res.status})`);
 		}
 
-		const data = (await res.json()) as { activities: StrydActivity[] };
+		const data = await parseBoundedJson<{ activities: StrydActivity[] }>(res, "listActivities");
 		return data.activities ?? [];
 	}
 
@@ -293,7 +321,10 @@ export class StrydClient {
 			throw new Error(`Stryd FIT URL fetch failed (HTTP ${metaRes.status})`);
 		}
 
-		const { url: signedUrl } = (await metaRes.json()) as { url: string };
+		const { url: signedUrl } = await parseBoundedJson<{ url: string }>(
+			metaRes,
+			"downloadFit metadata",
+		);
 
 		// Validate signed URL against allowed hosts (SSRF prevention)
 		const parsedUrl = new URL(signedUrl);
@@ -339,7 +370,10 @@ export class StrydClient {
 			throw new Error(`Stryd CP history failed (HTTP ${res.status})`);
 		}
 
-		const entries = (await res.json()) as { critical_power: number; created: number }[];
+		const entries = await parseBoundedJson<{ critical_power: number; created: number }[]>(
+			res,
+			"getLatestCriticalPower",
+		);
 		if (!Array.isArray(entries) || entries.length === 0) return null;
 
 		// Find the most recent entry with a non-zero created timestamp
@@ -365,7 +399,7 @@ export class StrydClient {
 			throw new Error(`Stryd createWorkout failed (HTTP ${res.status}): ${text}`);
 		}
 
-		const data = (await res.json()) as { id: number };
+		const data = await parseBoundedJson<{ id: number }>(res, "createWorkout");
 		return data.id;
 	}
 
@@ -392,7 +426,7 @@ export class StrydClient {
 			throw new Error(`Stryd scheduleWorkout failed (HTTP ${res.status}): ${text}`);
 		}
 
-		return (await res.json()) as StrydCalendarEntry;
+		return await parseBoundedJson<StrydCalendarEntry>(res, "scheduleWorkout");
 	}
 
 	/** Delete a workout from the user's Stryd calendar. */
