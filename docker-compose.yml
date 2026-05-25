@@ -22,6 +22,8 @@ services:
       - MCP_TOKEN_VERSION=${MCP_TOKEN_VERSION:-1}
       - EXERCITATOR_API_KEYS=${EXERCITATOR_API_KEYS:-}
       - EXERCITATOR_API_BIND_ADDR=${EXERCITATOR_API_BIND_ADDR:-0.0.0.0:8643}
+      - PROMUS_API=${PROMUS_API:-}
+      - PROMUS_URL=${PROMUS_URL:-}
     deploy:
       resources:
         limits:
@@ -65,6 +67,8 @@ services:
       - STRYD_PASSWORD=${STRYD_PASSWORD:-}
       - STRYD_EMAIL_PAM=${STRYD_EMAIL_PAM:-}
       - STRYD_PASSWORD_PAM=${STRYD_PASSWORD_PAM:-}
+      - PROMUS_API=${PROMUS_API:-}
+      - PROMUS_URL=${PROMUS_URL:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
       interval: 60s
