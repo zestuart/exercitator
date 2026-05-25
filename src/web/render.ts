@@ -37,10 +37,16 @@ function escapeHtml(s: string): string {
 }
 
 function formatDuration(secs: number): string {
+	if (secs <= 0) return "0min";
 	const h = Math.floor(secs / 3600);
 	const m = Math.floor((secs % 3600) / 60);
+	const s = secs % 60;
 	if (h > 0) return `${h}h${m.toString().padStart(2, "0")}m`;
-	return `${m}min`;
+	// Sub-minute durations would otherwise floor to "0min" — Stryd fartlek
+	// bursts (e.g. 30 s work + 30 s recovery) hit this regularly.
+	if (m === 0) return `${s}s`;
+	if (s === 0) return `${m}min`;
+	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function dayName(dateStr: string, tz?: string): string {
