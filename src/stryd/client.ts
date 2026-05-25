@@ -420,15 +420,16 @@ export class StrydClient {
 	 * `/recommendations/{type}` returns 404 (verified Phase 0).
 	 */
 	async getRecommendedWorkouts(
-		userId: string,
 		type: StrydRecommendationType,
 		extended = false,
 	): Promise<StrydRecommendationSet | null> {
+		if (!this.userId) throw new Error("StrydClient: not authenticated");
+
 		const params = new URLSearchParams({
 			type,
 			extended: extended ? "true" : "false",
 		});
-		const url = `${API_BASE}/users/${userId}/workouts/recommendations?${params}`;
+		const url = `${API_BASE}/users/${this.userId}/workouts/recommendations?${params}`;
 
 		const doFetch = () =>
 			fetch(url, {

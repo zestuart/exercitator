@@ -134,6 +134,23 @@ export interface SuggestedWorkoutBody {
 	warnings: string[];
 	injury_warning: InjuryWarningBlock | null;
 	segments: ApiSegment[];
+	/**
+	 * Where the segments came from. Only set when Praescriptor's Stryd swap
+	 * layer ran (ze + Run; never on Swim, never on rest, never on Pam).
+	 *   "stryd"                — Stryd-served workout
+	 *   "exercitator-fallback" — Stryd attempted but unavailable; engine output
+	 *   "exercitator"          — explicit engine output (rest day; no swap attempted)
+	 *   omitted                — engine output (default)
+	 */
+	prescription_source?: "stryd" | "exercitator" | "exercitator-fallback";
+	/** Why the swap fell back (only when prescription_source === "exercitator-fallback"). */
+	fallback_reason?: string;
+	/** Stryd workout id (only when prescription_source === "stryd"). */
+	stryd_workout_id?: number;
+	/** Stryd workout title (only when prescription_source === "stryd"). */
+	stryd_workout_title?: string;
+	/** pickStrydWorkout's rationale (only when prescription_source === "stryd"). */
+	stryd_pick_rationale?: string;
 }
 
 export interface SuggestedResponse {

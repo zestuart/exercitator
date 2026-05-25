@@ -169,6 +169,22 @@ function renderWarnings(warnings: string[]): string {
 	return `<div class="warnings"><ul>${items}</ul></div>`;
 }
 
+/**
+ * Source attribution chip — shown only when Stryd-swap was attempted.
+ * Engine-only prescriptions (Pam, or ze on rest days) render no chip.
+ */
+function renderSourceChip(suggestion: WorkoutSuggestion): string {
+	if (suggestion.prescriptionSource === "stryd") {
+		const title = suggestion.strydWorkoutTitle ?? "(untitled)";
+		return `<span class="source-chip source-chip-stryd" title="${escapeHtml(suggestion.strydPickRationale ?? "")}">Source: Stryd · ${escapeHtml(title)}</span>`;
+	}
+	if (suggestion.prescriptionSource === "exercitator-fallback") {
+		const reason = suggestion.fallbackReason ?? "unknown";
+		return `<span class="source-chip source-chip-fallback">Source: Exercitator (Stryd unavailable: ${escapeHtml(reason)})</span>`;
+	}
+	return "";
+}
+
 function renderVigilSection(vigil: VigilSummary | undefined): string {
 	if (!vigil || vigil.severity === 0) return "";
 
@@ -285,6 +301,7 @@ function renderCard(
 					<span class="meta-pill">${escapeHtml(suggestion.category)}</span>
 					<span class="meta-pill">${formatDuration(suggestion.total_duration_secs)}</span>
 					<span class="meta-pill">~${suggestion.estimated_load} load</span>
+					${renderSourceChip(suggestion)}
 				</div>
 			</div>
 
@@ -697,6 +714,26 @@ body {
 	border-radius: 12px;
 	text-transform: capitalize;
 	border: 1px solid var(--border);
+}
+
+.source-chip {
+	font-size: 0.72rem;
+	padding: 2px 8px;
+	border-radius: 12px;
+	border: 1px solid var(--border);
+	text-transform: none;
+}
+
+.source-chip-stryd {
+	color: #1f5e3a;
+	background: #e6f4ec;
+	border-color: #b8dac5;
+}
+
+.source-chip-fallback {
+	color: #8a5a00;
+	background: #fdf4e0;
+	border-color: #e4cf94;
 }
 
 /* --- Readiness --- */

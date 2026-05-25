@@ -323,5 +323,10 @@ export function suggestionToApi(
 				}
 			: null,
 		segments: s.segments.map((seg) => segmentToApi(seg, s.sport)),
+		...(s.prescriptionSource && { prescription_source: s.prescriptionSource }),
+		...(s.fallbackReason && { fallback_reason: s.fallbackReason }),
+		...(s.strydWorkoutId !== undefined && { stryd_workout_id: s.strydWorkoutId }),
+		...(s.strydWorkoutTitle && { stryd_workout_title: s.strydWorkoutTitle }),
+		...(s.strydPickRationale && { stryd_pick_rationale: s.strydPickRationale }),
 	};
 }

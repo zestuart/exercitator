@@ -23,6 +23,17 @@ export interface UserProfile {
 	strydEmailEnv: string | null;
 	/** Environment variable name for Stryd password (null if stryd: false). */
 	strydPasswordEnv: string | null;
+	/**
+	 * Optional override for the run-prescription source. When `"stryd"`, the
+	 * engine still decides the category (readiness, Vigil, sleep debt,
+	 * cross-training, staleness all gate as normal), but the segments are
+	 * replaced by a Stryd-served workout chosen via intensity_zones overlap.
+	 * On any failure (5xx / 401 / 204 / picker rejection) we fall back to the
+	 * engine's own segments and surface the fallback reason on the card.
+	 * Undefined keeps the engine's builder (default behaviour for Pam).
+	 * Swim prescriptions are never affected.
+	 */
+	runRecommendationSource?: "stryd";
 }
 
 const PROFILES: UserProfile[] = [
@@ -35,6 +46,7 @@ const PROFILES: UserProfile[] = [
 		apiKeyEnv: "INTERVALS_ICU_API_KEY",
 		strydEmailEnv: "STRYD_EMAIL",
 		strydPasswordEnv: "STRYD_PASSWORD",
+		runRecommendationSource: "stryd",
 	},
 	{
 		id: "pam",

@@ -172,4 +172,23 @@ export interface WorkoutSuggestion {
 	status?: "ready" | "awaiting_input";
 	/** Present when status is 'awaiting_input'. */
 	awaitingInput?: AwaitingInput;
+	/**
+	 * Where the segments came from. Set by Praescriptor's Stryd swap layer
+	 * (src/web/prescriptions.ts) when the user has `runRecommendationSource:
+	 * "stryd"`. The engine itself never sets this.
+	 *
+	 *   "stryd"                — segments are from a Stryd-served workout
+	 *   "exercitator-fallback" — Stryd query failed or no candidate matched;
+	 *                            fell back to the engine's own segments
+	 *   undefined / "exercitator" — engine output (default; rendered with no chip)
+	 */
+	prescriptionSource?: "stryd" | "exercitator" | "exercitator-fallback";
+	/** When prescriptionSource is "exercitator-fallback": why we fell back. */
+	fallbackReason?: string;
+	/** Stryd workout id (when prescriptionSource is "stryd"). */
+	strydWorkoutId?: number;
+	/** Stryd workout title (when prescriptionSource is "stryd"). */
+	strydWorkoutTitle?: string;
+	/** Pick rationale returned by pickStrydWorkout (when prescriptionSource is "stryd"). */
+	strydPickRationale?: string;
 }

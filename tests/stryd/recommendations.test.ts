@@ -41,7 +41,7 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 		const fixture = loadFixture("recommendations-easy-extfalse.json");
 		mockFetch.mockResolvedValueOnce(jsonResponse(fixture));
 
-		const set = await client.getRecommendedWorkouts("user-uuid", "easy");
+		const set = await client.getRecommendedWorkouts("easy");
 
 		expect(set).not.toBeNull();
 		expect(set?.type).toBe("easy");
@@ -73,12 +73,12 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 			jsonResponse(loadFixture("recommendations-easy-extfalse.json")),
 		);
 
-		await client.getRecommendedWorkouts("user-uuid", "workout");
+		await client.getRecommendedWorkouts("workout");
 
 		const [url, opts] = mockFetch.mock.calls[1];
 		const parsed = new URL(url as string);
 		expect(parsed.hostname).toBe("api.stryd.com");
-		expect(parsed.pathname).toBe("/b/api/v1/users/user-uuid/workouts/recommendations");
+		expect(parsed.pathname).toBe("/b/api/v1/users/user-456/workouts/recommendations");
 		expect(parsed.searchParams.get("type")).toBe("workout");
 		expect(parsed.searchParams.get("extended")).toBe("false");
 
@@ -95,19 +95,19 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 		mockFetch.mockImplementation(async () => jsonResponse(fixture));
 
 		// Default — no third arg
-		await client.getRecommendedWorkouts("user-uuid", "easy");
+		await client.getRecommendedWorkouts("easy");
 		expect(new URL(mockFetch.mock.calls[1][0] as string).searchParams.get("extended")).toBe(
 			"false",
 		);
 
 		// Explicit false
-		await client.getRecommendedWorkouts("user-uuid", "easy", false);
+		await client.getRecommendedWorkouts("easy", false);
 		expect(new URL(mockFetch.mock.calls[2][0] as string).searchParams.get("extended")).toBe(
 			"false",
 		);
 
 		// Explicit true
-		await client.getRecommendedWorkouts("user-uuid", "easy", true);
+		await client.getRecommendedWorkouts("easy", true);
 		expect(new URL(mockFetch.mock.calls[3][0] as string).searchParams.get("extended")).toBe("true");
 	});
 
@@ -115,7 +115,7 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 		const client = await loggedInClient();
 		mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-		const set = await client.getRecommendedWorkouts("user-uuid", "long");
+		const set = await client.getRecommendedWorkouts("long");
 		expect(set).toBeNull();
 	});
 
@@ -131,7 +131,7 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 			jsonResponse(loadFixture("recommendations-easy-extfalse.json")),
 		);
 
-		const set = await client.getRecommendedWorkouts("user-uuid", "easy");
+		const set = await client.getRecommendedWorkouts("easy");
 		expect(set?.type).toBe("easy");
 
 		// fetch call sequence: [0] initial login, [1] first attempt (401),
@@ -160,7 +160,7 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 			}),
 		);
 
-		await expect(client.getRecommendedWorkouts("user-uuid", "workout")).rejects.toThrow(
+		await expect(client.getRecommendedWorkouts("workout")).rejects.toThrow(
 			/getRecommendedWorkouts failed \(HTTP 500\).*internal server error/,
 		);
 	});
@@ -171,7 +171,7 @@ describe("StrydClient.getRecommendedWorkouts", () => {
 		mockFetch.mockResolvedValueOnce(jsonResponse({ token: "fresh-tok", id: "user-456" }));
 		mockFetch.mockResolvedValueOnce(new Response("Unauthorized", { status: 401 }));
 
-		await expect(client.getRecommendedWorkouts("user-uuid", "easy")).rejects.toThrow(
+		await expect(client.getRecommendedWorkouts("easy")).rejects.toThrow(
 			/getRecommendedWorkouts failed \(HTTP 401\)/,
 		);
 	});

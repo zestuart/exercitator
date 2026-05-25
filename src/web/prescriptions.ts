@@ -17,6 +17,7 @@ import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
 import type { UserProfile } from "../users.js";
+import { applyStrydRecommendation } from "./stryd-swap.js";
 
 export interface DataSource {
 	/** Number of activities in the 14-day window. */
@@ -92,12 +93,26 @@ export async function generatePrescriptions(
 
 	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);
 
-	const run = hasSport("Run")
+	let run = hasSport("Run")
 		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id, tz)
 		: null;
 	const swim = hasSport("Swim")
 		? suggestWorkoutFromData(data, "Swim", now, undefined, undefined, "0", tz)
 		: null;
+
+	// Stryd recommendation swap (per-user flag; ze-only at the moment).
+	// Runs AFTER all engine guards (Vigil, sleep debt, cross-training, HRV,
+	// staleness) have already shaped the category. Stryd never re-decides
+	// intensity; it only supplies the workout body for the chosen category.
+	if (
+		run &&
+		run.status !== "awaiting_input" &&
+		profile.runRecommendationSource === "stryd" &&
+		strydClient &&
+		strydCp
+	) {
+		run = await applyStrydRecommendation(run, strydClient, strydCp.cp);
+	}
 
 	// Vigil wellness write: update injury field when severity ≥ 2 (run prescription only).
 	// Severity 2 → Niggle (2), Severity 3 → Poor (3). Never write 4 (Injured) automatically.
