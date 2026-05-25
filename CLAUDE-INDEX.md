@@ -19,6 +19,8 @@ Index of all subsidiary documentation files. See `CLAUDE.md` for core rules, wor
 | `phase2/2026-03-28_vigil-injury-research.md` | Pre-implementation research notes for Vigil |
 | `phase2/exercitator-structured-steps-feature.md` | Backlog spec — structured `workout_doc.steps[]` for Suunto/Garmin sync (low priority, not yet implemented) |
 | `phase2/promus-calibration-migration-resume-2026-05-08.md` | Session-resume prompt for the Promus calibration migration (paused 2026-05-08; six interview questions answered) |
+| `phase2/cross-training-muscle-group-research-2026-05-12.md` | Decision document for cross-training muscle-group awareness — variant comparison, literature, Phase 1 / Phase 2 split (issues #33 / #34) |
+| `phase2/research-2026-05-12/README.md` | Raw research artefacts companion to the 2026-05-12 cross-training decision doc (Promus + intervals.icu data pull, analysis script) |
 | `phase3/exercitator-http-api-v0.3-delta.md` | HTTP API v0.3 — canonical wire contract (push-to-stryd, form-text) |
 | `phase3/exercitator-http-api-v0.3-amendment-proposal-2026-05-03.md` | Excubitor amendment proposal + §7 team response (calendar_id type drift) |
 | `phase3/exercitator-http-api-v0.3-amendment-resolution-2026-05-03.md` | Resolution memo for Excubitor team — types, struct template, verification (commit `bf1393b`) |

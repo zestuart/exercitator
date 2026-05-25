@@ -43,7 +43,7 @@ Tailnet-only at `https://exercitator-api.tail7ab379.ts.net`. Pass `Authorization
 | `GET` | `/api/users/:userId/compliance/detail` | Per-prescription detail for a date range |
 | `POST` | `/api/users/:userId/cross-training/:activityId/rpe` | Submit RPE to unblock 409 awaiting_input |
 
-Full wire contract: `phase2/exercitator-http-api-spec.md`.
+Full wire contract: `phase3/exercitator-http-api-v0.3-delta.md`.
 
 ## Quick start
 

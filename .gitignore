@@ -26,3 +26,6 @@ data/
 
 # Claude Code local settings
 .claude/settings.local.json
+graphify-out/cache
+graphify-out/manifest.json
+graphify-out/cost.json

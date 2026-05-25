@@ -175,10 +175,12 @@ Tests: same fixtures as Phase 1 plus muscle-group-classification tests.
 
 ## Open questions
 
-1. **Promus exercise vocabulary control** — should Palaestra constrain exercise names to a fixed list (closing the `"High row"` / `"High row "` data-hygiene bug at source), or should Exercitator's classifier normalise? I'd recommend Palaestra-side normalisation because the exercise list lives there; Exercitator just consumes.
-2. **RPE capture path** — given that none of the real sessions has `rpe` logged in Promus, is the right next step a Palaestra-side end-of-session RPE prompt, or do we rely on the existing `submit_cross_training_rpe` MCP/HTTP tool? The literature says sRPE is the gold-standard predictor — worth getting it in for cases where the volume tier is borderline.
-3. **WHOOP overnight recovery as a separate readiness input** — the `reference_hrv_capture_constraints` memory notes WHOOP only captures HRV at rest under 70 bpm, useless in-session. But WHOOP's overnight recovery score *is* a strain indicator that Promus already collects (per `last_whoop_at` in dashboard). Should this feed readiness directly as a fifth subjective-style component, separately from cross-training-strain? Probably a separate issue.
-4. **Sport-musculature map for cycling** — the engine treats Cycling as `Ride` activities currently not prescribed. If/when Ride prescriptions land, the map needs `Ride = ["lower"]` (legs) — slightly different muscle emphasis from Run but same primary.
+> **Status as of 2026-05-24**: Q1 + Q2 routed to [palaestra#11](https://github.com/zestuart/palaestra/issues/11) (both whitespace trim and end-of-session RPE capture). Q3 + Q4 remain open and unactioned; both can wait until Phase 1 ([exercitator#33](https://github.com/zestuart/exercitator/issues/33)) is implemented. Phase 1 is still pending — no `src/promus/` client landed in the 11 days since the research was completed.
+
+1. **Promus exercise vocabulary control** — should Palaestra constrain exercise names to a fixed list (closing the `"High row"` / `"High row "` data-hygiene bug at source), or should Exercitator's classifier normalise? I'd recommend Palaestra-side normalisation because the exercise list lives there; Exercitator just consumes. **2026-05-12: routed to palaestra#11.**
+2. **RPE capture path** — given that none of the real sessions has `rpe` logged in Promus, is the right next step a Palaestra-side end-of-session RPE prompt, or do we rely on the existing `submit_cross_training_rpe` MCP/HTTP tool? The literature says sRPE is the gold-standard predictor — worth getting it in for cases where the volume tier is borderline. **2026-05-12: routed to palaestra#11.**
+3. **WHOOP overnight recovery as a separate readiness input** — the `reference_hrv_capture_constraints` memory notes WHOOP only captures HRV at rest under 70 bpm, useless in-session. But WHOOP's overnight recovery score *is* a strain indicator that Promus already collects (per `last_whoop_at` in dashboard). Should this feed readiness directly as a fifth subjective-style component, separately from cross-training-strain? Probably a separate issue. **Still open.**
+4. **Sport-musculature map for cycling** — the engine treats Cycling as `Ride` activities currently not prescribed. If/when Ride prescriptions land, the map needs `Ride = ["lower"]` (legs) — slightly different muscle emphasis from Run but same primary. **Still open; deferred until Ride prescription is on the roadmap.**
 
 ---
 
@@ -186,9 +188,9 @@ Tests: same fixtures as Phase 1 plus muscle-group-classification tests.
 
 Per this analysis I'd recommend:
 
-1. Update [exercitator#33](https://github.com/zestuart/exercitator/issues/33) to reflect the two-phase scope, splitting it into #33 (Phase 1) and a new #34 (Phase 2).
-2. Open a Palaestra/Promus-side issue for the data-hygiene + RPE-capture concerns (questions 1 and 2 above).
-3. Implement Phase 1 in a single ~3–4 hour session. Backtest against the three real sessions before deploying.
-4. Wait at least 4 weeks of real training data with Phase 1 live before deciding whether to land Phase 2 — gives the cascade time to fire on real strain signal and reveals whether the user actually has any pure-upper sessions.
+1. ✅ Update [exercitator#33](https://github.com/zestuart/exercitator/issues/33) to reflect the two-phase scope, splitting it into #33 (Phase 1) and a new #34 (Phase 2). **Done 2026-05-12.**
+2. ✅ Open a Palaestra/Promus-side issue for the data-hygiene + RPE-capture concerns (questions 1 and 2 above). **Done 2026-05-12 — palaestra#11.**
+3. ⬜ Implement Phase 1 in a single ~3–4 hour session. Backtest against the three real sessions before deploying. **Pending as of 2026-05-24.**
+4. ⬜ Wait at least 4 weeks of real training data with Phase 1 live before deciding whether to land Phase 2. **Blocked on item 3.**
 
-This document is the record. Awaiting decision before any further code work on this.
+This document is the record. Items 1 and 2 actioned the same day; item 3 (Phase 1 implementation) remains open as exercitator#33.
