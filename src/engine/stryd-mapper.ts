@@ -236,11 +236,26 @@ function classToSegmentName(cls: "warmup" | "work" | "rest" | "cooldown"): strin
  * power-prescribed; HR is not in the response. Layering an HR cap belongs
  * upstream of this module.
  */
+/**
+ * Defensive cap on `block.repeat` from the Stryd API. Real workouts top out
+ * around 12 reps; this caps at 100 to defend against a compromised or
+ * malformed upstream response that could otherwise exhaust memory by
+ * flattening a billion-rep block. Inputs above the cap are rejected with
+ * a console warning so an audit trail exists.
+ */
+const MAX_BLOCK_REPEAT = 100;
+
 export function strydWorkoutToSegments(workout: StrydWorkout, ftp: number): WorkoutSegment[] {
 	const segments: WorkoutSegment[] = [];
 
 	for (const block of workout.blocks) {
-		const repeat = Math.max(1, block.repeat);
+		const rawRepeat = Math.max(1, block.repeat);
+		if (rawRepeat > MAX_BLOCK_REPEAT) {
+			console.warn(
+				`strydWorkoutToSegments: clamping block.repeat ${rawRepeat} to ${MAX_BLOCK_REPEAT}`,
+			);
+		}
+		const repeat = Math.min(rawRepeat, MAX_BLOCK_REPEAT);
 
 		for (let r = 0; r < repeat; r++) {
 			for (const seg of block.segments) {

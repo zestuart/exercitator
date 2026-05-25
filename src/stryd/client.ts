@@ -17,6 +17,14 @@ const FIT_DOWNLOAD_TIMEOUT_MS = 60_000;
 /** Maximum FIT file size (10 MB — largest real Stryd FIT is ~200 KB). */
 const MAX_FIT_SIZE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Maximum recommendation-set JSON response size. Observed payloads: ~20 KB
+ * (workout bucket, 2 candidates), ~4 KB (easy bucket, 1 candidate). 1 MB
+ * gives generous headroom for adaptive-plan accounts while capping the
+ * memory footprint of a malformed upstream response.
+ */
+const MAX_RECOMMENDATIONS_JSON_BYTES = 1024 * 1024;
+
 /** Allowed hostnames for Stryd FIT download URLs. */
 const ALLOWED_FIT_HOSTS = ["storage.googleapis.com", "storage.cloud.google.com"];
 
@@ -453,7 +461,17 @@ export class StrydClient {
 			throw new Error(`Stryd getRecommendedWorkouts failed (HTTP ${res.status}): ${excerpt}`);
 		}
 
-		return (await res.json()) as StrydRecommendationSet;
+		// Defensive cap: real recommendation payloads observed at ~20 KB
+		// (workout bucket) and 4 KB (easy bucket). 1 MB is generous headroom
+		// for adaptive plans without exposing the process to memory exhaustion
+		// from a compromised or malformed upstream response.
+		const text = await res.text();
+		if (text.length > MAX_RECOMMENDATIONS_JSON_BYTES) {
+			throw new Error(
+				`Stryd getRecommendedWorkouts: response too large (${text.length} bytes, limit ${MAX_RECOMMENDATIONS_JSON_BYTES})`,
+			);
+		}
+		return JSON.parse(text) as StrydRecommendationSet;
 	}
 
 	get isAuthenticated(): boolean {
