@@ -127,7 +127,7 @@ All credentials live in `.env` at the project root: gitignored, never logged or 
 
 Every deployment includes a SAST scan via Gemini 2.5 Pro (different model family from Claude, independent review). `scripts/sast_scan.py` is zero-dependency (Python stdlib) and reads `GEMINI_API_KEY` from `.env` or environment. Diff mode during deploys (changes since last baseline), full mode on demand via `/sast`. Clean scans tag as `sast-baseline-YYYY-MM-DD`. Findings block deployment — fix or explicitly accept.
 
-**Current baseline**: `sast-baseline-2026-05-13` on commit `a6aafb7` (Suunto + Stryd pod detection — fixes the spurious "Garmin native" warning + 0.87 correction factor on Suunto-recorded runs). `python3 scripts/sast_scan.py --mode diff` scans only files changed since this tag. Re-baseline immediately after each clean deploy or accepted-risk deploy.
+**Current baseline**: `sast-baseline-2026-05-25` on commit `9960fc3` (Stryd workout-recommendations integration phases 1–3 + defensive caps on `block.repeat` and recommendation-response size, both from the 2026-05-25 SAST findings + sast_scan.py inline-content patch for cache-disabled accounts). `python3 scripts/sast_scan.py --mode diff` scans only files changed since this tag. Re-baseline immediately after each clean deploy or accepted-risk deploy.
 
 Full inventory of security surfaces, outstanding findings, and remediation history: see **`SECURITY.md`**.
 
