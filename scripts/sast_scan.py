@@ -357,8 +357,71 @@ def get_or_create_cache(api_key, model, source_content, content_hash, system_ins
     return cache_name
 
 
+def call_gemini_inline(api_key, model, system_instruction, source_context, instruction):
+    """Call Gemini generateContent with the source context inline (no cache).
+
+    The cache path was disabled when free-tier accounts stopped getting any
+    cache quota (max_total_token_count=0). Inline content uses the model's
+    normal generation context window (2M tokens for gemini-2.5-pro), which
+    fits the full project source comfortably.
+    """
+    url = _api_url(f"models/{model}:generateContent", api_key)
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": source_context},
+                    {"text": instruction},
+                ],
+            },
+        ],
+        "generationConfig": {
+            "maxOutputTokens": 65536,
+            "temperature": 0.1,
+        },
+    }
+
+    try:
+        result = _api_request(url, payload)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(2)
+
+    try:
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        print(
+            f"Unexpected API response: {json.dumps(result, indent=2)}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    usage = result.get("usageMetadata", {})
+    if usage:
+        inp = usage.get("promptTokenCount", "?")
+        out = usage.get("candidatesTokenCount", "?")
+        thought = usage.get("thoughtsTokenCount", 0)
+        print(
+            f"Gemini tokens — input: {inp}, output: {out}, thinking: {thought}",
+            file=sys.stderr,
+        )
+
+    finish = result.get("candidates", [{}])[0].get("finishReason", "?")
+    if finish not in ("STOP", "?"):
+        print(f"WARNING: finishReason={finish} (response may be truncated)", file=sys.stderr)
+
+    return text
+
+
 def call_gemini_with_cache(cache_name, instruction, api_key, model):
-    """Call Gemini generateContent using a cached context."""
+    """Call Gemini generateContent using a cached context.
+
+    DEPRECATED: caching is disabled on free-tier accounts (max_total_token_count=0).
+    Kept for the case where a paid tier with cache support is provisioned.
+    """
     url = _api_url(f"models/{model}:generateContent", api_key)
 
     payload = {
@@ -481,7 +544,21 @@ def main():
         print("No files to scan.")
         sys.exit(0)
 
-    source_bundle, source_bytes, content_hash = build_source_bundle(all_files)
+    # In diff mode, bundle ONLY the changed files (plus the security context
+    # docs that build_cached_content prepends). The full project source is
+    # ~3.4 MB / 1.3M tokens which exceeds gemini-2.5-pro's 1M inline-content
+    # limit, and the audit instruction already directs the model to those
+    # files anyway. Full mode still bundles every file.
+    if args.mode == "diff" and changed_files:
+        changed_set = set(changed_files)
+        scan_files = [f for f in all_files if str(f.relative_to(REPO_ROOT)) in changed_set]
+        if not scan_files:
+            print("No scannable changed files (all changes were in ignored / excluded paths).")
+            sys.exit(0)
+    else:
+        scan_files = all_files
+
+    source_bundle, source_bytes, content_hash = build_source_bundle(scan_files)
     cached_content = build_cached_content(source_bundle)
     system_instruction = build_system_instruction()
 
@@ -489,22 +566,18 @@ def main():
     if baseline_tag:
         print(f"Baseline: {baseline_tag}", file=sys.stderr)
         print(f"Changed files: {len(changed_files)}", file=sys.stderr)
-    print(f"Files (total): {len(all_files)}", file=sys.stderr)
+    print(f"Files (project): {len(all_files)}", file=sys.stderr)
+    print(f"Files (bundled): {len(scan_files)}", file=sys.stderr)
     print(f"Source: {source_bytes:,} bytes", file=sys.stderr)
     print(f"Content hash: {content_hash}", file=sys.stderr)
     print(f"Model: {model}", file=sys.stderr)
 
-    cache_name = get_or_create_cache(
-        api_key, model, cached_content, content_hash, system_instruction
-    )
-
     instruction = build_audit_instruction(args.mode, changed_files)
-    print("Calling Gemini...", file=sys.stderr)
-    result = call_gemini_with_cache(cache_name, instruction, api_key, model)
+    print("Calling Gemini (inline; cache disabled on free tier)...", file=sys.stderr)
+    result = call_gemini_inline(api_key, model, system_instruction, cached_content, instruction)
     print(result)
 
-    # Clean up cache immediately to avoid storage charges
-    delete_cache(api_key, cache_name)
+    # No cache to clean up under the inline path.
     if CACHE_STATE_FILE.exists():
         CACHE_STATE_FILE.unlink()
 
