@@ -118,6 +118,61 @@ describe("applyStrydRecommendation", () => {
 		expect(out.estimated_load).toBe(45);
 	});
 
+	it("Stryd swap replaces engine narrative (rationale/terrain) with Stryd's", async () => {
+		const client = await loggedInClient();
+		mockFetch.mockResolvedValueOnce(
+			jsonResponse(loadFixture("recommendations-workout-extfalse.json")),
+		);
+
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({
+				category: "tempo",
+				rationale: "Sweet-spot tempo to lift lactate clearance and pace tolerance.",
+				terrain: "rolling",
+				terrain_rationale: "engine picked rolling",
+			}),
+			client,
+			FTP,
+		);
+
+		expect(out.prescriptionSource).toBe("stryd");
+		// Rationale replaced with Stryd's desc — first words of Stryd's
+		// Dash & Dine description.
+		expect(out.rationale).toMatch(/mixed aerobic|speed development/i);
+		expect(out.rationale).not.toMatch(/Sweet-spot tempo/);
+		// Terrain neutralised (Stryd workout type carries terrain implicitly).
+		expect(out.terrain).toBe("any");
+		expect(out.terrain_rationale).toBe("");
+	});
+
+	it("Stryd swap filters out engine-narrative warnings (staleness/buffer)", async () => {
+		const client = await loggedInClient();
+		mockFetch.mockResolvedValueOnce(
+			jsonResponse(loadFixture("recommendations-workout-extfalse.json")),
+		);
+
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({
+				category: "tempo",
+				warnings: [
+					// Should be dropped (staleness/buffer narrative)
+					"Return to run: only 2 sessions in 14 days — easing back in. Adding 10s/km buffer.",
+					"Last run was 30 days ago — thresholds may have regressed. Adding 10s/km buffer.",
+					// Should survive (health-related, applies regardless)
+					"Sleep below 7 hours (5h30m) — consider lighter intensity",
+					"Training stress balance is negative — fatigue exceeds fitness",
+				],
+			}),
+			client,
+			FTP,
+		);
+
+		expect(out.warnings).toEqual([
+			"Sleep below 7 hours (5h30m) — consider lighter intensity",
+			"Training stress balance is negative — fatigue exceeds fitness",
+		]);
+	});
+
 	it("recovery + easy fixture (Easy + Strides is stride type): falls back 'stride_rejected_on_recovery'", async () => {
 		const client = await loggedInClient();
 		mockFetch.mockResolvedValueOnce(

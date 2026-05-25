@@ -246,6 +246,22 @@ export async function applyStrydRecommendation(
 			title: strydWorkout.title,
 			segments,
 			total_duration_secs: totalSecs,
+			// Engine narrative replaced with Stryd's own narration of the
+			// workout. The engine's rationale ("Sweet-spot tempo...") describes
+			// how the engine WOULD have built the session and is superfluous
+			// when Stryd's served body replaces it. Stryd's `desc` is the
+			// canonical description the user sees in the Stryd app.
+			rationale: strydWorkout.desc,
+			// Filter out warnings that narrate engine modifications we didn't
+			// apply (return-to-sport buffer text). Health-related warnings
+			// (sleep, HRV, TSB, Vigil) survive — they apply regardless of who
+			// built the workout.
+			warnings: filterEngineWarningsForStryd(suggestion.warnings),
+			// Engine terrain guidance is irrelevant — Stryd's workout type
+			// carries terrain implicitly (hill repeat = hilly, fartlek =
+			// flat-friendly, etc.).
+			terrain: "any",
+			terrain_rationale: "",
 			prescriptionSource: "stryd",
 			strydWorkoutId: strydWorkout.id,
 			strydWorkoutTitle: strydWorkout.title,
@@ -264,6 +280,26 @@ export async function applyStrydRecommendation(
 		},
 		strydRecommendationSet: set,
 	};
+}
+
+/**
+ * Drop engine-narrative warnings that describe modifications Stryd's served
+ * workout doesn't carry. Today the staleness module is the only source — it
+ * appends ". Adding 10s/X buffer." to two return-to-sport warning shapes
+ * (src/engine/staleness.ts:88,100). When Stryd built the workout, no buffer
+ * was applied; the whole warning sentence becomes engine fiction.
+ *
+ * Other warning sources (sleep / HRV / TSB / Vigil / power-source) survive
+ * unchanged — they describe athlete state, not engine output.
+ */
+function filterEngineWarningsForStryd(warnings: string[]): string[] {
+	return warnings.filter((w) => {
+		// Staleness markers — match either of the two staleness.ts shapes.
+		if (/Adding \d+s\/\w+ buffer/.test(w)) return false;
+		if (/easing back in/i.test(w)) return false;
+		if (/thresholds may have regressed/i.test(w)) return false;
+		return true;
+	});
 }
 
 /**
