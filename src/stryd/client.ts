@@ -404,13 +404,22 @@ export class StrydClient {
 	}
 
 	/** Schedule a workout on the user's Stryd calendar for a given date.
-	 *  The workout then appears in the Stryd app for fetching to the watch. */
+	 *  The workout then appears in the Stryd app for fetching to the watch.
+	 *
+	 *  Stryd renders the schedule date by interpreting the timestamp in the
+	 *  user's profile timezone. We send the timestamp as-is (the actual moment
+	 *  the caller passed in) — previously this floored to `setHours(0,0,0,0)`,
+	 *  which sets MIDNIGHT IN THE JS RUNTIME'S LOCAL TZ. In a UTC container
+	 *  (production) that turned `new Date()` for a 21:00 UTC moment into the
+	 *  preceding day in any user TZ west of UTC, so pushes landed on the
+	 *  wrong date in Stryd's UI. Verified empirically against ze's account
+	 *  on 2026-05-25 (push at 14:00 PDT landed under "May 24" in the UI).
+	 *  Letting the actual moment through means Stryd renders today's date
+	 *  in any user TZ for any push happening during their local daytime. */
 	async scheduleWorkout(workoutId: number, date: Date): Promise<StrydCalendarEntry> {
 		if (!this.userId) throw new Error("StrydClient: not authenticated");
 
-		const d = new Date(date);
-		d.setHours(0, 0, 0, 0);
-		const timestamp = Math.floor(d.getTime() / 1000);
+		const timestamp = Math.floor(date.getTime() / 1000);
 
 		const res = await fetch(
 			`${API_BASE}/users/${this.userId}/workouts?id=${workoutId}&timestamp=${timestamp}`,
