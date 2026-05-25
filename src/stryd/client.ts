@@ -94,6 +94,117 @@ export interface StrydActivity {
 	surface_type?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Workout-recommendations endpoint (GET /users/{userId}/workouts/recommendations)
+// Wire contract: see retextor/notes/stryd-api/spec-recommendations.md.
+// Field names match the JSON exactly (snake_case, no camel-casing).
+// ---------------------------------------------------------------------------
+
+/** Recommendation type bucket — query-parameter discriminator. */
+export type StrydRecommendationType = "easy" | "long" | "workout";
+
+/** Per-segment block inside a recommended workout. */
+export interface StrydRecommendedSegment {
+	desc: string;
+	desc_no_cp: string;
+	flexible: boolean;
+	duration_type: "time" | "distance";
+	duration_time: { hour: number; minute: number; second: number };
+	duration_distance: number;
+	distance_unit_selected: string;
+	intensity_class: "warmup" | "work" | "rest" | "cooldown";
+	intensity_type: "percentage" | "zone" | "rpe";
+	intensity_percent: { value: number; min: number; max: number };
+	zone_selected: number;
+	rpe_selected: number;
+	pdc_target: number;
+	grade: number;
+	incline: number;
+	power_type: string;
+}
+
+/** Block in a recommended workout — `repeat` ≥ 1, loop over `segments[]`. */
+export interface StrydRecommendedBlock {
+	repeat: number;
+	segments: StrydRecommendedSegment[];
+}
+
+/** The workout body (`estimated_workout.workout`). `id` is a numeric int64. */
+export interface StrydWorkout {
+	id: number;
+	created: number;
+	created_time: string;
+	updated: number;
+	updated_time: string;
+	title: string;
+	objective: string;
+	desc: string;
+	surface: string;
+	type: string;
+	/** `null` is valid (observed on Hill Hustle, Dash & Dine). */
+	tags: string[] | null;
+	goal_types: string[];
+	blocks: StrydRecommendedBlock[];
+	notification_text: string;
+}
+
+/** Per-segment estimate — NOT repeat-folded (one rep only). */
+export interface StrydSegmentEstimate {
+	stress: number;
+	duration: number;
+	distance: number;
+	/** Fixed-length 5-element array: seconds in each power zone. */
+	intensity_zones: [number, number, number, number, number];
+}
+
+/** Per-block estimate — repeat-folded (multiplied by `block.repeat`). */
+export interface StrydBlockEstimate {
+	stress: number;
+	duration: number;
+	distance: number;
+	intensity_zones: [number, number, number, number, number];
+	segment_estimates: StrydSegmentEstimate[];
+}
+
+/** Workout + estimator output. `intensity_zones` is total seconds per zone. */
+export interface StrydEstimatedWorkout {
+	workout: StrydWorkout;
+	average: { power: number; intensity: number };
+	intensity_zones: [number, number, number, number, number];
+	estimates: StrydBlockEstimate[];
+}
+
+/** One entry in `workouts[]`. Labels rotate day-to-day — do NOT pick by label. */
+export interface StrydRecommendedWorkout {
+	estimated_workout: StrydEstimatedWorkout;
+	/** Opaque base64-protobuf — identifies the source library/collection. */
+	collection_id: string;
+	/** Ranking label(s): "Best match", "Harder", "Easier". Non-deterministic. */
+	labels: string[];
+}
+
+/** Root response envelope. */
+export interface StrydRecommendationSet {
+	user_id: string;
+	/** Recommendation-set id — string despite being int64; used by PATCH write op. */
+	id: string;
+	created: number;
+	created_time: string;
+	updated: number;
+	updated_time: string;
+	workouts: StrydRecommendedWorkout[];
+	/** Always `null` in captures — unmodelled extension point. */
+	non_workouts: unknown;
+	/** 0 = nothing picked; non-zero after a successful PATCH. */
+	selected_id: number;
+	type: StrydRecommendationType;
+	reason: string;
+	reason_key: string;
+	/** RFC3339 with user-local TZ offset, not UTC. */
+	target_date: string;
+	source: string;
+}
+
 export class StrydClient {
 	private token: string | null = null;
 	private userId: string | null = null;
@@ -290,6 +401,58 @@ export class StrydClient {
 			const text = await res.text().catch(() => "");
 			throw new Error(`Stryd deleteCalendarEntry failed (HTTP ${res.status}): ${text}`);
 		}
+	}
+
+	/**
+	 * Fetch the current recommendation set for a given workout-type bucket.
+	 *
+	 * - 200 → returns the parsed `StrydRecommendationSet`.
+	 * - 204 → returns `null` (empty bucket, e.g. `long` without an active
+	 *   guided/adaptive plan — this is the normal empty state, not an error).
+	 * - 401 → re-runs `login()` once and retries the request.
+	 * - 5xx / other → throws with the status code and a body excerpt.
+	 *
+	 * `extended` is plumbed in but empirically a no-op on Pioneer accounts
+	 * without an active adaptive plan (see spec-recommendations.md §2 and
+	 * phase0-verification-2026-05-25.md). Defaults to `false`.
+	 *
+	 * Note: the type discriminator MUST be a query parameter — the path form
+	 * `/recommendations/{type}` returns 404 (verified Phase 0).
+	 */
+	async getRecommendedWorkouts(
+		userId: string,
+		type: StrydRecommendationType,
+		extended = false,
+	): Promise<StrydRecommendationSet | null> {
+		const params = new URLSearchParams({
+			type,
+			extended: extended ? "true" : "false",
+		});
+		const url = `${API_BASE}/users/${userId}/workouts/recommendations?${params}`;
+
+		const doFetch = () =>
+			fetch(url, {
+				headers: this.authHeaders(),
+				signal: AbortSignal.timeout(API_TIMEOUT_MS),
+			});
+
+		let res = await doFetch();
+
+		if (res.status === 401) {
+			// Token expired — refresh and retry once.
+			await this.login();
+			res = await doFetch();
+		}
+
+		if (res.status === 204) return null;
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => "");
+			const excerpt = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+			throw new Error(`Stryd getRecommendedWorkouts failed (HTTP ${res.status}): ${excerpt}`);
+		}
+
+		return (await res.json()) as StrydRecommendationSet;
 	}
 
 	get isAuthenticated(): boolean {
