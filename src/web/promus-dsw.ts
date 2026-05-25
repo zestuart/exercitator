@@ -28,11 +28,17 @@ const PROMUS_URL_DEFAULT = "https://promus.tail7ab379.ts.net";
  * `process.env.promus-api` is not a valid identifier.
  */
 function promusToken(): string | null {
-	return process.env["promus-api"] ?? process.env.PROMUS_API ?? null;
+	// `||` (not `??`) so that an empty-string env var (the common
+	// docker-compose default `${PROMUS_API:-}`) falls through to null
+	// rather than being treated as a valid token.
+	const t = process.env["promus-api"] || process.env.PROMUS_API;
+	return t || null;
 }
 
 function promusUrl(): string {
-	return process.env.PROMUS_URL ?? PROMUS_URL_DEFAULT;
+	// `||` for the same reason — an unset/empty env var must fall
+	// through to the tailnet default, not pass an empty string to fetch().
+	return process.env.PROMUS_URL || PROMUS_URL_DEFAULT;
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
