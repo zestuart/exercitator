@@ -265,8 +265,9 @@ export function strydWorkoutToSegments(workout: StrydWorkout, ftp: number): Work
 				let durationSecs: number;
 				if (seg.duration_type === "distance") {
 					// TODO: distance-based segments not yet supported (not observed
-					// in captures). Carry the field through as 0 s so downstream
-					// code can detect and either skip or render a placeholder.
+					// in live captures or production payloads). Carry through as
+					// 0 s so downstream code can detect and either skip or render
+					// a placeholder.
 					durationSecs = 0;
 				} else {
 					durationSecs =

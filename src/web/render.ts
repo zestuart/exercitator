@@ -121,6 +121,133 @@ function zoneGuide(
 	return label;
 }
 
+/**
+ * Detect consecutive (A, B, A, B, …) pair-loops in a flattened segment list
+ * and group them so the render can show "5× repeats / Work … / Recovery …"
+ * instead of 10 individual rows. Pure — no I/O.
+ *
+ * A pair is detected when:
+ *   - two consecutive segments (A, B) both have non-zero duration
+ *   - they appear at least twice in a row (so n ≥ 2)
+ *   - each repetition is byte-equal on name + duration + power bands +
+ *     target_description (HR zone too if set)
+ *
+ * The detector is conservative: any field mismatch breaks the pair. This
+ * means Hill Hustle's `[work, rest, sprint]` 3-segment blocks never
+ * collapse (sprint differs from work in power), but Dash & Dine's fartlek
+ * `[work, rest]` × 5 collapses cleanly.
+ */
+export type SegmentGroup =
+	| { kind: "single"; seg: WorkoutSegment; index: number }
+	| {
+			kind: "pair";
+			work: WorkoutSegment;
+			rest: WorkoutSegment;
+			repeats: number;
+			firstIndex: number;
+	  };
+
+function segmentsMatch(a: WorkoutSegment, b: WorkoutSegment): boolean {
+	return (
+		a.name === b.name &&
+		a.duration_secs === b.duration_secs &&
+		a.target_description === b.target_description &&
+		a.target_power_low === b.target_power_low &&
+		a.target_power_high === b.target_power_high &&
+		a.target_hr_zone === b.target_hr_zone
+	);
+}
+
+export function groupPairSegments(segments: WorkoutSegment[]): SegmentGroup[] {
+	const groups: SegmentGroup[] = [];
+	let i = 0;
+	while (i < segments.length) {
+		const a = segments[i];
+		const b = segments[i + 1];
+		// A pair requires two non-zero-duration consecutive segments, and at
+		// least one further pair following.
+		if (
+			b !== undefined &&
+			a.duration_secs > 0 &&
+			b.duration_secs > 0 &&
+			i + 3 < segments.length &&
+			segmentsMatch(a, segments[i + 2]) &&
+			segmentsMatch(b, segments[i + 3])
+		) {
+			let n = 2;
+			while (
+				i + 2 * n + 1 < segments.length &&
+				segmentsMatch(a, segments[i + 2 * n]) &&
+				segmentsMatch(b, segments[i + 2 * n + 1])
+			) {
+				n++;
+			}
+			groups.push({ kind: "pair", work: a, rest: b, repeats: n, firstIndex: i });
+			i += 2 * n;
+			continue;
+		}
+		groups.push({ kind: "single", seg: a, index: i });
+		i++;
+	}
+	return groups;
+}
+
+function renderPairGroup(
+	group: {
+		kind: "pair";
+		work: WorkoutSegment;
+		rest: WorkoutSegment;
+		repeats: number;
+		firstIndex: number;
+	},
+	accent: string,
+	sport: "Run" | "Swim",
+	ftp: number,
+	hrZones: number[] | null,
+	complianceSegments?: SegmentCompliance[],
+): string {
+	const totalSecs = group.repeats * (group.work.duration_secs + group.rest.duration_secs);
+	const totalDur = formatDuration(totalSecs);
+	const workDur = formatDuration(group.work.duration_secs);
+	const restDur = formatDuration(group.rest.duration_secs);
+	const workGuide = zoneGuide(group.work, sport, ftp, hrZones);
+	const restGuide = zoneGuide(group.rest, sport, ftp, hrZones);
+
+	// Aggregate compliance across the 2N flattened segments behind this pair.
+	let complianceDot = "";
+	if (complianceSegments) {
+		const indices = new Set<number>();
+		for (let r = 0; r < group.repeats; r++) {
+			indices.add(group.firstIndex + 2 * r);
+			indices.add(group.firstIndex + 2 * r + 1);
+		}
+		const matching = complianceSegments.filter((s) => indices.has(s.segmentIndex));
+		if (matching.length > 0) {
+			const lights = matching.map((m) => m.light);
+			const light = lights.includes("red") ? "red" : lights.includes("amber") ? "amber" : "green";
+			complianceDot = `<span class="compliance-dot compliance-${light}" title="${matching.length} reps"></span>`;
+		}
+	}
+
+	return `
+		<div class="segment segment-pair">
+			<div class="segment-header">
+				<span class="segment-name">${escapeHtml(group.work.name)} set</span>
+				<span class="segment-duration">${group.repeats}&times; · ${totalDur}${complianceDot}</span>
+			</div>
+			<div class="segment-pair-row">
+				<span class="segment-pair-role">${escapeHtml(group.work.name)}</span>
+				<span class="segment-pair-dur">${workDur}</span>
+				<span class="segment-pair-target">${escapeHtml(group.work.target_description)}${workGuide ? ` <span class="zone-guide">${workGuide}</span>` : ""}</span>
+			</div>
+			<div class="segment-pair-row">
+				<span class="segment-pair-role">${escapeHtml(group.rest.name)}</span>
+				<span class="segment-pair-dur">${restDur}</span>
+				<span class="segment-pair-target">${escapeHtml(group.rest.target_description)}${restGuide ? ` <span class="zone-guide">${restGuide}</span>` : ""}</span>
+			</div>
+		</div>`;
+}
+
 function renderSegment(
 	seg: WorkoutSegment,
 	accent: string,
@@ -287,8 +414,13 @@ function renderCard(
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
 	const complianceSegs = compliance?.assessment?.segments;
-	const segments = suggestion.segments
-		.map((s, i) => renderSegment(s, accent, sport, ftp, hrZones, i, complianceSegs))
+	const groups = groupPairSegments(suggestion.segments);
+	const segments = groups
+		.map((g) =>
+			g.kind === "pair"
+				? renderPairGroup(g, accent, sport, ftp, hrZones, complianceSegs)
+				: renderSegment(g.seg, accent, sport, ftp, hrZones, g.index, complianceSegs),
+		)
 		.join("");
 
 	const sportTag = suggestion.sport === "Run" ? "CURSUS" : "NATATIO";
@@ -412,7 +544,13 @@ export function renderPage(data: RenderData): string {
 	const swimOnlyWarnings = swimWarnings.filter((w) => !sharedSet.has(w));
 	const sharedWarningsBlock = renderWarnings(sharedWarnings);
 
-	const showStryd = profile.stryd;
+	// Stryd-sourced runs already live in Stryd's calendar as a recommendation;
+	// re-pushing would create a duplicate copy rather than mark the
+	// recommendation as picked. The canonical "PATCH selected_id" write-op is
+	// unverified (spec-recommendations.md §1), so for now we suppress the
+	// button on Stryd-sourced cards. Engine output (incl. fallback) keeps it.
+	const runIsStrydSourced = data.run?.prescriptionSource === "stryd";
+	const showStryd = profile.stryd && !runIsStrydSourced;
 	const runCard =
 		data.run && data.runInvocations
 			? renderCard(
@@ -720,6 +858,43 @@ body {
 	border-radius: 12px;
 	text-transform: capitalize;
 	border: 1px solid var(--border);
+}
+
+.segment-pair {
+	/* Two-row layout: header + indented work + indented rest. */
+}
+
+.segment-pair-row {
+	display: grid;
+	grid-template-columns: 6rem 4rem 1fr;
+	gap: 0.5rem;
+	align-items: baseline;
+	font-size: 0.85rem;
+	padding: 0.15rem 0 0.15rem 1.2rem;
+	color: var(--text);
+}
+
+.segment-pair-row::before {
+	content: "→";
+	color: var(--text-dim);
+	margin-right: 0.4rem;
+	position: absolute;
+	margin-left: -1.1rem;
+}
+
+.segment-pair-role {
+	font-weight: 500;
+	color: var(--text-dim);
+}
+
+.segment-pair-dur {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	color: var(--text-dim);
+}
+
+.segment-pair-target {
+	color: var(--text);
 }
 
 .source-chip {

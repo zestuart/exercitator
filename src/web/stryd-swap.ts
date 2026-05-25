@@ -199,14 +199,7 @@ export async function applyStrydRecommendation(
 				};
 			}
 			const { hour, minute, second } = seg.duration_time;
-			if (
-				hour < 0 ||
-				hour > 24 ||
-				minute < 0 ||
-				minute >= 60 ||
-				second < 0 ||
-				second >= 60
-			) {
+			if (hour < 0 || hour > 24 || minute < 0 || minute >= 60 || second < 0 || second >= 60) {
 				console.warn(
 					`Stryd recommendation swap rejected: out-of-range duration h:${hour} m:${minute} s:${second}`,
 				);
@@ -228,10 +221,7 @@ export async function applyStrydRecommendation(
 	// load-bearing structural defence; this is a final belt-and-braces
 	// limit on the loop in strydWorkoutToSegments.
 	const MAX_TOTAL_EXPANDED_SEGMENTS = 500;
-	const expanded = strydWorkout.blocks.reduce(
-		(sum, b) => sum + b.repeat * b.segments.length,
-		0,
-	);
+	const expanded = strydWorkout.blocks.reduce((sum, b) => sum + b.repeat * b.segments.length, 0);
 	if (expanded > MAX_TOTAL_EXPANDED_SEGMENTS) {
 		console.warn(
 			`Stryd recommendation swap rejected: expanded segments=${expanded} exceeds MAX_TOTAL_EXPANDED_SEGMENTS=${MAX_TOTAL_EXPANDED_SEGMENTS}`,
