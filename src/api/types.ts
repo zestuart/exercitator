@@ -144,14 +144,16 @@ export interface SuggestedWorkoutBody {
 	injury_warning: InjuryWarningBlock | null;
 	segments: ApiSegment[];
 	/**
-	 * Where the segments came from. Only set when Praescriptor's Stryd swap
-	 * layer ran (ze + Run; never on Swim, never on rest, never on Pam).
-	 *   "stryd"                — Stryd-served workout
-	 *   "exercitator-fallback" — Stryd attempted but unavailable; engine output
+	 * Where the segments came from. Only set when a vendor-swap layer ran.
+	 *   "stryd"                — Stryd-served Run workout (ze)
+	 *   "form"                 — FORM-served Swim workout (ze)
+	 *   "exercitator-fallback" — vendor attempted but unavailable; engine output
 	 *   "exercitator"          — explicit engine output (rest day; no swap attempted)
 	 *   omitted                — engine output (default)
 	 */
-	prescription_source?: "stryd" | "exercitator" | "exercitator-fallback";
+	prescription_source?: "stryd" | "form" | "exercitator" | "exercitator-fallback";
+	/** Which vendor was attempted when prescription_source === "exercitator-fallback". */
+	fallback_vendor?: "stryd" | "form";
 	/** Why the swap fell back (only when prescription_source === "exercitator-fallback"). */
 	fallback_reason?: string;
 	/** Stryd workout id (only when prescription_source === "stryd"). */
@@ -160,6 +162,12 @@ export interface SuggestedWorkoutBody {
 	stryd_workout_title?: string;
 	/** pickStrydWorkout's rationale (only when prescription_source === "stryd"). */
 	stryd_pick_rationale?: string;
+	/** FORM workout id (UUID-v7; only when prescription_source === "form"). */
+	form_workout_id?: string;
+	/** FORM workout title (only when prescription_source === "form"). */
+	form_workout_title?: string;
+	/** pickFormWorkout's rationale (only when prescription_source === "form"). */
+	form_pick_rationale?: string;
 }
 
 export interface SuggestedResponse {

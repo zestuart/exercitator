@@ -1,0 +1,302 @@
+{
+	"createdAt": "2026-05-20T20:10:44.000Z",
+	"workouts": [
+		{
+			"type": "Endurance",
+			"description": "Similar in difficulty to your recent swims, but enhanced with HeadCoach\u2122 Skill modes.",
+			"isRecommended": true,
+			"parameters": {
+				"avgPace": 106,
+				"avgDuration": 1429,
+				"maxIntervalDistance": 200,
+				"includeShortCourse": true,
+				"recommendedFocus": "techniqueReliability",
+				"prioritySkill": "timeToNeutral",
+				"templateOverride": "technique_reliability/maintain/normal/better_as_you_go.json",
+				"workoutTypes": ["maintain"],
+				"templateConfigs": [
+					{
+						"workoutType": "maintain",
+						"energySystem": null,
+						"templateOverride": "technique_reliability/maintain/normal/better_as_you_go.json"
+					}
+				],
+				"preferredStrokeType": "freestyle",
+				"includeDrills": true,
+				"equipmentExclusions": [],
+				"strokeTypesPriority": {
+					"preferredStrokeType": "freestyle",
+					"secondaryStrokeType": "breaststroke",
+					"tertiaryStrokeType": "freestyle"
+				},
+				"maxIntervalDistancesByStrokeType": {
+					"freestyle": 200,
+					"breaststroke": 200
+				}
+			},
+			"workout": {
+				"categories": ["endurance"],
+				"description": "Your Swimmer Type: Stroke Fader\n\nPracticing technique on shorter intervals will help you build the reliability in your technique so that you can hold it for longer distances later.\n\nUsing drills to focus on your technique at the start will give you a good foundation to hold your technique for your workout.\n\nThen, as you swim longer intervals and build your endurance, remind yourself of what your stroke felt like at the beginning of the workout and hold your technique as you get deeper into your sets. \n\nUsing equipment is always optional, but here the equipment will help you focus just on your technique, rather than the difficulty of the workout.",
+				"distance": 1550,
+				"duration": {
+					"min": 1800,
+					"max": 2100
+				},
+				"equipment": [
+					{
+						"type": "fins"
+					}
+				],
+				"goal": "",
+				"headCoachFocusModes": [],
+				"id": "019e4703-1297-7551-b6a9-1e445eabbc1b",
+				"images": {
+					"tile": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000",
+					"tileImages": {
+						"default": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000",
+						"v2": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000"
+					}
+				},
+				"intensityLevel": "moderate",
+				"isBookmarked": null,
+				"isCommentsEnabled": false,
+				"isFormWorkout": false,
+				"isPublished": true,
+				"isReviewed": false,
+				"isSample": false,
+				"isSavable": false,
+				"isStructuralChange": null,
+				"isSwimmersEnabled": false,
+				"isSwumByUser": false,
+				"lastSwumActivityId": null,
+				"lastSwumByUserAt": null,
+				"lastUpdatedAt": "2026-05-20T20:10:44.000Z",
+				"lengthDistances": [
+					{
+						"distance": 25,
+						"measurement": "m"
+					},
+					{
+						"distance": 25,
+						"measurement": "yd"
+					}
+				],
+				"minFirmwareVersion": "2.0.0",
+				"name": "Better As You Go",
+				"origin": "personalized",
+				"revisionNumber": 1,
+				"workoutCoach": null,
+				"workoutCreator": null,
+				"workoutCreatorId": null,
+				"workoutUrl": "https://app.formswim.com/workout_details/019e4703-1297-7551-b6a9-1e445eabbc1b",
+				"workoutVersion": 1,
+				"parameters": null,
+				"commentsCount": 0,
+				"isNew": false,
+				"isSaved": false,
+				"recentSwimmers": [],
+				"swimmersCount": 0
+			}
+		},
+		{
+			"type": "Power",
+			"description": "A bit of a stretch, compared to recent swims, helping you build strength and endurance.",
+			"isRecommended": false,
+			"parameters": {
+				"avgPace": 106,
+				"avgDuration": 1429,
+				"maxIntervalDistance": 200,
+				"includeShortCourse": true,
+				"recommendedFocus": "techniqueReliability",
+				"prioritySkill": "timeToNeutral",
+				"templateOverride": "technique_reliability/build/normal/coming_round_again.json",
+				"workoutTypes": ["build"],
+				"templateConfigs": [
+					{
+						"workoutType": "build",
+						"energySystem": null,
+						"templateOverride": "technique_reliability/build/normal/coming_round_again.json"
+					}
+				],
+				"preferredStrokeType": "freestyle",
+				"includeDrills": true,
+				"equipmentExclusions": [],
+				"strokeTypesPriority": {
+					"preferredStrokeType": "freestyle",
+					"secondaryStrokeType": "breaststroke",
+					"tertiaryStrokeType": "freestyle"
+				},
+				"maxIntervalDistancesByStrokeType": {
+					"freestyle": 200,
+					"breaststroke": 200
+				}
+			},
+			"workout": {
+				"categories": ["power"],
+				"description": "Your Swimmer Type: Stroke Fader\n\nWorking on your technique during short, low intensity intervals is vital to holding your technique when you increase your intensity for longer sets.\n\nPracticing technique at the beginning of the workout will help you establish, and improve, your technique will give you a great starting point.\n\nFor this workout, the relatively short, but strong, intervals will challenge you to hold your technique as you increase your effort, especially towards the end when you are more tired.\n\nUsing equipment is always optional, but here the equipment will help you focus just on your technique, rather than the difficulty of the workout.",
+				"distance": 1250,
+				"duration": {
+					"min": 1800,
+					"max": 2100
+				},
+				"equipment": [
+					{
+						"type": "kickboard"
+					},
+					{
+						"type": "pullBuoy"
+					},
+					{
+						"type": "fins"
+					}
+				],
+				"goal": "",
+				"headCoachFocusModes": [],
+				"id": "019e4703-1298-7551-b6a9-22cb79aa5d07",
+				"images": {
+					"tile": "https://appcdn.formswim.com/workout_images/019e4703-1298-7551-b6a9-22cb79aa5d07/tile-v2.png?t=1779307845000",
+					"tileImages": {
+						"default": "https://appcdn.formswim.com/workout_images/019e4703-1298-7551-b6a9-22cb79aa5d07/tile-v2.png?t=1779307845000",
+						"v2": "https://appcdn.formswim.com/workout_images/019e4703-1298-7551-b6a9-22cb79aa5d07/tile-v2.png?t=1779307845000"
+					}
+				},
+				"intensityLevel": "high",
+				"isBookmarked": null,
+				"isCommentsEnabled": false,
+				"isFormWorkout": false,
+				"isPublished": true,
+				"isReviewed": false,
+				"isSample": false,
+				"isSavable": false,
+				"isStructuralChange": null,
+				"isSwimmersEnabled": false,
+				"isSwumByUser": false,
+				"lastSwumActivityId": null,
+				"lastSwumByUserAt": null,
+				"lastUpdatedAt": "2026-05-20T20:10:45.000Z",
+				"lengthDistances": [
+					{
+						"distance": 25,
+						"measurement": "m"
+					},
+					{
+						"distance": 25,
+						"measurement": "yd"
+					}
+				],
+				"minFirmwareVersion": "2.0.0",
+				"name": "Come Around Again and Again",
+				"origin": "personalized",
+				"revisionNumber": 1,
+				"workoutCoach": null,
+				"workoutCreator": null,
+				"workoutCreatorId": null,
+				"workoutUrl": "https://app.formswim.com/workout_details/019e4703-1298-7551-b6a9-22cb79aa5d07",
+				"workoutVersion": 1,
+				"parameters": null,
+				"commentsCount": 0,
+				"isNew": false,
+				"isSaved": false,
+				"recentSwimmers": [],
+				"swimmersCount": 0
+			}
+		},
+		{
+			"type": "Technique",
+			"description": "Similar or easier than recent swims, but more focused on improving technique and efficiency.",
+			"isRecommended": false,
+			"parameters": {
+				"avgPace": 106,
+				"avgDuration": 1429,
+				"maxIntervalDistance": 200,
+				"includeShortCourse": true,
+				"recommendedFocus": "techniqueReliability",
+				"prioritySkill": "timeToNeutral",
+				"templateOverride": "technique_reliability/technique/normal/fast_when_you_need_it.json",
+				"workoutTypes": ["technique"],
+				"templateConfigs": [
+					{
+						"workoutType": "technique",
+						"energySystem": null,
+						"templateOverride": "technique_reliability/technique/normal/fast_when_you_need_it.json"
+					}
+				],
+				"preferredStrokeType": "freestyle",
+				"includeDrills": true,
+				"equipmentExclusions": [],
+				"strokeTypesPriority": {
+					"preferredStrokeType": "freestyle",
+					"secondaryStrokeType": "breaststroke",
+					"tertiaryStrokeType": "freestyle"
+				},
+				"maxIntervalDistancesByStrokeType": {
+					"freestyle": 200,
+					"breaststroke": 200
+				}
+			},
+			"workout": {
+				"categories": ["technique"],
+				"description": "Your Swimmer Type: Stroke Fader\n\nImproving your technique on shorter sets will lay a good foundation so that you can hold your technique better when you are swimming longer, harder sets.\n\nFocusing on your technique at the start of the workout will help you feel the improvements in your technique while you are fresh.  Then, your goal is to maintain that feeling in your technique as you try harder or swim for longer.\n\nHere, spicing up short endurance intervals with very short speed intervals will give you the chance to practice your technique during short, high intensity efforts while still having the energy to hold your technique on the lower intensity intervals.\n\nUsing equipment is always optional, but here the equipment will help you focus just on your technique, rather than the difficulty of the workout.",
+				"distance": 1150,
+				"duration": {
+					"min": 1500,
+					"max": 1800
+				},
+				"equipment": [
+					{
+						"type": "fins"
+					}
+				],
+				"goal": "",
+				"headCoachFocusModes": [],
+				"id": "019e4703-1299-7551-b6a9-2b094bfea729",
+				"images": {
+					"tile": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000",
+					"tileImages": {
+						"default": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000",
+						"v2": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000"
+					}
+				},
+				"intensityLevel": "low",
+				"isBookmarked": null,
+				"isCommentsEnabled": false,
+				"isFormWorkout": false,
+				"isPublished": true,
+				"isReviewed": false,
+				"isSample": false,
+				"isSavable": false,
+				"isStructuralChange": null,
+				"isSwimmersEnabled": false,
+				"isSwumByUser": false,
+				"lastSwumActivityId": null,
+				"lastSwumByUserAt": null,
+				"lastUpdatedAt": "2026-05-20T20:10:45.000Z",
+				"lengthDistances": [
+					{
+						"distance": 25,
+						"measurement": "m"
+					},
+					{
+						"distance": 25,
+						"measurement": "yd"
+					}
+				],
+				"minFirmwareVersion": "2.0.0",
+				"name": "Fast When You Need It",
+				"origin": "personalized",
+				"revisionNumber": 1,
+				"workoutCoach": null,
+				"workoutCreator": null,
+				"workoutCreatorId": null,
+				"workoutUrl": "https://app.formswim.com/workout_details/019e4703-1299-7551-b6a9-2b094bfea729",
+				"workoutVersion": 1,
+				"parameters": null,
+				"commentsCount": 0,
+				"isNew": false,
+				"isSaved": false,
+				"recentSwimmers": [],
+				"swimmersCount": 0
+			}
+		}
+	]
+}

@@ -182,7 +182,15 @@ export interface WorkoutSuggestion {
 	 *                            fell back to the engine's own segments
 	 *   undefined / "exercitator" — engine output (default; rendered with no chip)
 	 */
-	prescriptionSource?: "stryd" | "exercitator" | "exercitator-fallback";
+	prescriptionSource?: "stryd" | "form" | "exercitator" | "exercitator-fallback";
+	/**
+	 * Which external vendor was attempted when `prescriptionSource` is
+	 * "exercitator-fallback". `undefined` on the success path (the
+	 * specific vendor is encoded in `prescriptionSource` directly). Used
+	 * by the render layer to phrase the fallback chip correctly
+	 * ("Stryd unavailable" vs "FORM unavailable").
+	 */
+	fallbackVendor?: "stryd" | "form";
 	/** When prescriptionSource is "exercitator-fallback": why we fell back. */
 	fallbackReason?: string;
 	/** Stryd workout id (when prescriptionSource is "stryd"). */
@@ -211,4 +219,19 @@ export interface WorkoutSuggestion {
 	 * to avoid a cycle with `src/stryd/client.ts`; the swap layer narrows.
 	 */
 	strydOriginalWorkout?: unknown;
+	/** FORM workout id (UUID-v7, when prescriptionSource is "form"). */
+	formWorkoutId?: string;
+	/** FORM workout name/title (when prescriptionSource is "form"). */
+	formWorkoutTitle?: string;
+	/** Pick rationale returned by pickFormWorkout (when prescriptionSource is "form"). */
+	formPickRationale?: string;
+	/**
+	 * The original FORM `setGroups[]`-bearing workout body, preserved
+	 * verbatim. Used by replay-from-Promus + the FORM-text emitter so the
+	 * fallback paste channel keeps working byte-equal even after the
+	 * primary segments are flattened/collapsed. Typed `unknown` here to
+	 * avoid a cycle with `src/form/client.ts`; the swap/render layers
+	 * narrow.
+	 */
+	formOriginalWorkout?: unknown;
 }

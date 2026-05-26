@@ -1,0 +1,233 @@
+{
+	"categories": ["technique"],
+	"description": "Your Swimmer Type: Stroke Fader\n\nImproving your technique on shorter sets will lay a good foundation so that you can hold your technique better when you are swimming longer, harder sets.\n\nFocusing on your technique at the start of the workout will help you feel the improvements in your technique while you are fresh.  Then, your goal is to maintain that feeling in your technique as you try harder or swim for longer.\n\nHere, spicing up short endurance intervals with very short speed intervals will give you the chance to practice your technique during short, high intensity efforts while still having the energy to hold your technique on the lower intensity intervals.\n\nUsing equipment is always optional, but here the equipment will help you focus just on your technique, rather than the difficulty of the workout.",
+	"distance": 1150,
+	"duration": { "min": 1500, "max": 1800 },
+	"equipment": [{ "type": "fins" }],
+	"goal": "",
+	"headCoachFocusModes": ["recommended"],
+	"id": "019e4703-1299-7551-b6a9-2b094bfea729",
+	"images": {
+		"tile": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000",
+		"tileImages": {
+			"default": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000",
+			"v2": "https://appcdn.formswim.com/workout_images/019e4703-1299-7551-b6a9-2b094bfea729/tile-v2.png?t=1779307845000"
+		}
+	},
+	"intensityLevel": "low",
+	"isBookmarked": null,
+	"isCommentsEnabled": false,
+	"isFormWorkout": false,
+	"isPublished": true,
+	"isReviewed": false,
+	"isSample": false,
+	"isSavable": true,
+	"isStructuralChange": null,
+	"isSwimmersEnabled": false,
+	"isSwumByUser": false,
+	"lastSwumActivityId": null,
+	"lastSwumByUserAt": null,
+	"lastUpdatedAt": "2026-05-20T20:10:45.000Z",
+	"lengthDistances": [
+		{ "distance": 25, "measurement": "m" },
+		{ "distance": 25, "measurement": "yd" }
+	],
+	"minFirmwareVersion": "2.0.0",
+	"name": "Fast When You Need It",
+	"origin": "personalized",
+	"revisionNumber": 1,
+	"workoutCoach": null,
+	"workoutCreator": null,
+	"workoutCreatorId": null,
+	"workoutUrl": "https://app.formswim.com/workout_details/019e4703-1299-7551-b6a9-2b094bfea729",
+	"workoutVersion": 1,
+	"parameters": null,
+	"commentsCount": 0,
+	"isNew": false,
+	"isSaved": false,
+	"recentSwimmers": [],
+	"swimmersCount": 0,
+	"importedWorkoutReviewState": 1,
+	"scheduledAt": null,
+	"setGroups": [
+		{
+			"groupType": "warmup",
+			"roundDistance": 100,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 100,
+					"intervalsCount": 1,
+					"rest": null,
+					"strokeType": "choice"
+				}
+			]
+		},
+		{
+			"groupType": "preSet",
+			"roundDistance": 400,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": {
+						"abbreviation": "CU",
+						"id": 1,
+						"isCustomDrill": false,
+						"name": "catchup",
+						"progressionLevel": "beginner",
+						"published": true,
+						"thumbnail": "https://appcdn.formswim.com/workout_drills_content/catchup/beginner.jpeg?t=1629763272000",
+						"type": "catchup",
+						"url": "https://appcdn.formswim.com/workout_drills_content/catchup/beginner.mp4?t=1629763272000"
+					},
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [{ "type": "fins" }],
+					"headCoachFocusMode": null,
+					"intervalDistance": 25,
+					"intervalsCount": 8,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "drill"
+				},
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [{ "type": "fins" }],
+					"headCoachFocusMode": "recommended",
+					"intervalDistance": 50,
+					"intervalsCount": 4,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "freestyle"
+				}
+			]
+		},
+		{
+			"groupType": "main",
+			"roundDistance": 500,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "moderate",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 200,
+					"intervalsCount": 1,
+					"rest": null,
+					"strokeType": "freestyle"
+				},
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "fast",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 50,
+					"intervalsCount": 2,
+					"rest": { "defined": 30, "takeoff": null },
+					"strokeType": "freestyle"
+				},
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "moderate",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 200,
+					"intervalsCount": 1,
+					"rest": null,
+					"strokeType": "freestyle"
+				}
+			]
+		},
+		{
+			"groupType": "cooldown",
+			"roundDistance": 150,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 75,
+					"intervalsCount": 2,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "choice"
+				}
+			]
+		}
+	],
+	"similarWorkouts": []
+}

@@ -227,4 +227,41 @@ describe("buildFormDescription", () => {
 		const text = buildFormDescription(suggestion);
 		expect(text).toContain("8 x 100 FR Fast 15 sec rest");
 	});
+
+	// --- FORM-mapper-sourced segments (round-trip integration) ----------
+
+	it("renders FORM-mapper drill segments as DCH, not K, even when drill name contains 'kick'", async () => {
+		const { formWorkoutToSegments } = await import("../../src/engine/form-mapper.js");
+		const { readFileSync } = await import("node:fs");
+		const { join } = await import("node:path");
+		const body = JSON.parse(
+			readFileSync(
+				join(__dirname, "..", "fixtures", "form-personalized", "workout-endurance.json"),
+				"utf-8",
+			),
+		);
+		const settings = {
+			sport: "Swim",
+			threshold_pace: 0.94,
+			hr_zones: [118, 125, 131, 139, 143, 147, 161],
+		} as Parameters<typeof formWorkoutToSegments>[1];
+
+		const segments = formWorkoutToSegments(body, settings);
+		const suggestion = makeSwim({ title: body.name, segments });
+		const text = buildFormDescription(suggestion);
+
+		// Endurance fixture has preSet 10× 25m sixKickSwitch drill on :15.
+		// inferStroke must classify this as "DCH" (drill), not "K" (kick),
+		// because the drill name "sixKickSwitch" contains "kick".
+		expect(text).toContain("10 x 25 DCH Easy 15 sec rest");
+		// Pace targets in mapper descriptions are stripped on the goggles
+		// channel — FORM NLP parser preference.
+		expect(text).not.toMatch(/\d+:\d+\/100m/);
+		// Main set: 2× 200m moderate on :35 — should appear as 200 FR Mod
+		expect(text).toContain("2 x 200 FR Mod 35 sec rest");
+		// Section headers present
+		expect(text).toContain("Warm-Up");
+		expect(text).toContain("Main");
+		expect(text).toContain("Warm-Down");
+	});
 });

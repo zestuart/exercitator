@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseApiKeys } from "../../src/api/auth.js";
 import { type ApiContext, handleApiRequest } from "../../src/api/router.js";
+import type { FormClient } from "../../src/form/client.js";
 import type { IntervalsClient } from "../../src/intervals.js";
 import { _resetRateLimits } from "../../src/rate-limit.js";
 import type { StrydClient } from "../../src/stryd/client.js";
@@ -47,10 +48,12 @@ function makeContext(): ApiContext {
 		get: async () => ({}),
 	} as unknown as IntervalsClient);
 	const strydClients = new Map<string, StrydClient>();
+	const formClients = new Map<string, FormClient>();
 	return {
 		auth: { keys },
 		intervalsClients,
 		strydClients,
+		formClients,
 		usersConfigured: ["ze"],
 		startedAt: Date.now(),
 		version: "0.1.0-test",

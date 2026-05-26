@@ -32,7 +32,13 @@ export async function handleFormText(
 
 	let prescriptions: Awaited<ReturnType<typeof generatePrescriptions>>;
 	try {
-		prescriptions = await generatePrescriptions(user.intervals, user.profile, user.stryd, tz);
+		prescriptions = await generatePrescriptions(
+			user.intervals,
+			user.profile,
+			user.stryd,
+			user.form,
+			tz,
+		);
 	} catch (err) {
 		console.error("generatePrescriptions failed in form-text handler:", err);
 		apiError(res, 502, "upstream error");

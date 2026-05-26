@@ -16,6 +16,7 @@ import {
 	suggestWorkoutFromData,
 } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
+import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { cacheGet, cacheSet } from "../cache.js";
@@ -212,15 +213,35 @@ export async function handleWorkoutsSuggested(
 		// API surface returns the Stryd-sourced workout when ze's profile
 		// has runRecommendationSource: "stryd". Fire-and-forget DSW emit on
 		// the back of it (Promus dedups by user+date+sport+source).
-		const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
-		suggestion = swap.suggestion;
-		void emitDsw({
-			userId: user.profile.id,
-			date: localDateStr(now, tz),
-			sport: suggestion.sport,
-			suggestion,
-			strydRecommendationSet: swap.strydRecommendationSet,
-		});
+		if (suggestion.sport === "Run") {
+			const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
+			suggestion = swap.suggestion;
+			void emitDsw({
+				kind: "stryd",
+				userId: user.profile.id,
+				date: localDateStr(now, tz),
+				sport: suggestion.sport,
+				suggestion,
+				strydRecommendationSet: swap.strydRecommendationSet,
+			});
+		} else if (suggestion.sport === "Swim") {
+			const swap = await applyFormSwapIfEnabled(
+				suggestion,
+				user.profile,
+				user.form,
+				data.swimSettings,
+			);
+			suggestion = swap.suggestion;
+			void emitDsw({
+				kind: "form",
+				userId: user.profile.id,
+				date: localDateStr(now, tz),
+				sport: suggestion.sport,
+				suggestion,
+				formRecommendationSet: swap.formRecommendationSet,
+				formBodies: swap.formBodies,
+			});
+		}
 
 		const body: SuggestedResponse = {
 			generated_at: now.toISOString(),

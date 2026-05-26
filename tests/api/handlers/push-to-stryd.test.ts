@@ -73,7 +73,7 @@ function makeUser(profile: UserProfile, withStryd: boolean): UserContext {
 		get: vi.fn().mockRejectedValue(new Error("no profile in test")),
 	} as unknown as IntervalsClient;
 	const stryd = withStryd ? ({} as StrydClient) : null;
-	return { profile, intervals, stryd };
+	return { profile, intervals, stryd, form: null };
 }
 
 describe("handlePushToStryd", () => {

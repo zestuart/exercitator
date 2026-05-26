@@ -236,17 +236,25 @@ function renderWarnings(warnings: string[]): string {
 }
 
 /**
- * Source attribution chip — shown only when Stryd-swap was attempted.
+ * Source attribution chip — shown only when a vendor-swap was attempted.
  * Engine-only prescriptions (Pam, or ze on rest days) render no chip.
+ *
+ * Stryd applies to Run, FORM applies to Swim — they never collide on the
+ * same suggestion.
  */
 function renderSourceChip(suggestion: WorkoutSuggestion): string {
 	if (suggestion.prescriptionSource === "stryd") {
 		const title = suggestion.strydWorkoutTitle ?? "(untitled)";
 		return `<span class="source-chip source-chip-stryd" title="${escapeHtml(suggestion.strydPickRationale ?? "")}">Source: Stryd · ${escapeHtml(title)}</span>`;
 	}
+	if (suggestion.prescriptionSource === "form") {
+		const title = suggestion.formWorkoutTitle ?? "(untitled)";
+		return `<span class="source-chip source-chip-form" title="${escapeHtml(suggestion.formPickRationale ?? "")}">Source: FORM · ${escapeHtml(title)}</span>`;
+	}
 	if (suggestion.prescriptionSource === "exercitator-fallback") {
 		const reason = suggestion.fallbackReason ?? "unknown";
-		return `<span class="source-chip source-chip-fallback">Source: Exercitator (Stryd unavailable: ${escapeHtml(reason)})</span>`;
+		const vendor = suggestion.fallbackVendor === "form" ? "FORM" : "Stryd";
+		return `<span class="source-chip source-chip-fallback">Source: Exercitator (${vendor} unavailable: ${escapeHtml(reason)})</span>`;
 	}
 	return "";
 }
@@ -842,6 +850,12 @@ body {
 	color: #1f5e3a;
 	background: #e6f4ec;
 	border-color: #b8dac5;
+}
+
+.source-chip-form {
+	color: #0e4f7d;
+	background: #e1eef9;
+	border-color: #a3c8e3;
 }
 
 .source-chip-fallback {

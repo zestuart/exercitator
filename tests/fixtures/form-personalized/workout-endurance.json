@@ -1,0 +1,213 @@
+{
+	"categories": ["endurance"],
+	"description": "Your Swimmer Type: Stroke Fader\n\nPracticing technique on shorter intervals will help you build the reliability in your technique so that you can hold it for longer distances later.\n\nUsing drills to focus on your technique at the start will give you a good foundation to hold your technique for your workout.\n\nThen, as you swim longer intervals and build your endurance, remind yourself of what your stroke felt like at the beginning of the workout and hold your technique as you get deeper into your sets. \n\nUsing equipment is always optional, but here the equipment will help you focus just on your technique, rather than the difficulty of the workout.",
+	"distance": 1550,
+	"duration": { "min": 1800, "max": 2100 },
+	"equipment": [{ "type": "fins" }],
+	"goal": "",
+	"headCoachFocusModes": ["recommended"],
+	"id": "019e4703-1297-7551-b6a9-1e445eabbc1b",
+	"images": {
+		"tile": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000",
+		"tileImages": {
+			"default": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000",
+			"v2": "https://appcdn.formswim.com/workout_images/019e4703-1297-7551-b6a9-1e445eabbc1b/tile-v2.png?t=1779307844000"
+		}
+	},
+	"intensityLevel": "moderate",
+	"isBookmarked": null,
+	"isCommentsEnabled": false,
+	"isFormWorkout": false,
+	"isPublished": true,
+	"isReviewed": false,
+	"isSample": false,
+	"isSavable": true,
+	"isStructuralChange": null,
+	"isSwimmersEnabled": false,
+	"isSwumByUser": false,
+	"lastSwumActivityId": null,
+	"lastSwumByUserAt": null,
+	"lastUpdatedAt": "2026-05-20T20:10:44.000Z",
+	"lengthDistances": [
+		{ "distance": 25, "measurement": "m" },
+		{ "distance": 25, "measurement": "yd" }
+	],
+	"minFirmwareVersion": "2.0.0",
+	"name": "Better As You Go",
+	"origin": "personalized",
+	"revisionNumber": 1,
+	"workoutCoach": null,
+	"workoutCreator": null,
+	"workoutCreatorId": null,
+	"workoutUrl": "https://app.formswim.com/workout_details/019e4703-1297-7551-b6a9-1e445eabbc1b",
+	"workoutVersion": 1,
+	"parameters": null,
+	"commentsCount": 0,
+	"isNew": false,
+	"isSaved": false,
+	"recentSwimmers": [],
+	"swimmersCount": 0,
+	"importedWorkoutReviewState": 1,
+	"scheduledAt": null,
+	"setGroups": [
+		{
+			"groupType": "warmup",
+			"roundDistance": 200,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 200,
+					"intervalsCount": 1,
+					"rest": null,
+					"strokeType": "choice"
+				}
+			]
+		},
+		{
+			"groupType": "preSet",
+			"roundDistance": 350,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": {
+						"abbreviation": "6KS",
+						"id": 2,
+						"isCustomDrill": false,
+						"name": "sixKickSwitch",
+						"progressionLevel": "beginner",
+						"published": true,
+						"thumbnail": "https://appcdn.formswim.com/workout_drills_content/sixKickSwitch/beginner.jpeg?t=1629763272000",
+						"type": "sixKickSwitch",
+						"url": "https://appcdn.formswim.com/workout_drills_content/sixKickSwitch/beginner.mp4?t=1629763272000"
+					},
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [{ "type": "fins" }],
+					"headCoachFocusMode": null,
+					"intervalDistance": 25,
+					"intervalsCount": 10,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "drill"
+				},
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [{ "type": "fins" }],
+					"headCoachFocusMode": "recommended",
+					"intervalDistance": 50,
+					"intervalsCount": 2,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "freestyle"
+				}
+			]
+		},
+		{
+			"groupType": "main",
+			"roundDistance": 850,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "moderate",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 200,
+					"intervalsCount": 2,
+					"rest": { "defined": 35, "takeoff": null },
+					"strokeType": "freestyle"
+				},
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "moderate",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 150,
+					"intervalsCount": 3,
+					"rest": { "defined": 25, "takeoff": null },
+					"strokeType": "freestyle"
+				}
+			]
+		},
+		{
+			"groupType": "cooldown",
+			"roundDistance": 150,
+			"roundsCount": 1,
+			"sets": [
+				{
+					"description": "",
+					"drill": null,
+					"effort": {
+						"level": "easy",
+						"pace": null,
+						"percentage": null,
+						"rpeLevel": null,
+						"splitRange": null,
+						"zone": null
+					},
+					"endDrill": null,
+					"endStrokeType": null,
+					"equipment": [],
+					"headCoachFocusMode": null,
+					"intervalDistance": 75,
+					"intervalsCount": 2,
+					"rest": { "defined": 15, "takeoff": null },
+					"strokeType": "choice"
+				}
+			]
+		}
+	],
+	"similarWorkouts": []
+}

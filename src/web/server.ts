@@ -6,6 +6,7 @@
  */
 
 import { createServer } from "node:http";
+import { FormClient } from "../form/client.js";
 import { IntervalsClient } from "../intervals.js";
 import { startRateLimitPrune } from "../rate-limit.js";
 import { StrydClient } from "../stryd/client.js";
@@ -53,8 +54,28 @@ for (const id of getUserIds()) {
 	}
 }
 
+// Build per-user FormClient map.
+// Users whose FORM env vars are unset get no client — swim swap silently skipped.
+const formClients = new Map<string, FormClient>();
+for (const id of getUserIds()) {
+	const profile = getUserProfile(id);
+	if (!profile?.formEmailEnv || !profile.formPasswordEnv) continue;
+	const email = process.env[profile.formEmailEnv];
+	const password = process.env[profile.formPasswordEnv];
+	if (email && password) {
+		const cachePath = process.env.FORM_CACHE_PATH || undefined;
+		formClients.set(
+			profile.id,
+			new FormClient({ email, password, ...(cachePath ? { cachePath } : {}) }),
+		);
+		console.error(`${profile.displayName}: FORM client ready`);
+	} else {
+		console.error(`${profile.displayName}: FORM credentials not set — swim swap disabled`);
+	}
+}
+
 const server = createServer((req, res) => {
-	handleRoutes(req, res, clients, strydClients).catch((err) => {
+	handleRoutes(req, res, clients, strydClients, formClients).catch((err) => {
 		console.error("Unhandled route error:", err);
 		if (!res.headersSent) {
 			res.writeHead(500);

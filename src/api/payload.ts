@@ -366,9 +366,13 @@ export function suggestionToApi(
 			g.kind === "pair" ? pairGroupToApi(g, s.sport) : segmentToApi(g.seg, s.sport),
 		),
 		...(s.prescriptionSource && { prescription_source: s.prescriptionSource }),
+		...(s.fallbackVendor && { fallback_vendor: s.fallbackVendor }),
 		...(s.fallbackReason && { fallback_reason: s.fallbackReason }),
 		...(s.strydWorkoutId !== undefined && { stryd_workout_id: s.strydWorkoutId }),
 		...(s.strydWorkoutTitle && { stryd_workout_title: s.strydWorkoutTitle }),
 		...(s.strydPickRationale && { stryd_pick_rationale: s.strydPickRationale }),
+		...(s.formWorkoutId && { form_workout_id: s.formWorkoutId }),
+		...(s.formWorkoutTitle && { form_workout_title: s.formWorkoutTitle }),
+		...(s.formPickRationale && { form_pick_rationale: s.formPickRationale }),
 	};
 }

@@ -2,13 +2,53 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutSuggestion } from "../../src/engine/types.js";
+import type { FormRecommendationSet, FormWorkoutBody } from "../../src/form/client.js";
 import type { StrydRecommendationSet } from "../../src/stryd/client.js";
 import { type DswEmitInput, buildDswPayload, emitDsw } from "../../src/web/promus-dsw.js";
 
 const FIXTURE_DIR = join(__dirname, "..", "fixtures", "stryd-recommendations");
+const FORM_FIXTURE_DIR = join(__dirname, "..", "fixtures", "form-personalized");
 
 function loadFixture(name: string): StrydRecommendationSet {
 	return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf-8"));
+}
+
+function loadFormFixture<T>(name: string): T {
+	return JSON.parse(readFileSync(join(FORM_FIXTURE_DIR, name), "utf-8")) as T;
+}
+
+const FORM_SET = loadFormFixture<FormRecommendationSet>("personalized.json");
+const FORM_ENDURANCE = loadFormFixture<FormWorkoutBody>("workout-endurance.json");
+const FORM_BODIES = new Map([[FORM_ENDURANCE.id, FORM_ENDURANCE]]);
+
+function baseSwimSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSuggestion {
+	return {
+		sport: "Swim",
+		category: "base",
+		title: FORM_ENDURANCE.name,
+		rationale: FORM_ENDURANCE.description,
+		total_duration_secs: 1800,
+		estimated_load: 30,
+		segments: [
+			{
+				name: "Warm-up",
+				duration_secs: 240,
+				target_description: "200m easy free",
+				target_hr_zone: 1,
+			},
+		],
+		readiness_score: 78,
+		sport_selection_reason: "swim day",
+		terrain: "pool",
+		terrain_rationale: "",
+		power_context: {
+			source: "none",
+			ftp: 0,
+			confidence: "low",
+		} as unknown as WorkoutSuggestion["power_context"],
+		warnings: [],
+		...overrides,
+	};
 }
 
 function baseSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSuggestion {
@@ -37,6 +77,7 @@ function baseSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSugg
 describe("buildDswPayload", () => {
 	it("returns null when prescriptionSource is undefined (engine-only / Pam)", () => {
 		const out = buildDswPayload({
+			kind: "stryd",
 			userId: "pam",
 			date: "2026-05-25",
 			sport: "Run",
@@ -48,6 +89,7 @@ describe("buildDswPayload", () => {
 
 	it("returns null when prescriptionSource is 'exercitator' (rest day)", () => {
 		const out = buildDswPayload({
+			kind: "stryd",
 			userId: "ze",
 			date: "2026-05-25",
 			sport: "Run",
@@ -63,6 +105,7 @@ describe("buildDswPayload", () => {
 	it("builds a full Stryd-success payload with workout type extracted from the set", () => {
 		const set = loadFixture("recommendations-workout-extfalse.json");
 		const out = buildDswPayload({
+			kind: "stryd",
 			userId: "ze",
 			date: "2026-05-25",
 			sport: "Run",
@@ -112,6 +155,7 @@ describe("buildDswPayload", () => {
 	it("builds a fallback payload (stride_rejected_on_recovery) with set carried over", () => {
 		const set = loadFixture("recommendations-easy-extfalse.json");
 		const out = buildDswPayload({
+			kind: "stryd",
 			userId: "ze",
 			date: "2026-05-25",
 			sport: "Run",
@@ -138,6 +182,7 @@ describe("buildDswPayload", () => {
 
 	it("builds a fallback payload (204_no_content_long) with empty set", () => {
 		const out = buildDswPayload({
+			kind: "stryd",
 			userId: "ze",
 			date: "2026-05-25",
 			sport: "Run",
@@ -175,8 +220,11 @@ afterEach(() => {
 	Reflect.deleteProperty(process.env, "PROMUS_URL");
 });
 
-function baseInput(overrides: Partial<DswEmitInput> = {}): DswEmitInput {
+function baseInput(
+	overrides: Partial<Extract<DswEmitInput, { kind: "stryd" }>> = {},
+): DswEmitInput {
 	return {
+		kind: "stryd",
 		userId: "ze",
 		date: "2026-05-25",
 		sport: "Run",
@@ -219,6 +267,7 @@ describe("emitDsw", () => {
 
 	it("skips silently (no fetch) when buildDswPayload returns null", async () => {
 		await emitDsw({
+			kind: "stryd",
 			userId: "pam",
 			date: "2026-05-25",
 			sport: "Run",
@@ -253,5 +302,169 @@ describe("emitDsw", () => {
 
 		await expect(emitDsw(baseInput())).resolves.toBeUndefined();
 		expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/fetch failed.*ECONNREFUSED/));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// buildDswPayload — FORM path
+// ---------------------------------------------------------------------------
+
+describe("buildDswPayload — FORM kind", () => {
+	function baseFormInput(
+		overrides: Partial<Extract<DswEmitInput, { kind: "form" }>> = {},
+	): DswEmitInput {
+		return {
+			kind: "form",
+			userId: "ze",
+			date: "2026-05-25",
+			sport: "Swim",
+			suggestion: baseSwimSuggestion({
+				prescriptionSource: "form",
+				formWorkoutId: FORM_ENDURANCE.id,
+				formWorkoutTitle: FORM_ENDURANCE.name,
+				formPickRationale: "base: picked 'Better As You Go' (score 1240, Z1+Z2)",
+			}),
+			formRecommendationSet: FORM_SET,
+			formBodies: FORM_BODIES,
+			...overrides,
+		};
+	}
+
+	it("returns null when prescriptionSource is undefined", () => {
+		const out = buildDswPayload(baseFormInput({ suggestion: baseSwimSuggestion() }));
+		expect(out).toBeNull();
+	});
+
+	it("returns null when prescriptionSource is 'exercitator' (rest)", () => {
+		const out = buildDswPayload(
+			baseFormInput({
+				suggestion: baseSwimSuggestion({
+					category: "rest",
+					prescriptionSource: "exercitator",
+				}),
+			}),
+		);
+		expect(out).toBeNull();
+	});
+
+	it("returns null when the fallback is for a different vendor (e.g. Stryd)", () => {
+		const out = buildDswPayload(
+			baseFormInput({
+				suggestion: baseSwimSuggestion({
+					prescriptionSource: "exercitator-fallback",
+					fallbackVendor: "stryd",
+					fallbackReason: "http_503",
+				}),
+			}),
+		);
+		expect(out).toBeNull();
+	});
+
+	it("builds a full FORM-success payload with vendor_recommendation_set", () => {
+		const out = buildDswPayload(baseFormInput());
+		expect(out).not.toBeNull();
+		expect(out?.source).toBe("form");
+		expect(out?.sport).toBe("Swim");
+		expect(out?.category).toBe("base");
+		expect(out?.fallback_used).toBe(false);
+		expect(out?.picked_workout_id).toBe(FORM_ENDURANCE.id);
+		expect(out?.picked_workout_title).toBe(FORM_ENDURANCE.name);
+		// type extracted from the matching candidate in the set
+		expect(out?.picked_workout_type).toBe("Endurance");
+		expect(out?.picked_strategy_rationale).toContain("base: picked");
+		// Renamed column (Promus #168)
+		expect(out?.vendor_recommendation_set).toBe(FORM_SET);
+		// Legacy column NOT populated on FORM path
+		expect(out?.stryd_recommendation_set).toBeUndefined();
+	});
+
+	it("builds a FORM fallback payload (network error) with empty set", () => {
+		const out = buildDswPayload(
+			baseFormInput({
+				suggestion: baseSwimSuggestion({
+					prescriptionSource: "exercitator-fallback",
+					fallbackVendor: "form",
+					fallbackReason: "network_error",
+				}),
+				formRecommendationSet: null,
+				formBodies: null,
+			}),
+		);
+		expect(out?.fallback_used).toBe(true);
+		expect(out?.fallback_reason).toBe("network_error");
+		expect(out?.picked_workout_id).toBeUndefined();
+		expect(out?.vendor_recommendation_set).toEqual({});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// emitDsw — FORM env gate
+// ---------------------------------------------------------------------------
+
+describe("emitDsw — FORM gate (PROMUS_FORM_DSW_ENABLED)", () => {
+	function formInput(): DswEmitInput {
+		return {
+			kind: "form",
+			userId: "ze",
+			date: "2026-05-25",
+			sport: "Swim",
+			suggestion: baseSwimSuggestion({
+				prescriptionSource: "form",
+				formWorkoutId: FORM_ENDURANCE.id,
+				formWorkoutTitle: FORM_ENDURANCE.name,
+				formPickRationale: "base: picked",
+			}),
+			formRecommendationSet: FORM_SET,
+			formBodies: FORM_BODIES,
+		};
+	}
+
+	beforeEach(() => {
+		Reflect.deleteProperty(process.env, "PROMUS_FORM_DSW_ENABLED");
+	});
+
+	afterEach(() => {
+		Reflect.deleteProperty(process.env, "PROMUS_FORM_DSW_ENABLED");
+	});
+
+	it("no-ops (no fetch) when PROMUS_FORM_DSW_ENABLED is unset", async () => {
+		await emitDsw(formInput());
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("no-ops when PROMUS_FORM_DSW_ENABLED is '0'", async () => {
+		process.env.PROMUS_FORM_DSW_ENABLED = "0";
+		await emitDsw(formInput());
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("emits when PROMUS_FORM_DSW_ENABLED is '1'", async () => {
+		process.env.PROMUS_FORM_DSW_ENABLED = "1";
+		mockFetch.mockResolvedValueOnce(
+			new Response(JSON.stringify({ upserted: false, records_accepted: 1 }), { status: 200 }),
+		);
+
+		await emitDsw(formInput());
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+		const init = mockFetch.mock.calls[0][1] as RequestInit;
+		const body = JSON.parse(init.body as string);
+		expect(body.source).toBe("form");
+		expect(body.vendor_recommendation_set).toBeDefined();
+		expect(body.stryd_recommendation_set).toBeUndefined();
+	});
+
+	it("emits when PROMUS_FORM_DSW_ENABLED is 'true'", async () => {
+		process.env.PROMUS_FORM_DSW_ENABLED = "true";
+		mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+		await emitDsw(formInput());
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	it("does NOT gate the Stryd path on PROMUS_FORM_DSW_ENABLED", async () => {
+		// PROMUS_FORM_DSW_ENABLED unset — Stryd path must still fire.
+		mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+		await emitDsw(baseInput());
+		expect(mockFetch).toHaveBeenCalledTimes(1);
 	});
 });

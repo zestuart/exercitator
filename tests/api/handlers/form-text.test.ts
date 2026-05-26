@@ -64,6 +64,8 @@ const SWIM_PROFILE: UserProfile = {
 	apiKeyEnv: "INTERVALS_ICU_API_KEY",
 	strydEmailEnv: "STRYD_EMAIL",
 	strydPasswordEnv: "STRYD_PASSWORD",
+	formEmailEnv: null,
+	formPasswordEnv: null,
 };
 
 const RUN_ONLY_PROFILE: UserProfile = { ...SWIM_PROFILE, sports: ["Run"] };
@@ -73,7 +75,7 @@ function makeUser(profile: UserProfile): UserContext {
 		athleteId: "0",
 		get: vi.fn().mockRejectedValue(new Error("no profile in test")),
 	} as unknown as IntervalsClient;
-	return { profile, intervals, stryd: null };
+	return { profile, intervals, stryd: null, form: null };
 }
 
 const SWIM_SUGGESTION = {
@@ -159,9 +161,9 @@ describe("handleFormText", () => {
 			makeUser(SWIM_PROFILE),
 			new URL("http://localhost/api/users/ze/form-text?tz=Europe/London"),
 		);
-		// generatePrescriptions(client, profile, strydClient, tz)
+		// generatePrescriptions(client, profile, strydClient, formClient, tz)
 		const call = generatePrescriptionsMock.mock.calls[0];
-		expect(call[3]).toBe("Europe/London");
+		expect(call[4]).toBe("Europe/London");
 	});
 
 	it("rejects a crafted invalid tz to UTC instead of crashing", async () => {
@@ -174,6 +176,6 @@ describe("handleFormText", () => {
 			new URL("http://localhost/api/users/ze/form-text?tz=a/a"),
 		);
 		expect(res._status).toBe(200);
-		expect(generatePrescriptionsMock.mock.calls[0][3]).toBe("UTC");
+		expect(generatePrescriptionsMock.mock.calls[0][4]).toBe("UTC");
 	});
 });

@@ -17,6 +17,7 @@ import {
 } from "../compliance/persist.js";
 import type { ComplianceView } from "../compliance/types.js";
 import { isValidTimezone, localDateStr } from "../engine/date-utils.js";
+import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
 import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -77,6 +78,7 @@ export async function handleRoutes(
 	res: ServerResponse,
 	clients: Map<string, IntervalsClient>,
 	strydClients: Map<string, StrydClient>,
+	formClients: Map<string, FormClient>,
 ): Promise<void> {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
 
@@ -141,16 +143,21 @@ export async function handleRoutes(
 
 		// User-scoped Stryd client: only if user has stryd: true and credentials configured
 		const userStryd = profile.stryd ? (strydClients.get(profile.id) ?? null) : null;
+		// User-scoped FORM client: only if user has FORM env vars configured
+		const userForm =
+			profile.formEmailEnv && profile.formPasswordEnv
+				? (formClients.get(profile.id) ?? null)
+				: null;
 
 		const tz = await resolveTimezone(req, client);
 
 		if (req.method === "GET" && (subPath === "/" || subPath === "")) {
-			await handleMainPage(profile, client, userStryd, tz, res);
+			await handleMainPage(profile, client, userStryd, userForm, tz, res);
 			return;
 		}
 
 		if (req.method === "GET" && subPath === "/api/prescriptions") {
-			const prescriptions = await generatePrescriptions(client, profile, userStryd, tz);
+			const prescriptions = await generatePrescriptions(client, profile, userStryd, userForm, tz);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(prescriptions));
 			return;
@@ -188,7 +195,7 @@ export async function handleRoutes(
 				return;
 			}
 			const force = url.searchParams.get("force") === "true";
-			await sendToIntervals(client, profile, sport, res, force, tz, userStryd);
+			await sendToIntervals(client, profile, sport, res, force, tz, userStryd, userForm);
 			return;
 		}
 
@@ -484,10 +491,11 @@ async function handleMainPage(
 	profile: UserProfile,
 	client: IntervalsClient,
 	strydClient: StrydClient | null | undefined,
+	formClient: FormClient | null | undefined,
 	tz: string,
 	res: ServerResponse,
 ): Promise<void> {
-	const prescriptions = await generatePrescriptions(client, profile, strydClient, tz);
+	const prescriptions = await generatePrescriptions(client, profile, strydClient, formClient, tz);
 	const today = localDateStr(new Date(), tz);
 
 	// Generate invocations for each sport this user has

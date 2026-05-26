@@ -10,6 +10,7 @@
  */
 
 import { createServer } from "node:http";
+import { FormClient } from "../form/client.js";
 import { IntervalsClient } from "../intervals.js";
 import { startRateLimitPrune } from "../rate-limit.js";
 import { StrydClient } from "../stryd/client.js";
@@ -77,10 +78,26 @@ export function startApiServer(opts: StartApiOptions): void {
 		}
 	}
 
+	const formClients = new Map<string, FormClient>();
+	for (const id of getUserIds()) {
+		const profile = getUserProfile(id);
+		if (!profile?.formEmailEnv || !profile.formPasswordEnv) continue;
+		const email = process.env[profile.formEmailEnv];
+		const password = process.env[profile.formPasswordEnv];
+		if (email && password) {
+			const cachePath = process.env.FORM_CACHE_PATH || undefined;
+			formClients.set(
+				profile.id,
+				new FormClient({ email, password, ...(cachePath ? { cachePath } : {}) }),
+			);
+		}
+	}
+
 	const ctx: ApiContext = {
 		auth: { keys },
 		intervalsClients,
 		strydClients,
+		formClients,
 		usersConfigured: Array.from(intervalsClients.keys()),
 		startedAt: Date.now(),
 		version: opts.version,

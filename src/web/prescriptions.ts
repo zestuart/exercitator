@@ -13,10 +13,12 @@ import {
 } from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
+import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
 import type { UserProfile } from "../users.js";
+import { applyFormSwapIfEnabled } from "./form-swap.js";
 import { emitDsw } from "./promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "./stryd-swap.js";
 
@@ -74,6 +76,7 @@ export async function generatePrescriptions(
 	client: IntervalsClient,
 	profile: UserProfile,
 	strydClient?: StrydClient | null,
+	formClient?: FormClient | null,
 	tz?: string,
 ): Promise<Prescription> {
 	const today = localDateStr(new Date(), tz);
@@ -115,7 +118,7 @@ export async function generatePrescriptions(
 	let run = hasSport("Run")
 		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id, tz)
 		: null;
-	const swim = hasSport("Swim")
+	let swim = hasSport("Swim")
 		? suggestWorkoutFromData(data, "Swim", now, undefined, undefined, "0", tz)
 		: null;
 
@@ -135,11 +138,32 @@ export async function generatePrescriptions(
 		// null for engine-only / non-Stryd-attempted suggestions, so this
 		// is a true no-op when the swap didn't fire.
 		void emitDsw({
+			kind: "stryd",
 			userId: profile.id,
 			date: today,
 			sport: "Run",
 			suggestion: run,
 			strydRecommendationSet: swap.strydRecommendationSet,
+		});
+	}
+
+	// FORM recommendation swap for Swim (per-user flag; ze-only at the
+	// moment). Same lifecycle as the Stryd path — runs AFTER the engine
+	// has decided the category and built its own segments. FORM replaces
+	// the body only when the swap succeeds. DSW emission is gated by
+	// PROMUS_FORM_DSW_ENABLED=1 (no-op until Promus #168 deploys the
+	// `vendor_recommendation_set` rename).
+	if (swim) {
+		const swap = await applyFormSwapIfEnabled(swim, profile, formClient, data.swimSettings);
+		swim = swap.suggestion;
+		void emitDsw({
+			kind: "form",
+			userId: profile.id,
+			date: today,
+			sport: "Swim",
+			suggestion: swim,
+			formRecommendationSet: swap.formRecommendationSet,
+			formBodies: swap.formBodies,
 		});
 	}
 

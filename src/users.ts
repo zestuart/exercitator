@@ -34,6 +34,20 @@ export interface UserProfile {
 	 * Swim prescriptions are never affected.
 	 */
 	runRecommendationSource?: "stryd";
+	/**
+	 * Optional override for the swim-prescription source. When `"form"`, the
+	 * engine still picks the category (readiness, sleep debt, cross-training,
+	 * staleness), but the segments are replaced by a FORM-served personalised
+	 * workout selected via content scoring (effort-level Z-buckets). On any
+	 * failure (5xx / 401 / picker rejection) we fall back to the engine's
+	 * own segments. Vigil does NOT apply to swim. Run prescriptions are
+	 * unaffected.
+	 */
+	swimRecommendationSource?: "form";
+	/** Environment variable name for FORM email (null if no FORM access). */
+	formEmailEnv: string | null;
+	/** Environment variable name for FORM password (null if no FORM access). */
+	formPasswordEnv: string | null;
 }
 
 const PROFILES: UserProfile[] = [
@@ -46,7 +60,10 @@ const PROFILES: UserProfile[] = [
 		apiKeyEnv: "INTERVALS_ICU_API_KEY",
 		strydEmailEnv: "STRYD_EMAIL",
 		strydPasswordEnv: "STRYD_PASSWORD",
+		formEmailEnv: "FORM_EMAIL",
+		formPasswordEnv: "FORM_PASSWORD",
 		runRecommendationSource: "stryd",
+		swimRecommendationSource: "form",
 	},
 	{
 		id: "pam",
@@ -57,6 +74,8 @@ const PROFILES: UserProfile[] = [
 		apiKeyEnv: "INTERVALS_ICU_API_KEY_PAM",
 		strydEmailEnv: "STRYD_EMAIL_PAM",
 		strydPasswordEnv: "STRYD_PASSWORD_PAM",
+		formEmailEnv: null,
+		formPasswordEnv: null,
 	},
 ];
 

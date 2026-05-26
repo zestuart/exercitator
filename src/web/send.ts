@@ -6,6 +6,7 @@
 import type { ServerResponse } from "node:http";
 import { getPrescription, getSendEvent, persistSendEvent } from "../compliance/persist.js";
 import { localDateStr } from "../engine/date-utils.js";
+import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import type { UserProfile } from "../users.js";
@@ -26,6 +27,7 @@ export async function sendToIntervals(
 	force = false,
 	tz?: string,
 	strydClient?: StrydClient | null,
+	formClient?: FormClient | null,
 ): Promise<void> {
 	try {
 		const today = localDateStr(new Date(), tz);
@@ -42,7 +44,12 @@ export async function sendToIntervals(
 			return;
 		}
 
-		const prescriptions = await generatePrescriptions(client, profile);
+		// Pass both vendor clients through so a fresh generation runs the
+		// vendor swap and ships the swapped suggestion. When Praescriptor
+		// has already rendered today the daily cache returns the same
+		// swapped prescription, but the iOS-first flow (push before
+		// loading the web page) must not regress to engine output.
+		const prescriptions = await generatePrescriptions(client, profile, strydClient, formClient, tz);
 		const suggestion = sport === "run" ? prescriptions.run : prescriptions.swim;
 
 		if (!suggestion) {

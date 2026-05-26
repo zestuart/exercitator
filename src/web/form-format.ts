@@ -40,9 +40,11 @@ function extractDistance(desc: string): number | null {
  */
 function inferStroke(desc: string, name: string): string {
 	const lower = `${desc} ${name}`.toLowerCase();
+	// "drill" first so FORM-sourced drill segments whose drill name
+	// embeds "kick" (e.g. sixKickSwitch) classify as drill, not kick.
+	if (lower.includes("drill")) return "DCH";
 	if (lower.includes("kick")) return "K";
 	if (lower.includes("pull")) return "P";
-	if (lower.includes("drill")) return "DCH";
 	if (lower.includes("im") || lower.includes("medley")) return "IM";
 	if (lower.includes("back")) return "BK";
 	if (lower.includes("breast")) return "BR";

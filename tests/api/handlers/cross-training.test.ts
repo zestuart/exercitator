@@ -74,7 +74,7 @@ function makeUser(
 		delete: vi.fn(),
 		request: vi.fn(),
 	} as unknown as IntervalsClient;
-	return { user: { profile: PROFILE, intervals: client, stryd: null }, put };
+	return { user: { profile: PROFILE, intervals: client, stryd: null, form: null }, put };
 }
 
 describe("handleCrossTrainingRpe", () => {

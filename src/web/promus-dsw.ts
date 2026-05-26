@@ -2,18 +2,28 @@
  * Promus DSW (Daily Suggested Workout) emitter.
  *
  * Fires a fire-and-forget `POST /api/ingest/dsw` to Promus after each
- * Stryd-attempted run prescription, so the longitudinal
- * fitness:readiness:workout corpus can correlate engine inputs against
- * Stryd's served candidates. The emitter NEVER blocks the prescription —
- * any error is logged via console.warn and dropped.
+ * vendor-attempted prescription (Stryd for Run, FORM for Swim), so the
+ * longitudinal fitness:readiness:workout corpus can correlate engine
+ * inputs against the served candidates. The emitter NEVER blocks the
+ * prescription — any error is logged via console.warn and dropped.
  *
- * Endpoint contract: see Promus repo issue #164 / PR #165 (merged
- * 2026-05-25). Idempotency is enforced server-side via the natural key
- * `(user_id, date, sport, source)` — re-renders within a day upsert in
- * place, so this emitter does no client-side dedup.
+ * Endpoint contract:
+ *   - issue #164 / PR #165 (merged 2026-05-25) — original Stryd path.
+ *   - issue #168 (open 2026-05-26) — `stryd_recommendation_set` →
+ *     `vendor_recommendation_set` rename; required for FORM emission.
+ *     FORM emission stays gated behind `PROMUS_FORM_DSW_ENABLED=1`
+ *     until #168 ships, so Exercitator can land the FORM-side code
+ *     dark.
+ *
+ * Idempotency is enforced server-side via the natural key
+ * `(user_id, date, sport, source)` — re-renders within a day upsert
+ * in place, so this emitter does no client-side dedup. The same key
+ * separates Stryd Run rows from FORM Swim rows even for the same
+ * user/date.
  */
 
 import type { WorkoutSuggestion } from "../engine/types.js";
+import type { FormRecommendationSet, FormWorkoutBody } from "../form/client.js";
 import type { StrydRecommendationSet } from "../stryd/client.js";
 
 /**
@@ -45,21 +55,46 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Caller-facing input. The emitter never inspects the engine's intermediate
- * state directly — it consumes the finalised suggestion + the raw Stryd
+ * state directly — it consumes the finalised suggestion + the raw vendor
  * response side-by-side.
+ *
+ * The `kind` discriminator selects the wire-field name and the picked
+ * workout id type (Stryd: numeric int64; FORM: UUID-v7 string).
  */
-export interface DswEmitInput {
-	userId: string;
-	/** User-local date the prescription is for (YYYY-MM-DD). */
-	date: string;
-	sport: "Run" | "Swim";
-	/** The suggestion AFTER the Stryd swap has run (or the engine's output if no swap). */
-	suggestion: WorkoutSuggestion;
-	/** Raw Stryd response body, when available. Null on 204 / 5xx / network. */
-	strydRecommendationSet: StrydRecommendationSet | null;
-}
+export type DswEmitInput =
+	| {
+			kind: "stryd";
+			userId: string;
+			/** User-local date the prescription is for (YYYY-MM-DD). */
+			date: string;
+			sport: "Run" | "Swim";
+			/** The suggestion AFTER the Stryd swap has run (or the engine's output if no swap). */
+			suggestion: WorkoutSuggestion;
+			/** Raw Stryd response body, when available. Null on 204 / 5xx / network. */
+			strydRecommendationSet: StrydRecommendationSet | null;
+	  }
+	| {
+			kind: "form";
+			userId: string;
+			/** User-local date the prescription is for (YYYY-MM-DD). */
+			date: string;
+			sport: "Run" | "Swim";
+			/** The suggestion AFTER the FORM swap has run. */
+			suggestion: WorkoutSuggestion;
+			/** Raw FORM personalised list, when available. Null on errors / picker rejection. */
+			formRecommendationSet: FormRecommendationSet | null;
+			/** Per-workout body map (FORM's two-call pattern). Null on errors. */
+			formBodies: Map<string, FormWorkoutBody> | null;
+	  };
 
-/** Wire shape — matches Promus's `DswIngest` request body. */
+/** Wire shape — matches Promus's `DswIngest` request body.
+ *
+ * Field-name dual-write transition: Promus issue #168 renames
+ * `stryd_recommendation_set` → `vendor_recommendation_set`. During the
+ * transition, the Stryd path keeps sending the legacy name; the FORM
+ * path uses the new name (and only fires after Promus #168 deploys —
+ * gated by PROMUS_FORM_DSW_ENABLED). Both fields are optional on the
+ * wire so future-Promus can ignore whichever it doesn't recognise. */
 export interface DswPayload {
 	user_id: string;
 	date: string;
@@ -72,34 +107,51 @@ export interface DswPayload {
 	picked_strategy_rationale?: string;
 	fallback_used: boolean;
 	fallback_reason?: string;
-	stryd_recommendation_set: unknown;
+	/** Legacy column name; populated only on the Stryd path during transition. */
+	stryd_recommendation_set?: unknown;
+	/** Renamed column (Promus #168); populated on the FORM path. */
+	vendor_recommendation_set?: unknown;
 	exercitator_context: unknown;
 }
 
 /**
- * Build the Promus payload from a finalised suggestion + the raw Stryd
+ * Build the Promus payload from a finalised suggestion + the raw vendor
  * response. Returns `null` when the input is not a DSW-loggable case:
- *   - prescriptionSource is undefined (engine-only; Pam, or a sport other
- *     than the one we wrap)
- *   - prescriptionSource is "exercitator" (rest day; no Stryd call made,
- *     not interesting for the Stryd-vs-engine corpus)
+ *   - prescriptionSource is undefined (engine-only; Pam, or a sport
+ *     other than the one we wrap)
+ *   - prescriptionSource is "exercitator" (rest day; no vendor call
+ *     made, not interesting for the vendor-vs-engine corpus)
  *
- * "stryd" and "exercitator-fallback" both emit — fallbacks are first-class
- * data (we want to know how often Stryd is unreachable / unhelpful).
+ * Vendor-success ("stryd" / "form") and "exercitator-fallback" both
+ * emit — fallbacks are first-class data (we want to know how often the
+ * vendor is unreachable / unhelpful). The `kind` discriminator on the
+ * input selects Stryd-shape vs FORM-shape fields.
  */
 export function buildDswPayload(input: DswEmitInput): DswPayload | null {
-	const { userId, date, sport, suggestion, strydRecommendationSet } = input;
-
-	const src = suggestion.prescriptionSource;
-	if (src !== "stryd" && src !== "exercitator-fallback") {
+	const src = input.suggestion.prescriptionSource;
+	if (src !== "stryd" && src !== "form" && src !== "exercitator-fallback") {
 		return null;
 	}
 
+	if (input.kind === "stryd") {
+		return buildStrydDswPayload(input);
+	}
+	return buildFormDswPayload(input);
+}
+
+function buildStrydDswPayload(input: Extract<DswEmitInput, { kind: "stryd" }>): DswPayload | null {
+	const { userId, date, sport, suggestion, strydRecommendationSet } = input;
+	const src = suggestion.prescriptionSource;
+
+	// On the Stryd surface we only emit when Stryd was attempted (success
+	// or fallback). A FORM-sourced suggestion that reached this branch
+	// must be a routing bug — bail.
+	if (src !== "stryd" && src !== "exercitator-fallback") return null;
+	if (src === "exercitator-fallback" && suggestion.fallbackVendor === "form") return null;
+
 	// Both branches log `source = "stryd"` because Stryd WAS attempted —
 	// the distinction "did we use Stryd's workout or fall back?" lives on
-	// `fallback_used`, not on `source`. (`source = "exercitator"` is
-	// reserved for prescriptions where Stryd was never consulted, which
-	// today only happens on rest days.)
+	// `fallback_used`, not on `source`.
 	const source = "stryd";
 	const fallbackUsed = src === "exercitator-fallback";
 
@@ -110,24 +162,20 @@ export function buildDswPayload(input: DswEmitInput): DswPayload | null {
 		source,
 		category: suggestion.category,
 		fallback_used: fallbackUsed,
-		// Promus accepts `null` here; we send `{}` to match the
-		// NOT NULL DEFAULT '{}'::jsonb on the column.
+		// Legacy column name during the Promus #168 transition.
 		stryd_recommendation_set: strydRecommendationSet ?? {},
 		exercitator_context: buildExercitatorContext(suggestion),
 	};
 
 	if (!fallbackUsed && suggestion.strydWorkoutId !== undefined) {
 		// Promus wants this as a string to dodge int64-precision issues
-		// across JS clients (consistent with how Stryd serialises its own
-		// recommendation-set id as a string).
+		// across JS clients.
 		payload.picked_workout_id = String(suggestion.strydWorkoutId);
 	}
 	if (suggestion.strydWorkoutTitle) {
 		payload.picked_workout_title = suggestion.strydWorkoutTitle;
 	}
 	if (strydRecommendationSet && !fallbackUsed) {
-		// Find the picked workout in the set to extract its type. Picker
-		// uses scoring + tiebreak; we cross-reference by id.
 		const picked = strydRecommendationSet.workouts.find(
 			(w) => w.estimated_workout.workout.id === suggestion.strydWorkoutId,
 		);
@@ -137,6 +185,54 @@ export function buildDswPayload(input: DswEmitInput): DswPayload | null {
 	}
 	if (suggestion.strydPickRationale) {
 		payload.picked_strategy_rationale = suggestion.strydPickRationale;
+	}
+	if (fallbackUsed && suggestion.fallbackReason) {
+		payload.fallback_reason = suggestion.fallbackReason;
+	}
+
+	return payload;
+}
+
+function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): DswPayload | null {
+	const { userId, date, sport, suggestion, formRecommendationSet } = input;
+	const src = suggestion.prescriptionSource;
+
+	if (src !== "form" && src !== "exercitator-fallback") return null;
+	// Cross-routing guard mirroring the Stryd branch.
+	if (src === "exercitator-fallback" && suggestion.fallbackVendor !== "form") return null;
+
+	const source = "form";
+	const fallbackUsed = src === "exercitator-fallback";
+
+	const payload: DswPayload = {
+		user_id: userId,
+		date,
+		sport,
+		source,
+		category: suggestion.category,
+		fallback_used: fallbackUsed,
+		// Renamed column name (Promus #168) — FORM emission requires
+		// the rename to have shipped on the Promus side.
+		vendor_recommendation_set: formRecommendationSet ?? {},
+		exercitator_context: buildExercitatorContext(suggestion),
+	};
+
+	if (!fallbackUsed && suggestion.formWorkoutId !== undefined) {
+		payload.picked_workout_id = suggestion.formWorkoutId;
+	}
+	if (suggestion.formWorkoutTitle) {
+		payload.picked_workout_title = suggestion.formWorkoutTitle;
+	}
+	if (formRecommendationSet && !fallbackUsed) {
+		const picked = formRecommendationSet.workouts.find(
+			(w) => w.workout.id === suggestion.formWorkoutId,
+		);
+		if (picked) {
+			payload.picked_workout_type = picked.type;
+		}
+	}
+	if (suggestion.formPickRationale) {
+		payload.picked_strategy_rationale = suggestion.formPickRationale;
 	}
 	if (fallbackUsed && suggestion.fallbackReason) {
 		payload.fallback_reason = suggestion.fallbackReason;
@@ -173,11 +269,31 @@ function buildExercitatorContext(suggestion: WorkoutSuggestion): unknown {
 }
 
 /**
+ * Returns true when FORM-side DSW emission is enabled. Stays false
+ * until the Promus #168 rename (`stryd_recommendation_set` →
+ * `vendor_recommendation_set`) has shipped, otherwise Promus would
+ * reject the new field name. Operator flips PROMUS_FORM_DSW_ENABLED=1
+ * to turn it on; reverting to 0 (or unset) disables again.
+ */
+function formDswEnabled(): boolean {
+	const v = process.env.PROMUS_FORM_DSW_ENABLED;
+	return v === "1" || v === "true";
+}
+
+/**
  * Fire-and-forget Promus emission. Always returns synchronously to the
  * caller — the network request runs in the background. Use the returned
  * Promise only for testing; production callers should ignore it.
+ *
+ * FORM-kind inputs no-op when `PROMUS_FORM_DSW_ENABLED` is not set —
+ * the gate exists so the FORM emitter code can ship before Promus #168
+ * deploys without sending a field name Promus doesn't yet accept.
  */
 export function emitDsw(input: DswEmitInput): Promise<void> {
+	if (input.kind === "form" && !formDswEnabled()) {
+		return Promise.resolve();
+	}
+
 	const payload = buildDswPayload(input);
 	if (!payload) {
 		return Promise.resolve();

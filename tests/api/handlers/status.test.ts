@@ -80,6 +80,7 @@ describe("handleStatus", () => {
 			profile: ZE_PROFILE,
 			intervals: makeMockIntervals(),
 			stryd: null,
+			form: null,
 		};
 		const res = fakeRes();
 		await handleStatus(fakeReq(), res, user);
@@ -99,6 +100,7 @@ describe("handleStatus", () => {
 			profile: { ...ZE_PROFILE, id: "ze-cc-test" },
 			intervals: makeMockIntervals(),
 			stryd: null,
+			form: null,
 		};
 		const res = fakeRes() as ServerResponse & {
 			_headers: Record<string, string>;

@@ -6,6 +6,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
 import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -20,6 +21,7 @@ export interface ApiContext {
 	auth: AuthContext;
 	intervalsClients: Map<string, IntervalsClient>;
 	strydClients: Map<string, StrydClient>;
+	formClients: Map<string, FormClient>;
 	usersConfigured: string[];
 	startedAt: number;
 	version: string;
@@ -29,6 +31,7 @@ export interface UserContext {
 	profile: UserProfile;
 	intervals: IntervalsClient;
 	stryd: StrydClient | null;
+	form: FormClient | null;
 }
 
 function resolveUser(ctx: ApiContext, userId: string, res: ServerResponse): UserContext | null {
@@ -43,7 +46,11 @@ function resolveUser(ctx: ApiContext, userId: string, res: ServerResponse): User
 		return null;
 	}
 	const stryd = profile.stryd ? (ctx.strydClients.get(profile.id) ?? null) : null;
-	return { profile, intervals, stryd };
+	const form =
+		profile.formEmailEnv && profile.formPasswordEnv
+			? (ctx.formClients.get(profile.id) ?? null)
+			: null;
+	return { profile, intervals, stryd, form };
 }
 
 export async function handleApiRequest(

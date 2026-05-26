@@ -19,6 +19,7 @@ import {
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
+import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -148,16 +149,38 @@ export async function handleDashboard(
 					prompt: suggestion.awaitingInput.prompt,
 				};
 			} else {
-				// Same Stryd-swap gating as Praescriptor / /workouts/suggested.
-				const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
-				suggestion = swap.suggestion;
-				void emitDsw({
-					userId: user.profile.id,
-					date: today,
-					sport: suggestion.sport,
-					suggestion,
-					strydRecommendationSet: swap.strydRecommendationSet,
-				});
+				// Same vendor-swap gating as Praescriptor / /workouts/suggested.
+				// Sport branches: Run→Stryd, Swim→FORM. DSW emission for FORM
+				// lands in Phase 4 (Promus schema rename).
+				if (suggestion.sport === "Run") {
+					const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
+					suggestion = swap.suggestion;
+					void emitDsw({
+						kind: "stryd",
+						userId: user.profile.id,
+						date: today,
+						sport: suggestion.sport,
+						suggestion,
+						strydRecommendationSet: swap.strydRecommendationSet,
+					});
+				} else if (suggestion.sport === "Swim") {
+					const swap = await applyFormSwapIfEnabled(
+						suggestion,
+						user.profile,
+						user.form,
+						data.swimSettings,
+					);
+					suggestion = swap.suggestion;
+					void emitDsw({
+						kind: "form",
+						userId: user.profile.id,
+						date: today,
+						sport: suggestion.sport,
+						suggestion,
+						formRecommendationSet: swap.formRecommendationSet,
+						formBodies: swap.formBodies,
+					});
+				}
 				suggestedResp = {
 					generated_at: now.toISOString(),
 					user_id: user.profile.id,
