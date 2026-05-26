@@ -15,6 +15,9 @@ services:
       - STRYD_PASSWORD=${STRYD_PASSWORD:-}
       - STRYD_EMAIL_PAM=${STRYD_EMAIL_PAM:-}
       - STRYD_PASSWORD_PAM=${STRYD_PASSWORD_PAM:-}
+      - FORM_EMAIL=${FORM_EMAIL:-}
+      - FORM_PASSWORD=${FORM_PASSWORD:-}
+      - FORM_CACHE_PATH=${FORM_CACHE_PATH:-/app/data/form-oauth.json}
       - MCP_OAUTH_CLIENT_ID=${MCP_OAUTH_CLIENT_ID:-exercitator}
       - MCP_OAUTH_CLIENT_SECRET=${MCP_OAUTH_CLIENT_SECRET:?required}
       - MCP_OAUTH_AUTHORIZE_PASSPHRASE=${MCP_OAUTH_AUTHORIZE_PASSPHRASE:?required}
@@ -24,6 +27,7 @@ services:
       - EXERCITATOR_API_BIND_ADDR=${EXERCITATOR_API_BIND_ADDR:-0.0.0.0:8643}
       - PROMUS_API=${PROMUS_API:-}
       - PROMUS_URL=${PROMUS_URL:-}
+      - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
     deploy:
       resources:
         limits:
@@ -67,8 +71,12 @@ services:
       - STRYD_PASSWORD=${STRYD_PASSWORD:-}
       - STRYD_EMAIL_PAM=${STRYD_EMAIL_PAM:-}
       - STRYD_PASSWORD_PAM=${STRYD_PASSWORD_PAM:-}
+      - FORM_EMAIL=${FORM_EMAIL:-}
+      - FORM_PASSWORD=${FORM_PASSWORD:-}
+      - FORM_CACHE_PATH=${FORM_CACHE_PATH:-/app/data/form-oauth.json}
       - PROMUS_API=${PROMUS_API:-}
       - PROMUS_URL=${PROMUS_URL:-}
+      - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
       interval: 60s
