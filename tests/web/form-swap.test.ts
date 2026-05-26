@@ -294,6 +294,32 @@ describe("applyFormSwapIfEnabled — defensive caps", () => {
 		warn.mockRestore();
 	});
 
+	it("rejects rest.defined > 3600 with unsafe_rest_duration", async () => {
+		const bad = poisonedBody({
+			setGroups: [
+				{
+					...ENDURANCE.setGroups[1],
+					roundsCount: 1,
+					sets: [
+						{
+							...ENDURANCE.setGroups[1].sets[0],
+							rest: { defined: 999_999, takeoff: null },
+						},
+					],
+				},
+			],
+		});
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const out = await applyFormSwapIfEnabled(
+			makeSwimSuggestion(),
+			ZE_PROFILE,
+			clientServingOnly(bad),
+			SETTINGS,
+		);
+		expect(out.suggestion.fallbackReason).toBe("unsafe_rest_duration");
+		warn.mockRestore();
+	});
+
 	it("rejects expanded > MAX_TOTAL_EXPANDED_SEGMENTS with unsafe_total_segment_count", async () => {
 		// Each set has intervalsCount=20, group has roundsCount=20, group has 2 sets
 		// → 20 × (20 + 20) = 800 expanded > 500 cap.

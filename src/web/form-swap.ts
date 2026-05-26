@@ -178,6 +178,21 @@ export async function applyFormRecommendation(
 					formBodies: bodies,
 				};
 			}
+			// rest.defined is summed into total_duration_secs and persisted to
+			// SQLite via the compliance table — an unbounded value from a
+			// compromised upstream could corrupt the duration column or
+			// overflow downstream consumers. Real values are 15–35 s; cap
+			// at 1 h (3600 s) — generous headroom for slow-lane endurance
+			// sessions while bounding the blast radius.
+			const restDefined = s.rest?.defined;
+			if (restDefined != null && (restDefined < 0 || restDefined > 3600)) {
+				console.warn(`FORM swap rejected: rest.defined=${restDefined} out of bounds [0, 3600]`);
+				return {
+					suggestion: { ...suggestion, ...fallbackReason("unsafe_rest_duration") },
+					formRecommendationSet: set,
+					formBodies: bodies,
+				};
+			}
 			expanded += rounds * ic;
 		}
 	}
