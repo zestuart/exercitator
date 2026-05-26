@@ -212,7 +212,7 @@ export async function handleWorkoutsSuggested(
 		// API surface returns the Stryd-sourced workout when ze's profile
 		// has runRecommendationSource: "stryd". Fire-and-forget DSW emit on
 		// the back of it (Promus dedups by user+date+sport+source).
-		const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd, strydCp);
+		const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
 		suggestion = swap.suggestion;
 		void emitDsw({
 			userId: user.profile.id,

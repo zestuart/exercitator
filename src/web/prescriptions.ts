@@ -127,7 +127,7 @@ export async function generatePrescriptions(
 	// re-decides intensity; it only supplies the workout body for the chosen
 	// category.
 	if (run) {
-		const swap = await applyStrydSwapIfEnabled(run, profile, strydClient, strydCp?.cp);
+		const swap = await applyStrydSwapIfEnabled(run, profile, strydClient);
 		run = swap.suggestion;
 
 		// Fire-and-forget DSW emission to Promus. Never blocks the

@@ -60,7 +60,6 @@ function baseSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSugg
 	};
 }
 
-const FTP = 286;
 
 describe("applyStrydRecommendation", () => {
 	it("category 'rest' returns the engine suggestion tagged 'exercitator' (no Stryd call)", async () => {
@@ -70,7 +69,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "rest" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("exercitator");
@@ -84,7 +82,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ sport: "Swim" }),
 			client,
-			FTP,
 		);
 		expect(out.prescriptionSource).toBe("exercitator");
 		expect(out.sport).toBe("Swim");
@@ -99,7 +96,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "base" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("stryd");
@@ -132,7 +128,6 @@ describe("applyStrydRecommendation", () => {
 				terrain_rationale: "engine picked rolling",
 			}),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("stryd");
@@ -164,7 +159,6 @@ describe("applyStrydRecommendation", () => {
 				],
 			}),
 			client,
-			FTP,
 		);
 
 		expect(out.warnings).toEqual([
@@ -182,7 +176,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "recovery" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("exercitator-fallback");
@@ -199,7 +192,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "long" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("exercitator-fallback");
@@ -214,7 +206,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "intervals" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("exercitator-fallback");
@@ -228,7 +219,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "threshold" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("exercitator-fallback");
@@ -244,7 +234,6 @@ describe("applyStrydRecommendation", () => {
 		const { suggestion: out } = await applyStrydRecommendation(
 			baseSuggestion({ category: "intervals" }),
 			client,
-			FTP,
 		);
 
 		expect(out.prescriptionSource).toBe("stryd");

@@ -42,12 +42,21 @@ export interface StrydSwapResult {
 /**
  * Apply the Stryd swap to a run suggestion. Pure mutation-free: returns a new
  * suggestion. The engine's `WorkoutSuggestion` is never modified in place.
+ *
+ * Reads `suggestion.power_context.ftp` for band computation. The engine
+ * rounds Stryd's raw float CP to an integer in `src/engine/suggest.ts:171`
+ * (`Math.round(strydCp.cp)`), so using `power_context.ftp` keeps the swap
+ * deterministic in integer math — the same FTP that flows into every
+ * other downstream surface (API responses, intervals.icu push,
+ * Stryd push). Avoids the previous float-vs-int drift where the swap
+ * computed bands from 285.86 (raw) while the rest of the system reported
+ * 286 (rounded), making round-trip replay non-deterministic.
  */
 export async function applyStrydRecommendation(
 	suggestion: WorkoutSuggestion,
 	strydClient: StrydClient,
-	ftp: number,
 ): Promise<StrydSwapResult> {
+	const ftp = suggestion.power_context.ftp;
 	if (suggestion.sport !== "Run") {
 		// Defensive — swims never reach this path under the current flag, but
 		// guard anyway so a future profile-flag generalisation doesn't silently
@@ -315,18 +324,17 @@ export async function applyStrydSwapIfEnabled(
 	suggestion: WorkoutSuggestion,
 	profile: UserProfile,
 	strydClient: StrydClient | null | undefined,
-	ftp: number | null | undefined,
 ): Promise<StrydSwapResult> {
 	if (
 		suggestion.sport !== "Run" ||
 		suggestion.status === "awaiting_input" ||
 		profile.runRecommendationSource !== "stryd" ||
 		!strydClient ||
-		!ftp
+		!(suggestion.power_context.ftp > 0)
 	) {
 		return { suggestion, strydRecommendationSet: null };
 	}
-	return applyStrydRecommendation(suggestion, strydClient, ftp);
+	return applyStrydRecommendation(suggestion, strydClient);
 }
 
 function fallback(err: unknown): {

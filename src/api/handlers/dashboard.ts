@@ -149,7 +149,7 @@ export async function handleDashboard(
 				};
 			} else {
 				// Same Stryd-swap gating as Praescriptor / /workouts/suggested.
-				const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd, strydCp);
+				const swap = await applyStrydSwapIfEnabled(suggestion, user.profile, user.stryd);
 				suggestion = swap.suggestion;
 				void emitDsw({
 					userId: user.profile.id,
