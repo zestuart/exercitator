@@ -434,3 +434,16 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 - Per-deploy SAST budget: **fix Critical + High; accept Medium / Low with explicit rationale once the structural defence is in place.** Document accepted findings in the commit message or SECURITY.md.
 - Don't iterate more than 2-3 rounds on the same code path — Gemini's diff bundle excludes upstream context and will repeatedly flag theoretical issues that the surrounding code already addresses.
 - If a finding cites a function in the bundle but the defence lives in an upstream module *not* in the bundle, write the rationale in plain English and accept. Codified at `phase2/external-coach-integration-playbook.md` § SAST iteration management.
+
+## 2026-05-26 — FORM deploy: docker-compose.yml didn't forward FORM_* env vars
+
+**What happened**: Shipped the full FORM swim integration (38 files, +4664/−88 LOC, 552 tests green) and the deploy was clean — three health endpoints OK, SAST `NO_FINDINGS`, new baseline tagged. User added `FORM_EMAIL`/`FORM_PASSWORD` to Cogitator's `.env` and restarted containers. Dashboard still showed the engine-built "Threshold Swim" with no Source chip. The live JSON had `prescriptionSource: null` on the swim — the FORM swap gate was failing silently.
+
+**Root cause**: `docker-compose.yml` only forwarded the `STRYD_*` and `PROMUS_*` env vars to the containers. `FORM_EMAIL`, `FORM_PASSWORD`, `FORM_CACHE_PATH`, and `PROMUS_FORM_DSW_ENABLED` were never declared in the `environment:` blocks, so the values existed on the host `.env` but never reached the Node process. The FormClient builder in `web/server.ts` therefore saw `process.env.FORM_EMAIL === undefined` and logged `"Ze: FORM credentials not set — swim swap disabled"` — which I would have spotted earlier if I'd tailed startup logs before declaring victory.
+
+**Fix**: added FORM_EMAIL, FORM_PASSWORD, FORM_CACHE_PATH, PROMUS_FORM_DSW_ENABLED to both the `exercitator` and `praescriptor` services in `docker-compose.yml`. Default FORM_CACHE_PATH points at `/app/data/form-oauth.json` so OAuth tokens survive container restarts via the existing `exercitator-data` volume (no new volume needed). Rebuilt, swim card now shows `Source: FORM · Better As You Go`.
+
+**Prevention**:
+- Every new env var needs a paired docker-compose forwarder. **Pre-deploy checklist for any new credential env**: (1) `.env.example` updated, (2) `docker-compose.yml environment:` block updated for every consuming service, (3) post-deploy log tail confirming the startup log line you wrote in the code actually appears.
+- The "client ready" / "credentials not set" startup log line was the lifesaver here. Every external-vendor client startup should emit one log line, success-or-skip — silent-skip is the worst failure mode.
+- Generalise: when a new piece of code reads `process.env.X`, search `docker-compose.yml` for `X` before commit. Codify in the external-coach-integration-playbook.
