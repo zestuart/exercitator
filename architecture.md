@@ -37,6 +37,8 @@ src/
     workout-selector.ts — category selection (rest/recovery/base/progression/tempo/threshold/intervals/long) + cross-training guard + same-day cap
     terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
     workout-builder.ts  — structured segment generation per sport × category
+    stryd-mapper.ts     — pure: category → Stryd type bucket, intensity_zones picker, vendor blocks → WorkoutSegment[] (flattened with repeat-folding). Used by the Stryd swap path.
+    segment-groups.ts   — pure: detect repeated (work,rest)×N pairs in a flattened segment list. Shared by render.ts and api/payload.ts for the pair-collapse UX. Conservative (byte-equal A,B,A,B matching).
     suggest.ts          — top-level orchestrator: fetchTrainingData, suggestWorkoutFromData, suggestWorkoutForSport, suggestWorkout
     vigil/
       types.ts          — Vigil interfaces, metric weights, Stryd FIT field constants
@@ -51,8 +53,11 @@ src/
     routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
     prescriptions.ts    — per-user prescription generator with day-level cache
     send.ts             — push workout to intervals.icu calendar with per-user dedup
-    send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup)
-    stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets)
+    send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup). On Stryd-sourced runs, also fires markStrydRecommendationSelected as a preference signal.
+    stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets). For Stryd-sourced runs, round-trips suggestion.strydOriginalWorkout verbatim instead of reconstructing from flattened segments (preserves block-repeat structure + exact intensity_percent bands).
+    stryd-swap.ts       — apply Stryd's served workout to a run suggestion. applyStrydRecommendation (per-run) + applyStrydSwapIfEnabled (gate + apply, centralised so all Run-producing surfaces share the gate). Replaces rationale with Stryd desc, neutralises terrain, filters engine-narrative warnings.
+    mark-stryd-selected.ts — fire-and-forget PATCH /recommendations/{id} with {selected_id} after send-to-{stryd,intervals}. Stryd preference signal; state-only on their side (does NOT auto-schedule).
+    promus-dsw.ts       — fire-and-forget POST /api/ingest/dsw to Promus after every Stryd-attempted run prescription. Carries the full Stryd recommendation set + Exercitator context for the longitudinal fitness:readiness:workout corpus.
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
     form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks

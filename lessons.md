@@ -392,3 +392,45 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 - New vitest case `tests/web/intervals-format.test.ts` pins the canonical tempo workout output line-for-line (`Warm-up`, `- 6m40s 163-200W`, `2x`, `- 6m 200-225W`, `- 3m 163-200W`, …) plus an explicit ASCII-only assertion: `expect(text.charCodeAt(i)).toBeLessThanOrEqual(0x7f)` over every byte of the description. Any future stray en/em-dash, smart quote, or NBSP introduced by code changes fails the assertion immediately.
 - Memory note added in `reference_intervals_icu.md` documenting the intervals.icu UI auto-correct so the next debugging session doesn't repeat the "is our formatter outputting unicode?" goose chase. The diagnostic move is to fetch the stored description over the API and check the bytes — never trust a paste-back, which may itself be normalised by the terminal or shell.
 - General lesson: when a user reports a rendering bug in someone else's UI, dump the bytes our system actually sent before assuming our system is at fault. Hex evidence settles it in one tool call.
+
+## 2026-05-25 — Stryd recommendation integration: float-vs-int FTP drift broke replay determinism
+
+**What happened**: A full session built the Stryd-recommendations integration (Phases 0 → 6 plus push-back, PATCH-on-send, and Promus DSW logging). After shipping, the user spotted a 1 W discrepancy between the live API output (`286–314W` for a 100–110 % CP band) and a replay reconstruction from the stored Promus DSW row (`286–315W` for the same workout). Same workout id, same `intensity_percent`, same nominal FTP — different bands.
+
+**Root cause**: precision drift across layers.
+- Stryd returns raw CP as a float: `285.86459663675254`.
+- The engine rounds CP to integer at `src/engine/suggest.ts:171` (`powerContext.ftp = Math.round(strydCp.cp)` → `286`). Every API response, every downstream consumer, sees FTP = 286.
+- But `applyStrydRecommendation` was called with the *raw float* `strydCp.cp`, so band computation ran as `Math.round(110 % × 285.86) = 314`. The engine reported FTP = 286 to consumers while emitting segments computed from 285.86. Internal inconsistency.
+- Replay reads the stored `cp_or_ftp = 286` (the integer the engine had advertised) and computes `Math.round(110 % × 286) = 315`. Diverges from the live emission.
+
+**Fix**: `applyStrydRecommendation` now reads `suggestion.power_context.ftp` (the integer) internally. The `ftp` parameter is dropped from both that function and its `applyStrydSwapIfEnabled` wrapper. Three callers updated; integer FTP threads through every consumer. Replay verified byte-equal to live emission post-fix.
+
+**Prevention**:
+- General principle: when a value has multiple representations across layers (raw upstream value, rounded engine value, persisted JSON value), **pick the rounded representation as the canonical one and thread it through every consumer**. Don't compute downstream values from one representation while reporting another. The float CP is fine for engine-internal use (load calculations etc.) but the segment band computation needs to use the same FTP that's reported on the wire.
+- Verification recipe: read a stored DSW row directly from Promus (or any persistence layer), reconstruct via the same code paths a live request would take, content-hash both, expect equality modulo metadata timestamps. This catches precision drift in a single command. Saved at `phase2/external-coach-integration-playbook.md` § Phase 7.
+
+## 2026-05-25 — Stryd integration: TZ bug in `scheduleWorkout` landed pushes on the wrong day
+
+**What happened**: After the round-trip push verification succeeded (API returned `success: true, calendar_id: …`), the user couldn't see the pushed workout on Stryd's calendar for today. Direct query of Stryd's calendar via the existing client showed the entry didn't exist where expected.
+
+**Root cause**: `src/stryd/client.ts:scheduleWorkout` called `d.setHours(0, 0, 0, 0)` on the date before computing the Unix timestamp. `setHours` operates in the JS runtime's *local* TZ — UTC inside the production container. A 14:00 PDT (= 21:00 UTC) push computed midnight UTC = 2026-05-25T00:00:00Z = **2026-05-24T17:00:00-07:00** in ze's TZ. Stryd interpreted the timestamp in user TZ and scheduled it on the 24th, not the 25th.
+
+**Fix**: drop the `setHours` floor. Use the actual current moment (or whatever the caller passes). Stryd renders the timestamp in the user's profile TZ; for a push happening during the user's local daytime, "now" always renders as "today". Re-tested: `21:00 UTC` push landed correctly on 2026-05-25 PDT.
+
+**Prevention**:
+- Never use `setHours(0,0,0,0)` on Date objects intended to be interpreted in a foreign TZ. The function operates in the runtime's local TZ, which in container deployments is UTC. Affects anyone deploying to a UTC container who serves users west of UTC.
+- General test recipe for any "schedule on external calendar" path: trigger the push from the production container, then *visually* verify the external system shows the right local day. API success codes are necessary but not sufficient.
+- Long-standing latent bug — would have hit any user west of UTC for any push happening after their local 17:00. Likely benign for users east of UTC where local midnight in UTC is even further "earlier" in their day. Documented at `phase2/external-coach-integration-playbook.md` § Phase 5.
+
+## 2026-05-25 — SAST iteration spiral: when to stop
+
+**What happened**: Each defensive cap added to `src/web/stryd-swap.ts` (block.repeat bounds, segments-per-block, total expanded segments, segment duration components, malformed duration_time object, etc.) triggered Gemini's diff-mode SAST to find the *next* unbounded surface. Seven iterations before stabilising at `NO_FINDINGS`. Most findings were theoretical — the actual exploit was already bounded by the upstream 1 MB JSON cap in `parseBoundedJson`.
+
+**Root cause**: Gemini's diff-mode bundle includes only changed files, not upstream defences. It repeatedly flags "unbounded loop X" without seeing that the JSON cap means X is structurally bounded to <100 000 iterations.
+
+**Fix**: stop iterating once the practical exploit is bounded by an existing structural defence. The 1 MB JSON cap caps every unbounded-loop variant; further defensive caps are belt-and-braces, not load-bearing.
+
+**Prevention**:
+- Per-deploy SAST budget: **fix Critical + High; accept Medium / Low with explicit rationale once the structural defence is in place.** Document accepted findings in the commit message or SECURITY.md.
+- Don't iterate more than 2-3 rounds on the same code path — Gemini's diff bundle excludes upstream context and will repeatedly flag theoretical issues that the surrounding code already addresses.
+- If a finding cites a function in the bundle but the defence lives in an upstream module *not* in the bundle, write the rationale in plain English and accept. Codified at `phase2/external-coach-integration-playbook.md` § SAST iteration management.

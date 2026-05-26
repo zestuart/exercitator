@@ -1,0 +1,802 @@
+{
+  "/Users/ze/Documents/claude/exercitator/vitest.config.ts": {
+    "mtime": 1774297745.0,
+    "ast_hash": "8ae53b2bb25eab46f0bfbdb446fa40c5",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/auth.test.ts": {
+    "mtime": 1774297896.0,
+    "ast_hash": "bc869fd5fcbea735ff79ea162c3c7e9e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/intervals.test.ts": {
+    "mtime": 1774685105.0,
+    "ast_hash": "62d056a1b9567692da5c26b63b8f3e59",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/vigil-render.test.ts": {
+    "mtime": 1777139365.1827059,
+    "ast_hash": "efac6e7c725a63b8c9043118ba309db3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/send.test.ts": {
+    "mtime": 1775097706.1815495,
+    "ast_hash": "b3b8a6ee8f3a521a38c7066c4992a2fe",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/invocations.test.ts": {
+    "mtime": 1774563688.0,
+    "ast_hash": "435f2430e434b3eb6dcff5a317fbf8b1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/intervals-format.test.ts": {
+    "mtime": 1778289512.5223665,
+    "ast_hash": "e72e8a8c2dcf095cb36e1621899643bb",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/form-format.test.ts": {
+    "mtime": 1775311732.0929887,
+    "ast_hash": "e061f75d024d0a7322a10cdafe39690e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/prescriptions.test.ts": {
+    "mtime": 1777139365.1822774,
+    "ast_hash": "07e79a548b4befa0ee28d79aae647bc9",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/compliance/persist.test.ts": {
+    "mtime": 1775263341.0080066,
+    "ast_hash": "e0b3023a2ec4365fa62f2c5fbce98a09",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/compliance/assess.test.ts": {
+    "mtime": 1775263341.0085733,
+    "ast_hash": "760580cab9fa0e2380faecbaf8c06ab3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/auth.test.ts": {
+    "mtime": 1777759946.8697517,
+    "ast_hash": "c2c44b3776895685499a6dfd1aea9f36",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/router.test.ts": {
+    "mtime": 1777759946.870799,
+    "ast_hash": "60af101da82bcd74ab7dfc1cd8779508",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/payload.test.ts": {
+    "mtime": 1778391389.6724284,
+    "ast_hash": "4f1a1309c8b3818a8fad1676695fe07c",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/handlers/cross-training.test.ts": {
+    "mtime": 1778636883.7581868,
+    "ast_hash": "55c569bb045a573e14111928745a6978",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/handlers/status.test.ts": {
+    "mtime": 1777139365.1812515,
+    "ast_hash": "f24d8ade32ced9b076aaf357c2e7f25e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/workout-selector.test.ts": {
+    "mtime": 1777759946.8741417,
+    "ast_hash": "0d36c9d9d85fcf821ed0634bec392a2b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/workout-builder.test.ts": {
+    "mtime": 1778634476.1418848,
+    "ast_hash": "ec824d2020d1ff9ca37df109cf3b3881",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/cross-training-strain.test.ts": {
+    "mtime": 1774881480.0,
+    "ast_hash": "49ca46fef60c86e537ba3121adb1f817",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/date-utils.test.ts": {
+    "mtime": 1777759946.8714786,
+    "ast_hash": "20066dec8f535d01a866d100e84880ae",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/terrain-selector.test.ts": {
+    "mtime": 1774682263.0,
+    "ast_hash": "09c862b54560427e406f6eca2e61e93c",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/readiness.test.ts": {
+    "mtime": 1778634444.260172,
+    "ast_hash": "fc082da8d7cf1f69a533d2242e985ce1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/suggest.test.ts": {
+    "mtime": 1778389392.2348692,
+    "ast_hash": "b2c61c575c47fdc3c2d0c00c56fbdcbf",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/power-source.test.ts": {
+    "mtime": 1778732316.2020943,
+    "ast_hash": "dad995088098493b0ffba5091fd47378",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/staleness.test.ts": {
+    "mtime": 1777759946.872175,
+    "ast_hash": "98a1dbd25dd75baf30c8ae0c733e896d",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/sport-selector.test.ts": {
+    "mtime": 1774880745.0,
+    "ast_hash": "e542e2a7fc299965f4bde54ae3e034cc",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/fit-parser.test.ts": {
+    "mtime": 1774705833.0,
+    "ast_hash": "5c688b45828fcb787e198cc56e8cc8ca",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/metrics.test.ts": {
+    "mtime": 1774769505.0,
+    "ast_hash": "2b3a9a7682c1543f687ebf447484ee22",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/db.test.ts": {
+    "mtime": 1774769463.0,
+    "ast_hash": "7ff26639b9a6a7e604458886a0752e4c",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/baseline.test.ts": {
+    "mtime": 1774769480.0,
+    "ast_hash": "cdc46dcb13cd2f1f3fa1cad11f9e77f5",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/integration.test.ts": {
+    "mtime": 1777759946.8733747,
+    "ast_hash": "a78d415eabf1602a5d0a42576667c6b7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/scorer.test.ts": {
+    "mtime": 1774769523.0,
+    "ast_hash": "d02eebf22c99a39182d6b20e579a2485",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/stryd/enricher.test.ts": {
+    "mtime": 1774690609.0,
+    "ast_hash": "6069448b1eb4700c40b5ece6886391b1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/stryd/client.test.ts": {
+    "mtime": 1777759946.874716,
+    "ast_hash": "4ac1e846d2291bb7226688ebfd696272",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/scripts/sast_scan.py": {
+    "mtime": 1773998889.0,
+    "ast_hash": "f4d87a2c7d5e50c7cd8fa0321a98b280",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/scripts/test-stryd.ts": {
+    "mtime": 1777759946.8567858,
+    "ast_hash": "c76e89b63a205787056fa372686fbd09",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/intervals.ts": {
+    "mtime": 1774684914.0,
+    "ast_hash": "008d6d97df5915af1f685e8a073599b2",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/users.ts": {
+    "mtime": 1777139365.1769595,
+    "ast_hash": "d5e0d4f1cb955db89e5ec8815a83cfa4",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/index.ts": {
+    "mtime": 1777759946.8658006,
+    "ast_hash": "1d360f82f9a3f8ca51e1757790f67db0",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/db.ts": {
+    "mtime": 1775262678.5075185,
+    "ast_hash": "f2b7b068f73b44642ac1faf68e2c6951",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/auth.ts": {
+    "mtime": 1774855429.0,
+    "ast_hash": "c91a4f58b8a62b3143fff9912cc815f3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/athlete.ts": {
+    "mtime": 1774297775.0,
+    "ast_hash": "24cb3b1aa784883db951d014ffda7b74",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/wellness.ts": {
+    "mtime": 1774299477.0,
+    "ast_hash": "e391aa7242822bd4ef7816755a5a1ea2",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/events.ts": {
+    "mtime": 1774303878.0,
+    "ast_hash": "94a233ed7549b74808af64bf22592bbb",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/compliance.ts": {
+    "mtime": 1775263341.006581,
+    "ast_hash": "15c274b36d63e9bdaa81e883838f1dbb",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/suggest.ts": {
+    "mtime": 1778636865.3763628,
+    "ast_hash": "560fe01f0ad66032a9f64bc4f3c9385e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/tools/activities.ts": {
+    "mtime": 1775095687.1525338,
+    "ast_hash": "71abb5a8ac39fc7635cc3a6f7303d0f9",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/routes.ts": {
+    "mtime": 1777759946.8683424,
+    "ast_hash": "ca36a263f7a3ae41dcde169d530733c1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/stryd-format.ts": {
+    "mtime": 1777759946.869493,
+    "ast_hash": "1bca58b3b0852cd93187c228893b4277",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/send-stryd.ts": {
+    "mtime": 1777866171.6158257,
+    "ast_hash": "24997815a6bec93edc2d010847286ddf",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/send.ts": {
+    "mtime": 1777139365.1795835,
+    "ast_hash": "b8d68468286fc66a71f3208de5d3eb18",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/intervals-format.ts": {
+    "mtime": 1778289468.8007038,
+    "ast_hash": "67bb4873013c2ec2dec9f08048107716",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/render.ts": {
+    "mtime": 1777759946.8678768,
+    "ast_hash": "0c886be7c573340ee19a1ab519581ab7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/form-format.ts": {
+    "mtime": 1775311671.1464548,
+    "ast_hash": "3d7f81e43bb16f8da28c269f74b09923",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/prescriptions.ts": {
+    "mtime": 1778389322.3761961,
+    "ast_hash": "609a6d42be7e59386d9b2edc9d41b02b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/server.ts": {
+    "mtime": 1777759946.8689144,
+    "ast_hash": "6d4e807e19b32265383aea3ca0dc8760",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/invocations.ts": {
+    "mtime": 1775102673.988928,
+    "ast_hash": "45b5f06eca6050a1a07326048f78c8db",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/compliance/assess.ts": {
+    "mtime": 1775263163.7928972,
+    "ast_hash": "71c28da345592d4ee1bab76179dc3b99",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/compliance/types.ts": {
+    "mtime": 1775262663.4829433,
+    "ast_hash": "c1b2f352e9e491f43f6fa2f89587bcbd",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/compliance/persist.ts": {
+    "mtime": 1775263163.7941837,
+    "ast_hash": "08b97cbb2db5883070c5f2420e7597ac",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/compliance/aggregate.ts": {
+    "mtime": 1775263323.7487948,
+    "ast_hash": "9f84d3395fa88dcba5126f392a3012b8",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/router.ts": {
+    "mtime": 1777832995.5442317,
+    "ast_hash": "e26bfd3b14d6b6a9796bc0dc9243aad1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/errors.ts": {
+    "mtime": 1777139365.1722658,
+    "ast_hash": "fffb6a83e0a72dca832379e5365b61f8",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/payload.ts": {
+    "mtime": 1778391379.2438347,
+    "ast_hash": "72af8b6dd484b1b3bd0539c2fb760833",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/types.ts": {
+    "mtime": 1777139365.1756046,
+    "ast_hash": "0b41f84b8a48839deeff79596ced7c45",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/cache.ts": {
+    "mtime": 1777759946.857849,
+    "ast_hash": "dc365c35986e0f42dff68f421e5cae24",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/server.ts": {
+    "mtime": 1777759946.8604667,
+    "ast_hash": "bef1cbdfbec3e1f99ba23107f539993f",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/auth.ts": {
+    "mtime": 1777759946.857475,
+    "ast_hash": "dd656595f51917ae5b614280d80cd6af",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/status.ts": {
+    "mtime": 1777759946.8586392,
+    "ast_hash": "f593966da4a61561872b5eb20074e177",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/workouts.ts": {
+    "mtime": 1778389329.9906626,
+    "ast_hash": "ec0431fb1f0f205cecd73792595a5abd",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/dashboard.ts": {
+    "mtime": 1777834673.3235674,
+    "ast_hash": "2892698fb3821f38563d2b7850316096",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/health.ts": {
+    "mtime": 1777139365.1739056,
+    "ast_hash": "9caea5630cd421235873737b73b74b52",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/compliance.ts": {
+    "mtime": 1777139365.1727662,
+    "ast_hash": "b784de44388cac7736619b87b5d0d638",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/cross-training.ts": {
+    "mtime": 1778636875.58018,
+    "ast_hash": "29a6eecedbbc4157cb390685184a592a",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/cross-training-strain.ts": {
+    "mtime": 1775095415.6336107,
+    "ast_hash": "e59ea34e7ac30127931b1e0f4cbc88f4",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/staleness.ts": {
+    "mtime": 1777759946.862148,
+    "ast_hash": "da73ddcb50d2519f74e18414bb9f1481",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/date-utils.ts": {
+    "mtime": 1777759946.8613577,
+    "ast_hash": "5a1f63c4253e5c9c346fe0757b103980",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/readiness.ts": {
+    "mtime": 1778635533.0717049,
+    "ast_hash": "eaddeaa4560e443b0a0cf33bb0d553f6",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/sport-selector.ts": {
+    "mtime": 1774377194.0,
+    "ast_hash": "0fc24a712c727b2657e9638f5109c842",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/workout-selector.ts": {
+    "mtime": 1777759946.8655908,
+    "ast_hash": "1a9c44ba89fc37392ff4f78d21f26fe8",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/terrain-selector.ts": {
+    "mtime": 1777759946.8633814,
+    "ast_hash": "3bc89666b651ad78777e5380afc1f0b6",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/power-source.ts": {
+    "mtime": 1778732474.4391172,
+    "ast_hash": "c59cb230241bd40dca60f9c865a1b797",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/types.ts": {
+    "mtime": 1777759946.8639162,
+    "ast_hash": "716dc4d2c061f888639b90b3e28172e9",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/workout-builder.ts": {
+    "mtime": 1778634529.1135418,
+    "ast_hash": "34516113fec1ee8d10c6db3b4c33e1a0",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/suggest.ts": {
+    "mtime": 1778634205.206482,
+    "ast_hash": "e1e58f706284eb0d98ab159a21a6a0fc",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/scorer.ts": {
+    "mtime": 1774705265.0,
+    "ast_hash": "6076bc8f8d7896821acbfbcc38ec8f27",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/backfill.ts": {
+    "mtime": 1777759946.8644967,
+    "ast_hash": "a04419107dc0b666462d9308c6aef420",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/types.ts": {
+    "mtime": 1774769211.0,
+    "ast_hash": "1cd152876b5141c180824c0dc02e8e85",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/fit-parser.ts": {
+    "mtime": 1774769335.0,
+    "ast_hash": "361dff989f1ed97efc05f03b60800166",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/index.ts": {
+    "mtime": 1777759946.8649077,
+    "ast_hash": "1952657e8337cce36844c9245b5ec336",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/baseline.ts": {
+    "mtime": 1775095462.164912,
+    "ast_hash": "f56a1b3f2f2732676cc74027af801c1f",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/engine/vigil/metrics.ts": {
+    "mtime": 1774704894.0,
+    "ast_hash": "bd63eb3f50cecb4de7677f4d701c0991",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/stryd/enricher.ts": {
+    "mtime": 1774769555.0,
+    "ast_hash": "c87f368498b65773470041fe8629a858",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/stryd/client.ts": {
+    "mtime": 1777759946.8665738,
+    "ast_hash": "af2577c8cbc86638a651a40afb2fe3b3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/exercitator-api-spec.md": {
+    "mtime": 1777867882.2784488,
+    "ast_hash": "85e8c20eddf4f581952c4c5f6870c749",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/praescriptor-web-spec.md": {
+    "mtime": 1774563263.0,
+    "ast_hash": "b53ea253c6cbd05215419006eb778873",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/CHANGELOG.md": {
+    "mtime": 1778732599.738558,
+    "ast_hash": "e3ae9b90622c5826cf7d9aa3a5c9ecd1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/CLAUDE-INDEX.md": {
+    "mtime": 1778624359.347274,
+    "ast_hash": "e88459059e9b55dfba4c1c4bc0ced966",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/README.md": {
+    "mtime": 1777139365.1688435,
+    "ast_hash": "5d6b6f6a8d3c60a1c39424d4820980e1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/lessons.md": {
+    "mtime": 1778391439.7200513,
+    "ast_hash": "1e399dfe22976c0eeb5c5a4c2878fa6a",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/stryd-api.md": {
+    "mtime": 1774777768.0,
+    "ast_hash": "c78f93efdb7e2aba014d6c9191b56cc3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/docker-compose.yml": {
+    "mtime": 1777139365.1698148,
+    "ast_hash": "6129f25e0822a9fb7fcf140ad4141f3c",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/CLAUDE.md": {
+    "mtime": 1778732566.6851413,
+    "ast_hash": "74c2705fe97cf7de0b3bccf7bf96c702",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/SECURITY.md": {
+    "mtime": 1778732580.1600096,
+    "ast_hash": "905beb2654d8246d967032ee7f896aaa",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/exercitator-http-api-plan.md": {
+    "mtime": 1777139365.1703308,
+    "ast_hash": "0c219a73dcb9dd7cd84d8eabefca32f7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/dsw-spec.md": {
+    "mtime": 1777758442.2962694,
+    "ast_hash": "57d45f84c7176a6b8af367e37931f3a0",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/exercitator-structured-steps-feature.md": {
+    "mtime": 1774305476.0,
+    "ast_hash": "4e805afd16a6704fca1d99ed690ed24b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/dsw-spec-v2.md": {
+    "mtime": 1777758457.54446,
+    "ast_hash": "bc9f7d45ec5d2b35fe2d9efc6a8081a7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/2026-03-28_vigil-injury-research.md": {
+    "mtime": 1774703580.0,
+    "ast_hash": "f64aca59695a37044e2c86a8f623190e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/exercitator-http-api-spec.md": {
+    "mtime": 1777139365.1709566,
+    "ast_hash": "d37ca68b8a7d2427c155a4063c91278c",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/injury-warning-spec.md": {
+    "mtime": 1774706211.0,
+    "ast_hash": "af301206b95ca0c501fa42f1bacbb0b1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/package.json": {
+    "mtime": 1774703921.0,
+    "ast_hash": "ea98e710785cf843eb5150b3af6619c1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tsconfig.json": {
+    "mtime": 1774298010.0,
+    "ast_hash": "8b4e72b6137fc0102b36d5dd3e773f7a",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/biome.json": {
+    "mtime": 1774298010.0,
+    "ast_hash": "47011e0410b140abbd81410f21f41d2e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tailscale-config-exercitator-api/serve.json": {
+    "mtime": 1777139365.180398,
+    "ast_hash": "63e813ad0f60a71d6d7c7321a058d6d4",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research_analyse.py": {
+    "mtime": 1778641847.5413523,
+    "ast_hash": "dd578cb176fade8da3f272e723d4c0c4",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-iv-activities.json": {
+    "mtime": 1778641847.5401533,
+    "ast_hash": "dc4744ddbd7a62a5b9c24b99f59506d4",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-promus-sessions.json": {
+    "mtime": 1778641847.5397055,
+    "ast_hash": "dfc5c886bf9615e7240e2e275bf371a1",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-iv-wellness.json": {
+    "mtime": 1778641847.5405102,
+    "ast_hash": "ae28f3cb91ec93654402c4b74d4b2fd9",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/rate-limit.test.ts": {
+    "mtime": 1777759946.8743417,
+    "ast_hash": "6ed7c252d035c0038d1d654d0fc4dba2",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/security-headers.test.ts": {
+    "mtime": 1777759946.8749292,
+    "ast_hash": "9a0d27caee6bb1c3d2f3ee0db4d5cbb7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/web/send-stryd.test.ts": {
+    "mtime": 1777866181.626638,
+    "ast_hash": "d3defc8aeb703fae64340f4d67d6bc49",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/cache.test.ts": {
+    "mtime": 1777759946.8698704,
+    "ast_hash": "c51fd08e6a7462929e768de60c0f93fd",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/handlers/push-to-stryd.test.ts": {
+    "mtime": 1777834650.2658584,
+    "ast_hash": "d8c36efee3672a9e9f30ee3eb05812a7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/api/handlers/form-text.test.ts": {
+    "mtime": 1777834662.3508425,
+    "ast_hash": "965194fcb23bb43dbe1b9409634f2739",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/wellness-7d.json": {
+    "mtime": 1774300868.0,
+    "ast_hash": "a6ea77ba1e603105241e24b52eb01064",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/activities-14d.json": {
+    "mtime": 1774880787.0,
+    "ast_hash": "501fc7fa8666dca45d0d028a46ee1d88",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/sport-settings-swim.json": {
+    "mtime": 1774300868.0,
+    "ast_hash": "0085b8bf394958a75e56665275eb4716",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/sport-settings-run.json": {
+    "mtime": 1774300868.0,
+    "ast_hash": "edfa74c0002f7ac5962517d0dea3518b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/activity-dual-power.json": {
+    "mtime": 1774880818.0,
+    "ast_hash": "18e7a17491ace721e9aef0da80247557",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/fixtures/activity-apple-watch-stryd.json": {
+    "mtime": 1774880810.0,
+    "ast_hash": "b22d1b565d401891dd47aef7172fd6b8",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tests/engine/vigil/backfill.test.ts": {
+    "mtime": 1777759946.8728635,
+    "ast_hash": "0743eec96cee501ddd1b331dd838ca0e",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/settings.json": {
+    "mtime": 1777751784.767596,
+    "ast_hash": "9276b535256dc065bd7b8b84e15abd95",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tailscale-config/serve.json": {
+    "mtime": 1774298010.0,
+    "ast_hash": "080f3bc7d9e38b2a739894204f987b14",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/scripts/css_main_set.py": {
+    "mtime": 1777754562.0532444,
+    "ast_hash": "fbda6882b77814a23419288d17059dc6",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/scripts/css_pipeline.py": {
+    "mtime": 1777754412.051059,
+    "ast_hash": "2e1b8f258741fd0f7372ebb587d3d419",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/scripts/css_lengths.py": {
+    "mtime": 1777755053.974319,
+    "ast_hash": "2626ce1f8c4fbf75785fbf6e82af4329",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/tailscale-config-praescriptor/serve.json": {
+    "mtime": 1774564720.0,
+    "ast_hash": "caeea28ccd6057e866462a53f00efb8b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/rate-limit.ts": {
+    "mtime": 1777759946.8660047,
+    "ast_hash": "5bce9ce7531eb94f5a4eda53262b181d",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/web/security-headers.ts": {
+    "mtime": 1777759946.8685877,
+    "ast_hash": "3a085aab800a33201ba6f7acc0366ff3",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/validate.ts": {
+    "mtime": 1777759946.8607543,
+    "ast_hash": "4cb58f07f3b0463aeab8e0cdb5ed7786",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/tz.ts": {
+    "mtime": 1777834573.8738475,
+    "ast_hash": "598c1fa9fbd2b192c1c0454d0a3b28d6",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/form-text.ts": {
+    "mtime": 1777834612.4100263,
+    "ast_hash": "cdf538cd96cca2531cdc31c8c53ea60d",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/src/api/handlers/push-to-stryd.ts": {
+    "mtime": 1777834605.8637161,
+    "ast_hash": "008d9826d1b3800e78ac3884235878c5",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/architecture.md": {
+    "mtime": 1778624287.3773227,
+    "ast_hash": "a9656ee5f312c08292bd02176b555b6b",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/deployment.md": {
+    "mtime": 1778624309.3761446,
+    "ast_hash": "76263c081c93d4c6a49e1afbea8a8181",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase3/exercitator-http-api-v0.3-amendment-resolution-2026-05-03.md": {
+    "mtime": 1777866624.1541898,
+    "ast_hash": "26cf9ac06df745b6de1191974424e755",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase3/exercitator-http-api-v0.3-amendment-proposal-2026-05-03.md": {
+    "mtime": 1777866163.1534426,
+    "ast_hash": "c34f7eba069b00443c65475ef165e2e0",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase3/exercitator-http-api-v0.3-delta.md": {
+    "mtime": 1777866121.7185187,
+    "ast_hash": "0f767fbe63a48144e0a828c6531834e7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/cross-training-muscle-group-research-2026-05-12.md": {
+    "mtime": 1778637608.7359004,
+    "ast_hash": "795ebbf58db3b65b13f1fe3872a2a999",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/promus-calibration-migration-resume-2026-05-08.md": {
+    "mtime": 1778288754.848255,
+    "ast_hash": "fc94aca4200c504225dc015c651bb64f",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-correlation.md": {
+    "mtime": 1778641847.5407317,
+    "ast_hash": "09c9fef7a3aa7c6960b4c87df8ed59a0",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/README.md": {
+    "mtime": 1778641859.7744238,
+    "ast_hash": "78bb233e741e2e3d8a36a09716f442f5",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-analyse-output.txt": {
+    "mtime": 1778641847.5416355,
+    "ast_hash": "fe3dfe6c321abbe57b3cb94dc4db58fb",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/phase2/research-2026-05-12/research-data-summary.md": {
+    "mtime": 1778641847.5409956,
+    "ast_hash": "85496c86d5cbbcbc280e0aff1c59ed6a",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/skills/init/prompt.md": {
+    "mtime": 1773999178.0,
+    "ast_hash": "140e382bd2835f17a251c862ed558ee6",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/skills/test/prompt.md": {
+    "mtime": 1773999178.0,
+    "ast_hash": "3a9cbfeba65544cfbc63f98c1d19d3b7",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/skills/deploy/prompt.md": {
+    "mtime": 1773999178.0,
+    "ast_hash": "c98369bcb727e339a1ef7afb3cb98220",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/skills/setup/prompt.md": {
+    "mtime": 1773998889.0,
+    "ast_hash": "ec52c8adc1fc44b348289d373ce1fe00",
+    "semantic_hash": ""
+  },
+  "/Users/ze/Documents/claude/exercitator/.claude/skills/sast/prompt.md": {
+    "mtime": 1773998889.0,
+    "ast_hash": "aaaa0411ca7e59c4895a3054c9723b52",
+    "semantic_hash": ""
+  }
+}
