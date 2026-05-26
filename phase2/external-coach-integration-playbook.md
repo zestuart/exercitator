@@ -28,11 +28,9 @@ Three states:
 | API exists but undocumented; you have account credentials | Run a mitm capture (retextor pattern); reverse-engineer the response shape; codify as `notes/<vendor>-api/spec-recommendations.md` (or similar) |
 | No API exists, only on-device input | This playbook does not apply. The existing FORM-text push (`src/web/form-format.ts`) is the model for that case |
 
-**FORM swim specifically** (as of 2026-05-25):
-- FORM's known surface is the **NLP-based "Script"** input — natural language workout text, parsed by FORM's app on the goggles. We already produce this via `buildFormDescription` for clipboard paste.
-- FORM does maintain a library of **Coached Workouts** (curated structured workouts in their app). Whether these are exposed via an undocumented API is **unknown** — needs mitm-capture verification before the playbook's Phase 0 can start.
-- **Pre-Phase-0 step for FORM**: capture the FORM iOS app against a tailnet mitmproxy while opening the "Workouts" tab in the app. If you see `GET /workouts/recommendations`-style traffic, the playbook applies. If only the canvas Script input is seen, the integration is fundamentally different (we already do the push direction).
-- An alternative target if FORM has no API: **MySwimPro**, **TriDot**, or **Swim Smooth** — all have suggestion features. Same playbook, different vendor.
+**FORM swim** (status as of 2026-05-26): **completed reference arc alongside Stryd.** Phase 0 capture identified the auth flow + the two-call recommendation pattern: `GET /api/v1/users/me/workouts/smart_coach/personalized` returns 3 metadata summaries; `GET /api/v1/workouts/{id}` returns the structured `setGroups[]` body. Wire spec at `~/Documents/claude/retextor/notes/form-api/spec-recommendations.md`. Plan + phase breakdown at `phase2/form-swim-integration-plan.md`. Shipped end-to-end in commit `89ff94b`; live on ze with `swimRecommendationSource: "form"`.
+
+**Two reference arcs to mine for new integrations**: this playbook generalises both. Stryd shows the JSON-with-blocks shape + integer-FTP gotcha + selected_id PATCH; FORM shows the qualitative-effort + two-call body fetch + cache-cadence-unknown patterns. New vendor → diff against both.
 
 ---
 

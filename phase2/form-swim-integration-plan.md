@@ -1,5 +1,7 @@
 # Plan — FORM swim recommendations into Exercitator
 
+> **STATUS — 2026-05-26: shipped + live on ze**. All 7 phases complete; FORM-sourced swim prescriptions show on praescriptor.tail7ab379.ts.net/ze with the blue `Source: FORM · <title>` chip. `PROMUS_FORM_DSW_ENABLED=1` set on Cogitator after Promus #168 merged (Promus accepts `vendor_recommendation_set` in the DSW payload). Promus #167 (DSW read endpoint) still open — Phase 7 replay scaffold ready for HTTP-mode wiring once #167 ships.
+
 **Created**: 2026-05-26, derived from `external-coach-integration-playbook.md` after Stryd arc.
 **Vendor**: FORM Athletica (swim goggles).
 **Scope**: bridge FORM's per-user recommendation endpoint into the Swim path of Exercitator's prescription engine, mirroring the Stryd run swap.
@@ -38,7 +40,7 @@
 
 ---
 
-## Phase 1 — TS client (agent-safe, ~15 min)
+## Phase 1 — TS client (**DONE** — commit 89ff94b)
 
 **File**: `src/form/client.ts` (new directory).
 
@@ -73,7 +75,7 @@ class FormClient {
 
 ---
 
-## Phase 2 — mapper (agent-safe, ~20 min)
+## Phase 2 — mapper (**DONE** — commit 89ff94b)
 
 **File**: `src/engine/form-mapper.ts`.
 
@@ -110,7 +112,7 @@ class FormClient {
 
 ---
 
-## Phase 3 — swap layer + surface wiring (non-autonomous, ~30 min)
+## Phase 3 — swap layer + surface wiring (**DONE** — commit 89ff94b)
 
 **Helper**: `src/web/form-swap.ts:applyFormSwapIfEnabled`.
 
@@ -160,7 +162,7 @@ formOriginalWorkout?: unknown;  // on WorkoutSuggestion, for FORM-text round-tri
 
 ---
 
-## Phase 4 — Promus DSW (gated on Promus migration, ~15 min Exercitator-side)
+## Phase 4 — Promus DSW (**DONE** — commit 89ff94b; Promus #168 merged + `PROMUS_FORM_DSW_ENABLED=1` live on Cogitator)
 
 **Pre-requisite**: open Promus issue *rename `stryd_recommendation_set` → `vendor_recommendation_set`*. Plus migration. Block Phase 4 until merged.
 
@@ -183,7 +185,7 @@ Fire-and-forget. Don't block the user-facing path on Promus latency.
 
 ---
 
-## Phase 5 — send paths (~20 min)
+## Phase 5 — send paths (**DONE** — commit 89ff94b)
 
 **intervals.icu calendar event**: `src/web/send.ts` already pushes Swim suggestions to intervals.icu. Verify the path uses the swapped suggestion (not the raw engine output) — same pattern as the Stryd fix.
 
@@ -197,7 +199,7 @@ Fire-and-forget. Don't block the user-facing path on Promus latency.
 
 ---
 
-## Phase 6 — UX (~10 min, mostly already done)
+## Phase 6 — UX (**DONE** — commit 89ff94b)
 
 **Pair-collapse**: `src/engine/segment-groups.ts:groupPairSegments` is vendor-agnostic; reuse as-is. Swim sets like `8× (50 fast + 50 easy)` get collapsed at render-time only.
 
@@ -207,7 +209,7 @@ Fire-and-forget. Don't block the user-facing path on Promus latency.
 
 ---
 
-## Phase 7 — validation (multi-day)
+## Phase 7 — validation (**SCAFFOLD DONE** — commit 89ff94b; HTTP-replay mode awaits Promus #167)
 
 1. **Replay from Promus** once issue #167 (DSW read endpoint) ships. SQL-read the stored row, reconstruct `WorkoutSuggestion`, run through `buildFormDescription` + `buildIntervalsDescription`, hash both, expect equality.
 2. **Live verification**: ze does one swim sourced from FORM. Check: intervals.icu calendar event matches the FORM tile, FORM-text paste matches, compliance grading runs, Promus DSW row written.

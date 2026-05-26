@@ -19,6 +19,8 @@ src/
   stryd/
     client.ts           — Stryd PowerCenter API client (auth, list activities, download FIT, post-run report fields, create/schedule/delete workouts)
     enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
+  form/
+    client.ts           — FORM Athletica API client (OAuth2 with three-tier cache → refresh → login cascade, filesystem cache at FORM_CACHE_PATH mode 0600, 1 MB JSON cap, 401 retry-once with cache invalidation, UUID-validated workout fetches). `getPersonalizedWithBodies()` is the two-call composition: `/users/me/workouts/smart_coach/personalized` for the 3-item list, then parallel `/workouts/{id}` for each body's setGroups.
   tools/
     athlete.ts          — get_athlete_profile, get_sport_settings
     activities.ts       — list_activities, get_activity, get_activity_streams, get_power_curve
@@ -38,6 +40,7 @@ src/
     terrain-selector.ts — flat/rolling/trail/pool guidance per category + recent terrain
     workout-builder.ts  — structured segment generation per sport × category
     stryd-mapper.ts     — pure: category → Stryd type bucket, intensity_zones picker, vendor blocks → WorkoutSegment[] (flattened with repeat-folding). Used by the Stryd swap path.
+    form-mapper.ts      — pure: category → preferred FORM type, content-scored picker over effort-level Z-buckets, FORM setGroups → WorkoutSegment[] (flattens roundsCount, pre-collapses intra-set intervals into `repeats`+work/rest, drill coercion to Z1). Used by the FORM swap path.
     segment-groups.ts   — pure: detect repeated (work,rest)×N pairs in a flattened segment list. Shared by render.ts and api/payload.ts for the pair-collapse UX. Conservative (byte-equal A,B,A,B matching).
     suggest.ts          — top-level orchestrator: fetchTrainingData, suggestWorkoutFromData, suggestWorkoutForSport, suggestWorkout
     vigil/
@@ -57,9 +60,10 @@ src/
     stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets). For Stryd-sourced runs, round-trips suggestion.strydOriginalWorkout verbatim instead of reconstructing from flattened segments (preserves block-repeat structure + exact intensity_percent bands).
     stryd-swap.ts       — apply Stryd's served workout to a run suggestion. applyStrydRecommendation (per-run) + applyStrydSwapIfEnabled (gate + apply, centralised so all Run-producing surfaces share the gate). Replaces rationale with Stryd desc, neutralises terrain, filters engine-narrative warnings.
     mark-stryd-selected.ts — fire-and-forget PATCH /recommendations/{id} with {selected_id} after send-to-{stryd,intervals}. Stryd preference signal; state-only on their side (does NOT auto-schedule).
-    promus-dsw.ts       — fire-and-forget POST /api/ingest/dsw to Promus after every Stryd-attempted run prescription. Carries the full Stryd recommendation set + Exercitator context for the longitudinal fitness:readiness:workout corpus.
+    promus-dsw.ts       — fire-and-forget POST /api/ingest/dsw to Promus. Vendor-discriminated `DswEmitInput = {kind: "stryd" | "form", ...}`; Stryd path uses legacy `stryd_recommendation_set` field, FORM path uses renamed `vendor_recommendation_set` (Promus #168). FORM emission gated behind `PROMUS_FORM_DSW_ENABLED=1`.
+    form-swap.ts        — apply FORM's served workout to a swim suggestion. `applyFormSwapIfEnabled` gate (sport=Swim, swimRecommendationSource="form", CSS>0, formClient present). Defensive caps: setGroups ≤ 20, sets-per-group ≤ 20, roundsCount ≤ 20, intervalsCount ≤ 100, intervalDistance ≤ 5000m, rest.defined ≤ 3600s, expanded segments ≤ 500. Vendor-aware fallback chip ("FORM unavailable").
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
-    form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text
+    form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text. `inferStroke` checks "drill" before "kick"/"pull" so FORM drills named sixKickSwitch classify as DCH not K.
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
     render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim).
     security-headers.ts — defence-in-depth headers for every Praescriptor response (HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy) + CSP for HTML responses

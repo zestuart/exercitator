@@ -57,8 +57,30 @@ rm -f /tmp/exercitator.tar.gz
 1. **Lint + type check** — language-appropriate static analysis
 2. **Test suite** — all tests must pass
 3. **Secret scan** — verify no credentials in staged files
-4. **SAST scan** — Gemini security review of changed files
+4. **SAST scan** — Gemini security review of changed files (diff mode against current `sast-baseline-*` tag)
 5. **Documentation check** — `CHANGELOG.md` updated, docs current
-6. **Commit** — descriptive message with co-author attribution
-7. **Push** — to configured branch/remote
-8. **Monitor** — verify deployment status (if CI/CD configured)
+6. **Env forwarding check** — every new `process.env.X` read must have a paired entry in **every consuming service's `docker-compose.yml environment:` block**. The FORM-deploy missed this on 2026-05-26 (FORM_EMAIL/PASSWORD set in `.env` but unread by the container); see `lessons.md` 2026-05-26 entry.
+7. **Commit** — descriptive message with co-author attribution
+8. **Push** — to configured branch/remote
+9. **Monitor** — verify deployment status; tail container logs for the new code path's startup line ("X client ready" / "X credentials not set") before declaring victory.
+
+## Environment variables forwarded into containers
+
+`docker-compose.yml` declares each env var explicitly in the `environment:` block of every consuming service. Both `exercitator` (MCP + HTTP API) and `praescriptor` (web UI) consume the user-facing creds; sidecars consume only Tailscale auth. Source of truth is Cogitator's `~/Container/exercitator/.env` (gitignored).
+
+| Var | Required? | Consumer(s) | Purpose |
+|---|---|---|---|
+| `INTERVALS_ICU_API_KEY` | yes | exercitator, praescriptor | ze's intervals.icu API key |
+| `INTERVALS_ICU_API_KEY_PAM` | optional | exercitator, praescriptor | pam's intervals.icu API key (route returns 503 if unset) |
+| `STRYD_EMAIL` / `STRYD_PASSWORD` | optional | exercitator, praescriptor | ze's Stryd PowerCenter creds — drives Stryd enrichment + Stryd swap |
+| `STRYD_EMAIL_PAM` / `STRYD_PASSWORD_PAM` | optional | exercitator, praescriptor | pam's Stryd PowerCenter creds |
+| `FORM_EMAIL` / `FORM_PASSWORD` | optional | exercitator, praescriptor | ze's FORM Athletica creds — drives FORM swim swap |
+| `FORM_CACHE_PATH` | optional | exercitator, praescriptor | OAuth cache path; defaults to `/app/data/form-oauth.json` (in the `exercitator-data` volume so it survives restarts) |
+| `MCP_OAUTH_*` | yes (production) | exercitator | streamable-http OAuth client + passphrase |
+| `EXERCITATOR_API_KEYS` | optional | exercitator | HTTP API bearer keys; unset → listener disabled |
+| `TAILSCALE_AUTH_KEY` | yes | tailscale-* sidecars | reusable preauth key (in praefectura/docs/tailscale.md) |
+| `ANTHROPIC_API_KEY` | optional | praescriptor | dynamic deity invocations; static fallback if unset |
+| `PROMUS_API` / `PROMUS_URL` | optional | exercitator, praescriptor | DSW emission bearer + base URL (default `https://promus.tail7ab379.ts.net`) |
+| `PROMUS_FORM_DSW_ENABLED` | optional | exercitator, praescriptor | `"1"` or `"true"` enables FORM-side DSW emission. Stays off until Promus accepts `vendor_recommendation_set` (Promus #168, shipped 2026-05-26). Currently **set to `1` on Cogitator**. |
+
+**Rule**: when a code change reads a new env var, this table + the relevant `environment:` blocks in `docker-compose.yml` must be updated in the same commit. A grep for the var name in `docker-compose.yml` is the cheapest pre-commit check.

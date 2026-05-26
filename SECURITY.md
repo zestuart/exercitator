@@ -98,3 +98,35 @@ Follow-up deploy correcting Foster's session-RPE units (seconds → minutes) in 
 ### 2026-05-13 — Suunto + Stryd pod power-source detection (clean)
 
 `src/engine/power-source.ts` extended to recognise Suunto-recorded runs paired with a Stryd pod as Stryd-native, closing a misclassification where the most recent Suunto-recorded activity fell into the "Garmin active + athlete has Stryd" branch and applied a bogus 0.87 correction factor to FTP. Per-device heuristic split: Apple Watch keeps the filename-based detection (so the Stryd FIT enricher's HealthFit-vs-Stryd-app distinction holds), Suunto falls back to Stryd-stream presence in `stream_types` since the watch writes opaque-UUID `external_id` values. Diff-mode SAST against `sast-baseline-2026-05-12-b` returned `NO_FINDINGS`. Tagged `sast-baseline-2026-05-13` on commit `a6aafb7`.
+
+### 2026-05-25 — Stryd workout-recommendations arc
+
+Multi-round deploy + SAST iteration spiral landing the Stryd-recommendations integration. Four sequential clean tags after defensive hardening of the new code path: `sast-baseline-2026-05-25`, `-b`, `-c`, `-d`. Gemini's diff bundle does not include upstream defences, so each defensive cap added to `src/web/stryd-swap.ts` triggered the next theoretical finding even though the 1 MB JSON cap in `src/stryd/client.ts` was the load-bearing structural defence. Stopping criterion documented in `lessons.md` 2026-05-25 entry + `phase2/external-coach-integration-playbook.md` §SAST iteration management.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 20 | Medium | Unbounded `block.repeat` in Stryd recommendation payload would flatten any-N reps into memory | `MAX_BLOCK_REPEAT = 100` clamp in `strydWorkoutToSegments` (`src/engine/stryd-mapper.ts`) |
+| 21 | Medium | Unbounded JSON response from `getRecommendedWorkouts` | `MAX_RECOMMENDATIONS_JSON_BYTES = 1 MB` cap; response read as text first then size-checked before `JSON.parse` |
+| 22 | Medium | Same unbounded-JSON pattern across the rest of `StrydClient` | Generalised `parseBoundedJson<T>(res, label)` helper applied to login, listActivities, downloadFit metadata, getLatestCriticalPower, createWorkout, scheduleWorkout |
+| 23 | Medium | `applyStrydRecommendation` accepted any-shape Stryd workout structure | Pre-flight rejection with distinct `fallbackReason` chips: `unsafe_block_count` (>200), `unsafe_repeat_count` (out of [1,100] or non-integer), `unsafe_segments_per_block` (>50), `unsafe_segment_duration` (hour >24, minute/second ≥60), `malformed_duration_time`, `unsafe_total_segment_count` (product >500) |
+| 24 | Low | Recommendation-set id interpolated into PATCH URL without shape validation | `^\d+$` allowlist on `recommendationSetId` in `markRecommendationSelected` |
+| 25 | Low | Log injection: Stryd error message embedded in `console.warn` could include CR/LF | Strip `\r\n\t\v\f` before logging in the swap-layer error path |
+| 26 | Low | `generatePrescriptions` in-memory user cache had no bound | `MAX_CACHE_ENTRIES = 100` with FIFO eviction (real registry has 2 users; cap is defensive) |
+| 27 | Low | `sast_scan.py` failed on cache-disabled accounts (free-tier Gemini) | Inline-content patch so the scan runs without explicit cache references |
+
+**Accepted finding (documented in CLAUDE.md)**: pre-existing hardcoded `"0"` for Swim userId at `src/web/prescriptions.ts:118` flagged by `-d` diff. `"0"` is a Vigil-disable sentinel (Vigil is Run-only, not a user id); cross-user leak is structurally impossible because upstream `data` is fetched per-user before the call. Accepted, not fixed.
+
+### 2026-05-26 — FORM Athletica swim-recommendations arc
+
+Bridged FORM personalised-swim recommendations end-to-end (commit `89ff94b`). Tagged `sast-baseline-2026-05-26` on commit `ec2b6ff` after the single Gemini-found defensive gap closed.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 28 | (Pre-emptive) | Unbounded FORM JSON response on either `/personalized` or `/workouts/{id}` | `parseBoundedJson` 1 MB cap reused in `src/form/client.ts` |
+| 29 | (Pre-emptive) | OAuth cache file at `~/.cache/form-client/oauth.json` group/world readable | `chmodSync(cachePath, 0o600)` on every write; cache best-effort (failures don't break in-memory flow) |
+| 30 | (Pre-emptive) | Workout id path-traversal via `getWorkoutById` | UUID-v7 shape allowlist `^[0-9a-f]{8}-...-...$` before path interpolation |
+| 31 | (Pre-emptive) | Unsafe FORM workout structure flowing through `formWorkoutToSegments` | Defensive caps in `applyFormRecommendation`: setGroups ≤20, sets-per-group ≤20, roundsCount ≤20, intervalsCount ≤100, intervalDistance ≤5000m, expanded segments ≤500 — distinct `fallbackReason` chips per cap |
+| 32 | Low | `rest.defined` was not bounded; an attacker-controlled value would flow into `total_duration_secs` and land in the SQLite compliance table | `rest.defined` clamp to `[0, 3600]` s — `unsafe_rest_duration` fallback. Single Gemini diff finding before the `-2026-05-26` tag; fix landed in commit `ec2b6ff`. |
+| 33 | Low | Log injection: FORM error message embedded in `console.warn` could include CR/LF | Strip `\r\n\t\v\f` before logging in `fallback()` (`src/web/form-swap.ts`) |
+
+**Process miss (documented in `lessons.md` 2026-05-26)**: `docker-compose.yml` did not forward `FORM_EMAIL`/`FORM_PASSWORD`/`FORM_CACHE_PATH`/`PROMUS_FORM_DSW_ENABLED` to the running containers even though they were declared in `.env`. The FormClient builder logged `"Ze: FORM credentials not set — swim swap disabled"` and the swap silently no-op'd. Pre-flight checklist updated in `deployment.md` §Pre-flight sequence step 6: every new `process.env.X` requires a paired entry in every consuming service's `docker-compose.yml environment:` block.
