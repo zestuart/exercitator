@@ -54,6 +54,40 @@ function promusUrl(): string {
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
+ * Read a Response body as text, aborting once `maxBytes` has been
+ * accumulated. Defence against memory exhaustion from a compromised
+ * upstream returning an arbitrarily large body. Same posture as the
+ * `parseBoundedJson` cap on the Stryd/FORM clients but adapted for the
+ * error-body path here, where we only need the first few KB for the
+ * log excerpt.
+ */
+async function readBoundedText(res: Response, maxBytes: number): Promise<string> {
+	if (!res.body) return "";
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	let text = "";
+	try {
+		while (text.length < maxBytes) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			text += decoder.decode(value, { stream: true });
+		}
+		if (text.length >= maxBytes) {
+			await reader.cancel().catch(() => {});
+		}
+	} catch {
+		// Stream errors — return whatever we managed to accumulate.
+	} finally {
+		try {
+			reader.releaseLock();
+		} catch {
+			// Already-released reader after cancel() — harmless.
+		}
+	}
+	return text.slice(0, maxBytes);
+}
+
+/**
  * Caller-facing input. The emitter never inspects the engine's intermediate
  * state directly — it consumes the finalised suggestion + the raw vendor
  * response side-by-side.
@@ -212,9 +246,22 @@ function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): Ds
 		category: suggestion.category,
 		fallback_used: fallbackUsed,
 		// Renamed column name (Promus #168) — FORM emission requires
-		// the rename to have shipped on the Promus side.
+		// the rename to have shipped on the Promus side. Contains only
+		// the personalised list metadata (no setGroups). The picked
+		// workout's full setGroups[] body is bundled into
+		// `exercitator_context.picked_workout_body` below so future
+		// replay-from-Promus (Promus #167) is byte-equal-deterministic
+		// regardless of whether FORM later mutates the workout for the
+		// same UUID (revisionNumber on the wire indicates this is
+		// possible, even if not observed).
 		vendor_recommendation_set: formRecommendationSet ?? {},
-		exercitator_context: buildExercitatorContext(suggestion),
+		exercitator_context: buildExercitatorContext(
+			suggestion,
+			// On the success path the swap layer preserves the FORM
+			// body verbatim via `formOriginalWorkout`. On fallback this
+			// is undefined; the context omits the field cleanly.
+			fallbackUsed ? undefined : suggestion.formOriginalWorkout,
+		),
 	};
 
 	if (!fallbackUsed && suggestion.formWorkoutId !== undefined) {
@@ -251,8 +298,19 @@ function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): Ds
  *
  * The Promus column is JSONB with no schema enforcement, so adding
  * fields later does not require a Promus migration.
+ *
+ * Optional `pickedWorkoutBody` carries the vendor's full picked-workout
+ * payload (Stryd: already in `stryd_recommendation_set.workouts[i]
+ * .estimated_workout.workout`; FORM: not in `vendor_recommendation_set`
+ * because the /personalized list omits setGroups, so we bundle the
+ * picked body here). This guarantees byte-equal replay-from-Promus
+ * (Promus #167) even if the vendor later mutates the workout body for
+ * the same id.
  */
-function buildExercitatorContext(suggestion: WorkoutSuggestion): unknown {
+function buildExercitatorContext(
+	suggestion: WorkoutSuggestion,
+	pickedWorkoutBody?: unknown,
+): unknown {
 	return {
 		readiness_score: suggestion.readiness_score,
 		cp_or_ftp: suggestion.power_context.ftp,
@@ -260,6 +318,7 @@ function buildExercitatorContext(suggestion: WorkoutSuggestion): unknown {
 		vigil_severity: suggestion.vigil?.severity ?? 0,
 		vigil_status: suggestion.vigil?.status ?? null,
 		warnings_count: suggestion.warnings.length,
+		...(pickedWorkoutBody !== undefined && { picked_workout_body: pickedWorkoutBody }),
 		// TODO(phase4-deeper): plumb days_since_hard, fitness_ctl,
 		//  fatigue_atl, form_tsb, hrv_recent, sleep_debt_nights,
 		//  cross_training_strain, staleness_tier from the engine's
@@ -318,17 +377,30 @@ export function emitDsw(input: DswEmitInput): Promise<void> {
 	})
 		.then(async (res) => {
 			if (!res.ok) {
-				const text = await res.text().catch(() => "");
+				// Bounded read of the error body — defends against a
+				// compromised Promus returning a huge response that
+				// would exhaust container memory (praescriptor is
+				// 256 MB-limited). 4 KB headroom for any real JSON
+				// error envelope; logged excerpt is the first 200
+				// chars only. Same posture as the parseBoundedJson
+				// 1 MB cap on Stryd/FORM clients.
+				const text = await readBoundedText(res, 4096).catch(() => "");
 				const excerpt = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+				// Sanitise control chars before logging — defends against log
+				// injection if a compromised/MitM'd Promus response embeds
+				// CR/LF/etc. in the error body. Same pattern as the Stryd
+				// and FORM swap fallback paths (SECURITY.md #25, #33).
+				const sanitised = excerpt.replace(/[\r\n\t\v\f]/g, " ");
 				console.warn(
-					`emitDsw: Promus returned HTTP ${res.status} for ${input.userId}/${input.date}/${input.sport}: ${excerpt}`,
+					`emitDsw: Promus returned HTTP ${res.status} for ${input.userId}/${input.date}/${input.sport}: ${sanitised}`,
 				);
 			}
 		})
 		.catch((err) => {
 			const msg = err instanceof Error ? err.message : String(err);
+			const sanitised = msg.replace(/[\r\n\t\v\f]/g, " ");
 			console.warn(
-				`emitDsw: fetch failed for ${input.userId}/${input.date}/${input.sport}: ${msg}`,
+				`emitDsw: fetch failed for ${input.userId}/${input.date}/${input.sport}: ${sanitised}`,
 			);
 		});
 }

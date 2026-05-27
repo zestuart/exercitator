@@ -323,6 +323,8 @@ describe("buildDswPayload — FORM kind", () => {
 				formWorkoutId: FORM_ENDURANCE.id,
 				formWorkoutTitle: FORM_ENDURANCE.name,
 				formPickRationale: "base: picked 'Better As You Go' (score 1240, Z1+Z2)",
+				// Mirror what applyFormRecommendation persists for replay.
+				formOriginalWorkout: FORM_ENDURANCE,
 			}),
 			formRecommendationSet: FORM_SET,
 			formBodies: FORM_BODIES,
@@ -378,6 +380,18 @@ describe("buildDswPayload — FORM kind", () => {
 		expect(out?.stryd_recommendation_set).toBeUndefined();
 	});
 
+	it("bundles picked_workout_body in exercitator_context for byte-equal replay (Promus #167)", () => {
+		const out = buildDswPayload(baseFormInput());
+		const ctx = out?.exercitator_context as Record<string, unknown>;
+		// vendor_recommendation_set carries only the 3-item /personalized
+		// metadata (no setGroups). The picked body lives here for
+		// future replay-from-Promus.
+		expect(ctx.picked_workout_body).toBe(FORM_ENDURANCE);
+		const body = ctx.picked_workout_body as { setGroups: unknown[] };
+		expect(Array.isArray(body.setGroups)).toBe(true);
+		expect(body.setGroups.length).toBeGreaterThan(0);
+	});
+
 	it("builds a FORM fallback payload (network error) with empty set", () => {
 		const out = buildDswPayload(
 			baseFormInput({
@@ -394,6 +408,11 @@ describe("buildDswPayload — FORM kind", () => {
 		expect(out?.fallback_reason).toBe("network_error");
 		expect(out?.picked_workout_id).toBeUndefined();
 		expect(out?.vendor_recommendation_set).toEqual({});
+		// On fallback there's no picked workout — picked_workout_body
+		// must be absent so a downstream replay doesn't pick up stale
+		// or unrelated content.
+		const ctx = out?.exercitator_context as Record<string, unknown>;
+		expect(ctx.picked_workout_body).toBeUndefined();
 	});
 });
 

@@ -130,3 +130,19 @@ Bridged FORM personalised-swim recommendations end-to-end (commit `89ff94b`). Ta
 | 33 | Low | Log injection: FORM error message embedded in `console.warn` could include CR/LF | Strip `\r\n\t\v\f` before logging in `fallback()` (`src/web/form-swap.ts`) |
 
 **Process miss (documented in `lessons.md` 2026-05-26)**: `docker-compose.yml` did not forward `FORM_EMAIL`/`FORM_PASSWORD`/`FORM_CACHE_PATH`/`PROMUS_FORM_DSW_ENABLED` to the running containers even though they were declared in `.env`. The FormClient builder logged `"Ze: FORM credentials not set — swim swap disabled"` and the swap silently no-op'd. Pre-flight checklist updated in `deployment.md` §Pre-flight sequence step 6: every new `process.env.X` requires a paired entry in every consuming service's `docker-compose.yml environment:` block.
+
+### 2026-05-26 — FORM picked_workout_body persistence + Promus error-body hardening (clean after 2 iterations)
+
+Pre-Promus-#167 prep: persist the picked FORM workout body inside `exercitator_context.picked_workout_body` so replay-from-Promus is byte-equal-deterministic even if FORM mutates a workout for the same UUID later. Plus three follow-up defensive fixes from the iteration-2 Gemini scan.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 34 | Low | `emitDsw` logged remote error excerpt without stripping CR/LF — same log-injection class as #25/#33 | Sanitise `excerpt` + `msg` via `replace(/[\r\n\t\v\f]/g, " ")` in both the non-2xx and network-error branches of `emitDsw` |
+| 35 | Medium | `emitDsw` called `await res.text()` on the error path unbounded — a compromised Promus could exhaust the 256 MB praescriptor container | New `readBoundedText(res, maxBytes)` helper streams chunks until 4 KB and cancels the rest of the body; same posture as `parseBoundedJson` on Stryd/FORM clients |
+
+**Accepted findings (iteration-3 Gemini pass) — both pre-existing, not regressions**:
+
+- **Medium: Tailscale auth key reuse across the 3 sidecars** (`docker-compose.yml`). Deliberate per `praefectura/docs/tailscale.md`: the tag-scoped key + tailnet ACL gate is the load-bearing defence, not per-node key uniqueness. Long-standing pattern, not introduced by this commit (Gemini's diff bundle pulled `docker-compose.yml` in only because we appended FORM env-var rows).
+- **Low: PROMUS_API exposed to the `exercitator` container** (`docker-compose.yml`). Gemini misread the runtime topology — `src/web/promus-dsw.ts` is imported by both `src/api/handlers/{workouts,dashboard}.ts` (which run in the `exercitator` container under the HTTP API path) AND `src/web/prescriptions.ts` (which runs in `praescriptor`). The exercitator container legitimately needs `PROMUS_API` for DSW emission from its HTTP API handlers.
+
+Stopping iteration here per the documented spiral-management policy (`lessons.md` 2026-05-25, `phase2/external-coach-integration-playbook.md` §SAST iteration management). Tagged `sast-baseline-2026-05-26-b` on the deploy commit.
