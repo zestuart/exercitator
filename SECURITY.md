@@ -146,3 +146,13 @@ Pre-Promus-#167 prep: persist the picked FORM workout body inside `exercitator_c
 - **Low: PROMUS_API exposed to the `exercitator` container** (`docker-compose.yml`). Gemini misread the runtime topology — `src/web/promus-dsw.ts` is imported by both `src/api/handlers/{workouts,dashboard}.ts` (which run in the `exercitator` container under the HTTP API path) AND `src/web/prescriptions.ts` (which runs in `praescriptor`). The exercitator container legitimately needs `PROMUS_API` for DSW emission from its HTTP API handlers.
 
 Stopping iteration here per the documented spiral-management policy (`lessons.md` 2026-05-25, `phase2/external-coach-integration-playbook.md` §SAST iteration management). Tagged `sast-baseline-2026-05-26-b` on the deploy commit.
+
+### 2026-05-27 — Phase 7 replay closed-loop via Promus #167 (clean)
+
+`fetchDswRecord` helper added to read DSW rows over HTTP for the replay scaffold. `validateFormWorkoutBody` extracted from `applyFormRecommendation` into a shared exported helper so the live swap layer AND the replay scaffold both reject poisoned bodies before flattening. `swim_css_m_per_s` plumbed into `exercitator_context` so byte-equal replay survives future intervals.icu CSS recalibration.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 36 | Medium | `scripts/replay-form-dsw.ts` called `formWorkoutToSegments` on `picked_workout_body` without the swap-layer's defensive caps. A poisoned DSW row could exhaust memory at replay time (dev workstation or CI runner). | Extract `validateFormWorkoutBody` from `applyFormRecommendation` into an exported helper at `src/web/form-swap.ts`. Both the production swap path and the replay scaffold now call it before flattening; rejection produces a clear error rather than runaway expansion. |
+
+Tagged `sast-baseline-2026-05-27` on commit `c9dc2bd` (`feat(replay): closed-loop replay via Promus #167 + swim_css persistence`). Diff scan returned `NO_FINDINGS` after the iter-1 fix landed. Verified end-to-end: live FORM/Swim DSW row for ze/2026-05-26 replays to SHA-256 byte-equal to the determinism-guard inline snapshot in `tests/web/form-render-integration.test.ts`.

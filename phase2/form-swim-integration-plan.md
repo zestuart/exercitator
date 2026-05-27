@@ -211,9 +211,9 @@ Fire-and-forget. Don't block the user-facing path on Promus latency.
 
 ## Phase 7 — validation (**DONE** — file mode + Promus HTTP-replay mode both live; commit 89ff94b + 2026-05-27 follow-up)
 
-1. **Replay from Promus** once issue #167 (DSW read endpoint) ships. SQL-read the stored row, reconstruct `WorkoutSuggestion`, run through `buildFormDescription` + `buildIntervalsDescription`, hash both, expect equality.
-2. **Live verification**: ze does one swim sourced from FORM. Check: intervals.icu calendar event matches the FORM tile, FORM-text paste matches, compliance grading runs, Promus DSW row written.
-3. **Determinism**: store integer CSS (the engine's rounded value), thread through `pace_context.css`, exclude raw floats from the swap layer.
+1. **Replay from Promus** (DONE 2026-05-27 via #167). `tsx scripts/replay-form-dsw.ts --user ze --date YYYY-MM-DD --sport Swim --source form` GETs the stored row from `/api/dsw/{...}`, reconstructs a `WorkoutSuggestion` from `exercitator_context.picked_workout_body` + `swim_css_m_per_s`, and runs it through `buildFormDescription` + `buildIntervalsDescription`. Hashes match the determinism-guard inline snapshot in `tests/web/form-render-integration.test.ts` exactly — byte-equal contract verified end-to-end. Optional `--vs-live <fresh.json>` mode diffs the stored emission against a freshly-rendered one and exits non-zero on divergence.
+2. **Live verification** (DONE 2026-05-26). Praescriptor shows the blue `Source: FORM · <title>` chip on the swim card; FORM-text paste matches the goggles; compliance grading runs against the swapped segments; Promus DSW row written (verified via `gh issue view 167` + direct `curl` against `/api/dsw/{...}`).
+3. **Determinism**: CSS at decision time is persisted into `exercitator_context.swim_css_m_per_s` so replay survives future recalibration in intervals.icu. `picked_workout_body` carries the full setGroups[] verbatim so replay survives any FORM-side mutation of the workout for the same UUID. `validateFormWorkoutBody` is the shared defensive-cap helper between the live swap layer and the replay scaffold — defends against poisoned DSW rows.
 
 ---
 

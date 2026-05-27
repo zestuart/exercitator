@@ -152,7 +152,7 @@ exercitator_context     // shared shape
 
 The Promus issue's natural-key design already supports source-discriminated rows; the JSONB column naming is the only friction point. **Discuss with Promus side before starting FORM integration.**
 
-**Read API** is open as Promus issue #167 — when it lands, Exercitator gains HTTP-level access to historical DSW records without direct SQL.
+**Read API** shipped as Promus issue #167 (merged 2026-05-27). `fetchDswRecord(userId, date, sport, source)` in `src/web/promus-dsw.ts` is the TS client; `GET /api/dsw/{...}` is the single-record endpoint; `GET /api/dsw?from=&to=` is the range endpoint with `?lean=true` to suppress the JSONB columns.
 
 ---
 
@@ -189,7 +189,7 @@ Default-unset for engine-built intervals (their rest is implicit-easy). New cons
 
 ## Phase 7 — validation (manual, interpretive; multi-day)
 
-**Replay-from-Promus**: read a stored DSW record back via direct SQL (or Promus's read API once #167 lands), reconstruct a `WorkoutSuggestion`, run through `toStrydWorkout` / `buildIntervalsDescription` / `toFormScript`, confirm byte-equal to a fresh live-engine emission.
+**Replay-from-Promus** via `fetchDswRecord` (Promus #167, shipped 2026-05-27): GET `/api/dsw/{userId}/{date}/{sport}/{source}`, reconstruct a `WorkoutSuggestion` from the stored fields + `exercitator_context.picked_workout_body` (+ `swim_css_m_per_s` for FORM/Swim), run through `toStrydWorkout` / `buildIntervalsDescription` / `buildFormDescription`, confirm byte-equal to a fresh live-engine emission. FORM arc's reference scaffold lives at `scripts/replay-form-dsw.ts`. **Defensive cap**: always call `validateFormWorkoutBody` (or the equivalent vendor helper) before flattening a stored body — a poisoned DSW row would otherwise blow memory at replay time. The shared helper between the live swap and the replay path is the canonical pattern.
 
 For replay determinism:
 - Store *integer* CP/FTP (the engine's rounded value), not the raw float
@@ -254,7 +254,7 @@ Per-deploy SAST budget: **fix Critical + High; accept Medium / Low with explicit
 | Stryd wire spec | `notes/stryd-api/spec-recommendations.md` (in `retextor` repo) |
 | Stryd Phase-0 verification | `notes/stryd-api/phase0-verification-2026-05-25.md` (in `retextor` repo) |
 | Promus DSW write endpoint | issue #164 / PR #165 in `zestuart/promus` |
-| Promus DSW read endpoint | issue #167 in `zestuart/promus` (in flight) |
+| Promus DSW read endpoint | issue #167 in `zestuart/promus` (shipped 2026-05-27); `fetchDswRecord` in `src/web/promus-dsw.ts` |
 | Today's session log | TBD — Exercitator has no `notes/session-*` convention; today's arc is in commit history `dc62f64..9d3ce13` |
 | Architecture overview | `architecture.md` |
 | Stryd swap layer | `src/web/stryd-swap.ts` |
