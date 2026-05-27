@@ -49,6 +49,57 @@ const MAX_SETS_PER_GROUP = 20;
 const MAX_ROUNDS = 20;
 const MAX_INTERVALS = 100;
 const MAX_TOTAL_EXPANDED_SEGMENTS = 500;
+const MAX_INTERVAL_DISTANCE_M = 5000;
+const MAX_REST_SECS = 3600;
+
+/**
+ * Validate a FORM workout body's structure before flattening. Returns
+ * a fallback-reason string on the first violation found, or `null` if
+ * the body is safe to process.
+ *
+ * Exported so other consumers of `formWorkoutToSegments` (notably the
+ * Phase 7 replay scaffold reading bodies from Promus DSW rows) can
+ * apply the same defence-in-depth as the live swap layer. Without
+ * this, a poisoned DSW row could exhaust memory at replay time.
+ */
+export function validateFormWorkoutBody(formBody: FormWorkoutBody): string | null {
+	if (formBody.setGroups.length > MAX_SETGROUPS) {
+		return "unsafe_setgroup_count";
+	}
+	let expanded = 0;
+	for (const group of formBody.setGroups) {
+		if (group.sets.length > MAX_SETS_PER_GROUP) {
+			return "unsafe_sets_per_group";
+		}
+		const rounds = Number.isFinite(group.roundsCount) ? group.roundsCount : 1;
+		if (rounds < 1 || rounds > MAX_ROUNDS) {
+			return "unsafe_rounds_count";
+		}
+		for (const s of group.sets) {
+			const ic = Number.isFinite(s.intervalsCount) ? s.intervalsCount : 1;
+			if (ic < 0 || ic > MAX_INTERVALS) {
+				return "unsafe_intervals_count";
+			}
+			if (s.intervalDistance < 0 || s.intervalDistance > MAX_INTERVAL_DISTANCE_M) {
+				return "unsafe_interval_distance";
+			}
+			// rest.defined is summed into total_duration_secs and persisted
+			// to SQLite via the compliance table — an unbounded value from
+			// a compromised upstream could corrupt the duration column or
+			// overflow downstream consumers. Real values are 15–35 s; cap
+			// at 1 h.
+			const restDefined = s.rest?.defined;
+			if (restDefined != null && (restDefined < 0 || restDefined > MAX_REST_SECS)) {
+				return "unsafe_rest_duration";
+			}
+			expanded += rounds * ic;
+		}
+	}
+	if (expanded > MAX_TOTAL_EXPANDED_SEGMENTS) {
+		return "unsafe_total_segment_count";
+	}
+	return null;
+}
 
 /**
  * Apply the FORM swap to a swim suggestion. Pure mutation-free: returns
@@ -126,82 +177,15 @@ export async function applyFormRecommendation(
 
 	const formBody = result.picked;
 
-	// Pre-flight: reject responses with an unsafe structure.
-	if (formBody.setGroups.length > MAX_SETGROUPS) {
-		console.warn(
-			`FORM recommendation swap rejected: setGroups.length=${formBody.setGroups.length} exceeds MAX_SETGROUPS=${MAX_SETGROUPS}`,
-		);
+	// Pre-flight: reject responses with an unsafe structure. Shared
+	// helper so the Phase 7 replay scaffold can apply the same checks
+	// to bodies loaded from Promus (defends against poisoned rows
+	// crashing dev/CI when running replay).
+	const violation = validateFormWorkoutBody(formBody);
+	if (violation) {
+		console.warn(`FORM recommendation swap rejected: ${violation}`);
 		return {
-			suggestion: { ...suggestion, ...fallbackReason("unsafe_setgroup_count") },
-			formRecommendationSet: set,
-			formBodies: bodies,
-		};
-	}
-	let expanded = 0;
-	for (const group of formBody.setGroups) {
-		if (group.sets.length > MAX_SETS_PER_GROUP) {
-			console.warn(
-				`FORM swap rejected: group.sets.length=${group.sets.length} exceeds MAX_SETS_PER_GROUP=${MAX_SETS_PER_GROUP}`,
-			);
-			return {
-				suggestion: { ...suggestion, ...fallbackReason("unsafe_sets_per_group") },
-				formRecommendationSet: set,
-				formBodies: bodies,
-			};
-		}
-		const rounds = Number.isFinite(group.roundsCount) ? group.roundsCount : 1;
-		if (rounds < 1 || rounds > MAX_ROUNDS) {
-			console.warn(`FORM swap rejected: roundsCount=${rounds} out of bounds [1, ${MAX_ROUNDS}]`);
-			return {
-				suggestion: { ...suggestion, ...fallbackReason("unsafe_rounds_count") },
-				formRecommendationSet: set,
-				formBodies: bodies,
-			};
-		}
-		for (const s of group.sets) {
-			const ic = Number.isFinite(s.intervalsCount) ? s.intervalsCount : 1;
-			if (ic < 0 || ic > MAX_INTERVALS) {
-				console.warn(
-					`FORM swap rejected: intervalsCount=${ic} out of bounds [0, ${MAX_INTERVALS}]`,
-				);
-				return {
-					suggestion: { ...suggestion, ...fallbackReason("unsafe_intervals_count") },
-					formRecommendationSet: set,
-					formBodies: bodies,
-				};
-			}
-			if (s.intervalDistance < 0 || s.intervalDistance > 5000) {
-				console.warn(`FORM swap rejected: intervalDistance=${s.intervalDistance} out of bounds`);
-				return {
-					suggestion: { ...suggestion, ...fallbackReason("unsafe_interval_distance") },
-					formRecommendationSet: set,
-					formBodies: bodies,
-				};
-			}
-			// rest.defined is summed into total_duration_secs and persisted to
-			// SQLite via the compliance table — an unbounded value from a
-			// compromised upstream could corrupt the duration column or
-			// overflow downstream consumers. Real values are 15–35 s; cap
-			// at 1 h (3600 s) — generous headroom for slow-lane endurance
-			// sessions while bounding the blast radius.
-			const restDefined = s.rest?.defined;
-			if (restDefined != null && (restDefined < 0 || restDefined > 3600)) {
-				console.warn(`FORM swap rejected: rest.defined=${restDefined} out of bounds [0, 3600]`);
-				return {
-					suggestion: { ...suggestion, ...fallbackReason("unsafe_rest_duration") },
-					formRecommendationSet: set,
-					formBodies: bodies,
-				};
-			}
-			expanded += rounds * ic;
-		}
-	}
-	if (expanded > MAX_TOTAL_EXPANDED_SEGMENTS) {
-		console.warn(
-			`FORM swap rejected: expanded=${expanded} exceeds MAX_TOTAL_EXPANDED_SEGMENTS=${MAX_TOTAL_EXPANDED_SEGMENTS}`,
-		);
-		return {
-			suggestion: { ...suggestion, ...fallbackReason("unsafe_total_segment_count") },
+			suggestion: { ...suggestion, ...fallbackReason(violation) },
 			formRecommendationSet: set,
 			formBodies: bodies,
 		};

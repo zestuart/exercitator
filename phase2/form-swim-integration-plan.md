@@ -1,6 +1,6 @@
 # Plan — FORM swim recommendations into Exercitator
 
-> **STATUS — 2026-05-26: shipped + live on ze**. All 7 phases complete; FORM-sourced swim prescriptions show on praescriptor.tail7ab379.ts.net/ze with the blue `Source: FORM · <title>` chip. `PROMUS_FORM_DSW_ENABLED=1` set on Cogitator after Promus #168 merged (Promus accepts `vendor_recommendation_set` in the DSW payload). Promus #167 (DSW read endpoint) still open — Phase 7 replay scaffold ready for HTTP-mode wiring once #167 ships.
+> **STATUS — 2026-05-27: arc closed, end-to-end byte-equal replay verified.** All 7 phases shipped + live on ze. FORM-sourced swim prescriptions render on praescriptor with the blue `Source: FORM · <title>` chip. Promus #168 (column rename) + #167 (read endpoint) both merged + deployed; `PROMUS_FORM_DSW_ENABLED=1` set on Cogitator. `scripts/replay-form-dsw.ts --user ze --date YYYY-MM-DD --sport Swim --source form` reconstructs a stored emission from Promus and produces SHA-256 byte-equal to the determinism-guard inline snapshot in `tests/web/form-render-integration.test.ts`. Promus DSW rows now also carry `exercitator_context.swim_css_m_per_s` so replay survives future CSS recalibration.
 
 **Created**: 2026-05-26, derived from `external-coach-integration-playbook.md` after Stryd arc.
 **Vendor**: FORM Athletica (swim goggles).
@@ -209,7 +209,7 @@ Fire-and-forget. Don't block the user-facing path on Promus latency.
 
 ---
 
-## Phase 7 — validation (**SCAFFOLD DONE** — commit 89ff94b; HTTP-replay mode awaits Promus #167)
+## Phase 7 — validation (**DONE** — file mode + Promus HTTP-replay mode both live; commit 89ff94b + 2026-05-27 follow-up)
 
 1. **Replay from Promus** once issue #167 (DSW read endpoint) ships. SQL-read the stored row, reconstruct `WorkoutSuggestion`, run through `buildFormDescription` + `buildIntervalsDescription`, hash both, expect equality.
 2. **Live verification**: ze does one swim sourced from FORM. Check: intervals.icu calendar event matches the FORM tile, FORM-text paste matches, compliance grading runs, Promus DSW row written.

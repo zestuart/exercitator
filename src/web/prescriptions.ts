@@ -164,6 +164,7 @@ export async function generatePrescriptions(
 			suggestion: swim,
 			formRecommendationSet: swap.formRecommendationSet,
 			formBodies: swap.formBodies,
+			swimSettings: data.swimSettings,
 		});
 	}
 

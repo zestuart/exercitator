@@ -179,6 +179,7 @@ export async function handleDashboard(
 						suggestion,
 						formRecommendationSet: swap.formRecommendationSet,
 						formBodies: swap.formBodies,
+						swimSettings: data.swimSettings,
 					});
 				}
 				suggestedResp = {

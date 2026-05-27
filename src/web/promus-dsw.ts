@@ -1,19 +1,23 @@
 /**
- * Promus DSW (Daily Suggested Workout) emitter.
+ * Promus DSW (Daily Suggested Workout) write + read.
  *
- * Fires a fire-and-forget `POST /api/ingest/dsw` to Promus after each
- * vendor-attempted prescription (Stryd for Run, FORM for Swim), so the
- * longitudinal fitness:readiness:workout corpus can correlate engine
- * inputs against the served candidates. The emitter NEVER blocks the
- * prescription — any error is logged via console.warn and dropped.
+ * `emitDsw` fires a fire-and-forget `POST /api/ingest/dsw` to Promus
+ * after each vendor-attempted prescription (Stryd for Run, FORM for
+ * Swim), so the longitudinal fitness:readiness:workout corpus can
+ * correlate engine inputs against the served candidates. The emitter
+ * NEVER blocks the prescription — any error is logged via
+ * `console.warn` and dropped.
  *
- * Endpoint contract:
- *   - issue #164 / PR #165 (merged 2026-05-25) — original Stryd path.
- *   - issue #168 (open 2026-05-26) — `stryd_recommendation_set` →
- *     `vendor_recommendation_set` rename; required for FORM emission.
- *     FORM emission stays gated behind `PROMUS_FORM_DSW_ENABLED=1`
- *     until #168 ships, so Exercitator can land the FORM-side code
- *     dark.
+ * `fetchDswRecord` is the read-side counterpart: GETs a single record
+ * by composite key via Promus #167. Used by the Phase 7 replay scaffold
+ * for byte-equal determinism verification.
+ *
+ * Endpoint history:
+ *   - issue #164 / PR #165 (merged 2026-05-25) — write side
+ *   - issue #168 (merged 2026-05-26) — column rename
+ *     `stryd_recommendation_set` → `vendor_recommendation_set`.
+ *     `PROMUS_FORM_DSW_ENABLED=1` set on Cogitator; FORM emission live.
+ *   - issue #167 (merged 2026-05-27) — read endpoints (single + range)
  *
  * Idempotency is enforced server-side via the natural key
  * `(user_id, date, sport, source)` — re-renders within a day upsert
@@ -22,7 +26,7 @@
  * user/date.
  */
 
-import type { WorkoutSuggestion } from "../engine/types.js";
+import type { SportSettings, WorkoutSuggestion } from "../engine/types.js";
 import type { FormRecommendationSet, FormWorkoutBody } from "../form/client.js";
 import type { StrydRecommendationSet } from "../stryd/client.js";
 
@@ -119,6 +123,11 @@ export type DswEmitInput =
 			formRecommendationSet: FormRecommendationSet | null;
 			/** Per-workout body map (FORM's two-call pattern). Null on errors. */
 			formBodies: Map<string, FormWorkoutBody> | null;
+			/** Swim sport settings (CSS m/s, HR zones) at decision time —
+			 *  persisted into `exercitator_context.swim_css_m_per_s` so
+			 *  replay-from-Promus produces byte-equal pace bands even if
+			 *  CSS is later recalibrated. */
+			swimSettings: SportSettings;
 	  };
 
 /** Wire shape — matches Promus's `DswIngest` request body.
@@ -228,7 +237,7 @@ function buildStrydDswPayload(input: Extract<DswEmitInput, { kind: "stryd" }>): 
 }
 
 function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): DswPayload | null {
-	const { userId, date, sport, suggestion, formRecommendationSet } = input;
+	const { userId, date, sport, suggestion, formRecommendationSet, swimSettings } = input;
 	const src = suggestion.prescriptionSource;
 
 	if (src !== "form" && src !== "exercitator-fallback") return null;
@@ -261,6 +270,7 @@ function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): Ds
 			// body verbatim via `formOriginalWorkout`. On fallback this
 			// is undefined; the context omits the field cleanly.
 			fallbackUsed ? undefined : suggestion.formOriginalWorkout,
+			swimSettings.threshold_pace ?? undefined,
 		),
 	};
 
@@ -310,6 +320,7 @@ function buildFormDswPayload(input: Extract<DswEmitInput, { kind: "form" }>): Ds
 function buildExercitatorContext(
 	suggestion: WorkoutSuggestion,
 	pickedWorkoutBody?: unknown,
+	swimCssMps?: number,
 ): unknown {
 	return {
 		readiness_score: suggestion.readiness_score,
@@ -319,12 +330,96 @@ function buildExercitatorContext(
 		vigil_status: suggestion.vigil?.status ?? null,
 		warnings_count: suggestion.warnings.length,
 		...(pickedWorkoutBody !== undefined && { picked_workout_body: pickedWorkoutBody }),
+		...(swimCssMps !== undefined && swimCssMps > 0 && { swim_css_m_per_s: swimCssMps }),
 		// TODO(phase4-deeper): plumb days_since_hard, fitness_ctl,
 		//  fatigue_atl, form_tsb, hrv_recent, sleep_debt_nights,
 		//  cross_training_strain, staleness_tier from the engine's
 		//  intermediate state. Open follow-up issue once the corpus has
 		//  enough records to motivate the schema.
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Read side — DswRecord type + fetchDswRecord helper (Promus #167)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire shape returned by `GET /api/dsw/{user_id}/{date}/{sport}/{source}`.
+ * Mirrors Promus's `DswRecord` struct after the #168 column rename:
+ *  - `stryd_recommendation_set` is gone; both Stryd and FORM rows now
+ *    surface under `vendor_recommendation_set`.
+ *  - `exercitator_context` is JSONB; on FORM rows it carries
+ *    `picked_workout_body` + `swim_css_m_per_s` for byte-equal replay.
+ */
+export interface DswRecord {
+	user_id: string;
+	date: string;
+	sport: string;
+	source: string;
+	category: string;
+	picked_workout_id: string | null;
+	picked_workout_title: string | null;
+	picked_workout_type: string | null;
+	picked_strategy_rationale: string | null;
+	fallback_used: boolean;
+	fallback_reason: string | null;
+	vendor_recommendation_set?: unknown;
+	exercitator_context?: unknown;
+	created_at: string;
+	updated_at: string;
+}
+
+/** Defensive 1 MB cap on the DSW read response — same posture as the
+ *  Stryd/FORM client JSON caps. Real records observed at ~3 KB; this
+ *  is generous headroom while bounding container-memory blast radius. */
+const MAX_DSW_RESPONSE_BYTES = 1024 * 1024;
+
+/**
+ * Retrieve a single DSW record by composite key. Returns `null` on 404,
+ * throws on other non-2xx + parse failures.
+ *
+ * Used by the Phase 7 replay scaffold (`scripts/replay-form-dsw.ts`)
+ * and future audit tooling that needs HTTP access to the corpus
+ * instead of direct SQL.
+ *
+ * Path components are validated before URL interpolation — even though
+ * the caller is internal, the cost is trivial and matches the
+ * defensive posture of the other clients in this codebase.
+ */
+export async function fetchDswRecord(
+	userId: string,
+	date: string,
+	sport: string,
+	source: string,
+): Promise<DswRecord | null> {
+	const token = promusToken();
+	if (!token) throw new Error("fetchDswRecord: PROMUS_API not configured");
+
+	if (!/^[A-Za-z0-9_-]+$/.test(userId)) throw new Error("fetchDswRecord: invalid userId");
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+		throw new Error("fetchDswRecord: invalid date (YYYY-MM-DD)");
+	if (!/^[A-Za-z]+$/.test(sport)) throw new Error("fetchDswRecord: invalid sport");
+	if (!/^[a-z]+$/.test(source)) throw new Error("fetchDswRecord: invalid source");
+
+	const url = `${promusUrl()}/api/dsw/${userId}/${date}/${sport}/${source}`;
+	const res = await fetch(url, {
+		headers: { Authorization: `Bearer ${token}` },
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	});
+	if (res.status === 404) return null;
+	if (!res.ok) {
+		const excerpt = await readBoundedText(res, 4096).catch(() => "");
+		const sanitised = excerpt.replace(/[\r\n\t\v\f]/g, " ").slice(0, 200);
+		throw new Error(`fetchDswRecord HTTP ${res.status}: ${sanitised}`);
+	}
+
+	const text = await readBoundedText(res, MAX_DSW_RESPONSE_BYTES);
+	if (text.length >= MAX_DSW_RESPONSE_BYTES) {
+		throw new Error(
+			`fetchDswRecord: response exceeds ${MAX_DSW_RESPONSE_BYTES} bytes — refusing to parse`,
+		);
+	}
+	return JSON.parse(text) as DswRecord;
 }
 
 /**

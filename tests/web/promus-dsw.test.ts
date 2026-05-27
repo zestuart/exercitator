@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutSuggestion } from "../../src/engine/types.js";
 import type { FormRecommendationSet, FormWorkoutBody } from "../../src/form/client.js";
 import type { StrydRecommendationSet } from "../../src/stryd/client.js";
-import { type DswEmitInput, buildDswPayload, emitDsw } from "../../src/web/promus-dsw.js";
+import {
+	type DswEmitInput,
+	type DswRecord,
+	buildDswPayload,
+	emitDsw,
+	fetchDswRecord,
+} from "../../src/web/promus-dsw.js";
 
 const FIXTURE_DIR = join(__dirname, "..", "fixtures", "stryd-recommendations");
 const FORM_FIXTURE_DIR = join(__dirname, "..", "fixtures", "form-personalized");
@@ -328,6 +334,11 @@ describe("buildDswPayload — FORM kind", () => {
 			}),
 			formRecommendationSet: FORM_SET,
 			formBodies: FORM_BODIES,
+			swimSettings: {
+				sport: "Swim",
+				threshold_pace: 0.94,
+				hr_zones: [118, 125, 131, 139, 143, 147, 161],
+			} as never,
 			...overrides,
 		};
 	}
@@ -392,6 +403,28 @@ describe("buildDswPayload — FORM kind", () => {
 		expect(body.setGroups.length).toBeGreaterThan(0);
 	});
 
+	it("bundles swim_css_m_per_s in exercitator_context for byte-equal pace-band replay", () => {
+		const out = buildDswPayload(baseFormInput());
+		const ctx = out?.exercitator_context as Record<string, unknown>;
+		// Persisted at decision time so replay produces identical pace
+		// bands even if CSS is later recalibrated in intervals.icu.
+		expect(ctx.swim_css_m_per_s).toBe(0.94);
+	});
+
+	it("omits swim_css_m_per_s when CSS is missing (threshold_pace null)", () => {
+		const out = buildDswPayload(
+			baseFormInput({
+				swimSettings: {
+					sport: "Swim",
+					threshold_pace: null,
+					hr_zones: null,
+				} as never,
+			}),
+		);
+		const ctx = out?.exercitator_context as Record<string, unknown>;
+		expect(ctx.swim_css_m_per_s).toBeUndefined();
+	});
+
 	it("builds a FORM fallback payload (network error) with empty set", () => {
 		const out = buildDswPayload(
 			baseFormInput({
@@ -435,6 +468,11 @@ describe("emitDsw — FORM gate (PROMUS_FORM_DSW_ENABLED)", () => {
 			}),
 			formRecommendationSet: FORM_SET,
 			formBodies: FORM_BODIES,
+			swimSettings: {
+				sport: "Swim",
+				threshold_pace: 0.94,
+				hr_zones: [118, 125, 131, 139, 143, 147, 161],
+			} as never,
 		};
 	}
 
@@ -485,5 +523,88 @@ describe("emitDsw — FORM gate (PROMUS_FORM_DSW_ENABLED)", () => {
 		mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
 		await emitDsw(baseInput());
 		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// fetchDswRecord — Promus #167 read side
+// ---------------------------------------------------------------------------
+
+describe("fetchDswRecord", () => {
+	function makeDswRecord(overrides: Partial<DswRecord> = {}): DswRecord {
+		return {
+			user_id: "ze",
+			date: "2026-05-26",
+			sport: "Swim",
+			source: "form",
+			category: "base",
+			picked_workout_id: FORM_ENDURANCE.id,
+			picked_workout_title: FORM_ENDURANCE.name,
+			picked_workout_type: "Endurance",
+			picked_strategy_rationale: "base: picked",
+			fallback_used: false,
+			fallback_reason: null,
+			vendor_recommendation_set: FORM_SET,
+			exercitator_context: {
+				readiness_score: 78,
+				cp_or_ftp: 0,
+				power_source: "none",
+				swim_css_m_per_s: 0.94,
+				picked_workout_body: FORM_ENDURANCE,
+			},
+			created_at: "2026-05-26T23:00:00Z",
+			updated_at: "2026-05-26T23:00:00Z",
+			...overrides,
+		};
+	}
+
+	it("GETs /api/dsw/{user}/{date}/{sport}/{source} with bearer auth", async () => {
+		const record = makeDswRecord();
+		mockFetch.mockResolvedValueOnce(
+			new Response(JSON.stringify(record), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		const out = await fetchDswRecord("ze", "2026-05-26", "Swim", "form");
+		expect(out?.source).toBe("form");
+		expect(out?.picked_workout_id).toBe(FORM_ENDURANCE.id);
+
+		const [url, init] = mockFetch.mock.calls[0];
+		expect(String(url)).toBe("https://promus.test.invalid/api/dsw/ze/2026-05-26/Swim/form");
+		expect((init as RequestInit).headers).toMatchObject({
+			Authorization: "Bearer test-token-abc",
+		});
+	});
+
+	it("returns null on 404", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
+		const out = await fetchDswRecord("ze", "2020-01-01", "Swim", "form");
+		expect(out).toBeNull();
+	});
+
+	it("throws with sanitised excerpt on non-2xx", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("server\r\nerror\nlog inject", { status: 500 }));
+		await expect(fetchDswRecord("ze", "2026-05-26", "Swim", "form")).rejects.toThrow(
+			/HTTP 500.*server\s+error\s+log inject/,
+		);
+	});
+
+	it.each([
+		["user-with-spaces ", "2026-05-26", "Swim", "form", "invalid userId"],
+		["ze", "26-05-2026", "Swim", "form", "invalid date"],
+		["ze", "2026-05-26", "Swim123", "form", "invalid sport"],
+		["ze", "2026-05-26", "Swim", "FORM", "invalid source"],
+	])("rejects malformed %s argument", async (u, d, sp, src, expected) => {
+		await expect(fetchDswRecord(u, d, sp, src)).rejects.toThrow(expected);
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
+	it("throws when PROMUS_API is not configured", async () => {
+		Reflect.deleteProperty(process.env, "promus-api");
+		Reflect.deleteProperty(process.env, "PROMUS_API");
+		await expect(fetchDswRecord("ze", "2026-05-26", "Swim", "form")).rejects.toThrow(
+			/PROMUS_API not configured/,
+		);
 	});
 });

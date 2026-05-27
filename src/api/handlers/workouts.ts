@@ -240,6 +240,7 @@ export async function handleWorkoutsSuggested(
 				suggestion,
 				formRecommendationSet: swap.formRecommendationSet,
 				formBodies: swap.formBodies,
+				swimSettings: data.swimSettings,
 			});
 		}
 
