@@ -17,6 +17,7 @@ import {
 } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
+import { plainQuiesMessage, quiesInvocation } from "../../web/invocations.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { cacheGet, cacheSet } from "../cache.js";
@@ -206,6 +207,38 @@ export async function handleWorkoutsSuggested(
 
 		if (suggestion.status === "awaiting_input") {
 			emitAwaitingInput(res, suggestion);
+			return;
+		}
+
+		// Suppression short-circuit: engine has flagged that the requested
+		// sport was already trained today. Skip the Stryd/FORM swap (the
+		// swap layers also defend, but skipping here avoids the upstream
+		// API call entirely). DSW emission for suppressed cards is deferred
+		// pending a Promus schema for the new source value.
+		if (suggestion.status === "already_trained" && suggestion.restMessage) {
+			const rm = suggestion.restMessage;
+			const invocations = user.profile.deities
+				? await quiesInvocation(rm.trainedSport, rm.alternateSport, localDateStr(now, tz))
+				: plainQuiesMessage(rm.trainedSport, rm.alternateSport);
+			const body: SuggestedResponse = {
+				generated_at: now.toISOString(),
+				user_id: user.profile.id,
+				date: localDateStr(now, tz),
+				tz,
+				status: "already_trained",
+				suggestion: suggestionToApi(suggestion, strydCp != null),
+				rest_message: {
+					trained_sport: rm.trainedSport,
+					trained_activity_id: rm.trainedActivityId,
+					trained_activity_type: rm.trainedActivityType,
+					trained_at: rm.trainedAt,
+					alternate_sport: rm.alternateSport,
+					invocation: invocations.opening,
+				},
+			};
+			cacheSet(user.profile.id, cacheKey, body);
+			res.setHeader("Cache-Control", "private, max-age=300");
+			jsonResponse(res, 200, body);
 			return;
 		}
 

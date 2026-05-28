@@ -20,6 +20,7 @@ import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
+import { plainQuiesMessage, quiesInvocation } from "../../web/invocations.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -147,6 +148,30 @@ export async function handleDashboard(
 					activity_name: suggestion.awaitingInput.activityName,
 					activity_type: suggestion.awaitingInput.activityType,
 					prompt: suggestion.awaitingInput.prompt,
+				};
+			} else if (suggestion.status === "already_trained" && suggestion.restMessage) {
+				// Suppression short-circuit (API 0.2.0). Skip vendor swap
+				// entirely. Render layer + native clients branch on the
+				// already_trained status and show the Quies card.
+				const rm = suggestion.restMessage;
+				const invocations = user.profile.deities
+					? await quiesInvocation(rm.trainedSport, rm.alternateSport, today)
+					: plainQuiesMessage(rm.trainedSport, rm.alternateSport);
+				suggestedResp = {
+					generated_at: now.toISOString(),
+					user_id: user.profile.id,
+					date: today,
+					tz,
+					status: "already_trained",
+					suggestion: suggestionToApi(suggestion, strydCp != null),
+					rest_message: {
+						trained_sport: rm.trainedSport,
+						trained_activity_id: rm.trainedActivityId,
+						trained_activity_type: rm.trainedActivityType,
+						trained_at: rm.trainedAt,
+						alternate_sport: rm.alternateSport,
+						invocation: invocations.opening,
+					},
 				};
 			} else {
 				// Same vendor-swap gating as Praescriptor / /workouts/suggested.

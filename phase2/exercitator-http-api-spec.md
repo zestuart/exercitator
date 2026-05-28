@@ -291,6 +291,38 @@ This wraps the existing DSW engine (`src/engine/suggest.ts`). v0.1's claim that 
 
 When the engine is blocked on cross-training RPE (see `WorkoutSuggestion.status === "awaiting_input"` in `src/engine/types.ts`), the response is **HTTP 409** with the error envelope from §4. Clients submit RPE via §5.5 and re-poll.
 
+**Same-sport already-trained suppression (added in API 0.2.0)**. When an activity matching the requested sport (Run: `Run|VirtualRun|TrailRun|Treadmill`; Swim: `Swim|OpenWaterSwim|VirtualSwim`) is already present for today, the response is **HTTP 200** with `status: "already_trained"` and an additional top-level `rest_message` block:
+
+```json
+{
+  "generated_at": "2026-05-27T22:00:00Z",
+  "user_id": "ze",
+  "date": "2026-05-27",
+  "tz": "America/Los_Angeles",
+  "status": "already_trained",
+  "suggestion": {
+    "sport": "Run",
+    "category": "rest",
+    "title": "Run already complete today",
+    "rationale": "Already trained Run today (Run). Rest, or swap to Swim.",
+    "total_duration_s": 0,
+    "estimated_load": 0,
+    "segments": [],
+    "...": "rest of SuggestedWorkoutBody is present so older clients degrade gracefully"
+  },
+  "rest_message": {
+    "trained_sport": "Run",
+    "trained_activity_id": "i151968721",
+    "trained_activity_type": "Run",
+    "trained_at": "2026-05-27T07:51:34",
+    "alternate_sport": "Swim",
+    "invocation": "Before Quies, goddess of repose, the day's work is set down. Diana releases you. Seek Amphitrite, or seek nothing at all."
+  }
+}
+```
+
+`alternate_sport` is the opposite sport unless that sport has also been trained today (then `null` — rest-only). `invocation` is the server-rendered Quies opening (deity profile) or plain-text equivalent (Pam) — clients may display it verbatim or substitute their own. Trigger is **any activity** of the matching sport since local midnight — no TSS / duration threshold. Cache lifetime is the same as the regular `ready` response (`Cache-Control: private, max-age=300`), so the suppression persists until 0500 local tomorrow without further server load.
+
 #### `GET /api/users/:userId/workouts/:id`
 
 Returns the full structured workout — steps, targets, source. Polymorphic targets per §5.3.4.

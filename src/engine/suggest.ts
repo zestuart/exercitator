@@ -25,6 +25,7 @@ import { selectTerrain } from "./terrain-selector.js";
 import type {
 	ActivitySummary,
 	PowerContext,
+	RestMessage,
 	SportSettings,
 	VigilSummary,
 	WellnessRecord,
@@ -140,6 +141,34 @@ function augmentStrydRpe(
 }
 
 // ---------------------------------------------------------------------------
+// Same-sport already-trained-today suppression
+// ---------------------------------------------------------------------------
+
+/**
+ * Activity types that count as "the user already did Run today" / "Swim today".
+ * Must stay in sync with the analogous lists in readiness.ts / sport-selector.ts /
+ * staleness.ts / workout-selector.ts — there is no shared module yet.
+ */
+const RUN_TYPES_FOR_SUPPRESSION = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
+const SWIM_TYPES_FOR_SUPPRESSION = ["Swim", "OpenWaterSwim", "VirtualSwim"];
+
+function findTodayActivityForSport(
+	activities: ActivitySummary[],
+	sport: "Run" | "Swim",
+	now: Date,
+	tz?: string,
+): ActivitySummary | null {
+	const today = localDateStr(now, tz);
+	const types = sport === "Run" ? RUN_TYPES_FOR_SUPPRESSION : SWIM_TYPES_FOR_SUPPRESSION;
+	for (const a of activities) {
+		if (!types.includes(a.type)) continue;
+		if (a.start_date_local.slice(0, 10) !== today) continue;
+		return a;
+	}
+	return null;
+}
+
+// ---------------------------------------------------------------------------
 // Pipeline for a fixed sport
 // ---------------------------------------------------------------------------
 
@@ -183,6 +212,45 @@ export function suggestWorkoutFromData(
 		ftp: powerContext.ftp > 0 ? powerContext.ftp : undefined,
 		sport,
 	});
+
+	// Suppression short-circuit: if the user has already done the requested
+	// sport today, skip the engine pipeline entirely (no Vigil, no category
+	// resolution, no Stryd/FORM swap downstream). The renderer shows the
+	// Quies card with a swap CTA instead of segments. Readiness is computed
+	// above so the readiness panel still has its score.
+	const trainedToday = findTodayActivityForSport(activities, sport, now, tz);
+	if (trainedToday) {
+		const otherSport: "Run" | "Swim" = sport === "Run" ? "Swim" : "Run";
+		const otherTrained = findTodayActivityForSport(activities, otherSport, now, tz);
+		const restMessage: RestMessage = {
+			trainedSport: sport,
+			trainedActivityId: trainedToday.id,
+			trainedActivityType: trainedToday.type,
+			trainedAt: trainedToday.start_date_local,
+			alternateSport: otherTrained ? null : otherSport,
+		};
+		return {
+			sport,
+			category: "rest",
+			title: `${sport} already complete today`,
+			rationale:
+				restMessage.alternateSport === null
+					? "Both sports trained today — rest is the prescription."
+					: `Already trained ${sport} today (${trainedToday.type}). Rest, or swap to ${restMessage.alternateSport}.`,
+			total_duration_secs: 0,
+			estimated_load: 0,
+			segments: [],
+			readiness_score: readiness.score,
+			sport_selection_reason: sportSelectionReason ?? `Forced: ${sport}`,
+			terrain: "any",
+			terrain_rationale: "Suppressed — already trained today",
+			power_context: powerContext,
+			warnings: [],
+			status: "already_trained",
+			restMessage,
+		};
+	}
+
 	const staleness = computeStaleness(activities, sport, now);
 
 	// Vigil: biomechanical deviation alert (running sports only, requires Stryd metrics in DB)

@@ -22,7 +22,12 @@ import type { IntervalsClient } from "../intervals.js";
 import { checkRate } from "../rate-limit.js";
 import type { StrydClient } from "../stryd/client.js";
 import { DEFAULT_USER, type UserProfile, getUserProfile } from "../users.js";
-import { generateInvocations, plainInvocations } from "./invocations.js";
+import {
+	generateInvocations,
+	plainInvocations,
+	plainQuiesMessage,
+	quiesInvocation,
+} from "./invocations.js";
 import { generatePrescriptions, invalidateCache } from "./prescriptions.js";
 import { renderPage } from "./render.js";
 import { applyBaseSecurityHeaders, applyHtmlSecurityHeaders } from "./security-headers.js";
@@ -498,29 +503,53 @@ async function handleMainPage(
 	const prescriptions = await generatePrescriptions(client, profile, strydClient, formClient, tz);
 	const today = localDateStr(new Date(), tz);
 
-	// Generate invocations for each sport this user has
+	// Generate invocations for each sport this user has. The suppression
+	// short-circuit (status === "already_trained") swaps the deity from
+	// Diana/Amphitrite to Quies so the card narrates "rest, or swap".
 	const runInvocations = prescriptions.run
-		? profile.deities
-			? await generateInvocations(
-					"Run",
-					prescriptions.run.category,
-					prescriptions.run.readiness_score,
-					prescriptions.run.warnings,
-					today,
-				)
-			: plainInvocations("Run")
+		? prescriptions.run.status === "already_trained" && prescriptions.run.restMessage
+			? profile.deities
+				? await quiesInvocation(
+						prescriptions.run.restMessage.trainedSport,
+						prescriptions.run.restMessage.alternateSport,
+						today,
+					)
+				: plainQuiesMessage(
+						prescriptions.run.restMessage.trainedSport,
+						prescriptions.run.restMessage.alternateSport,
+					)
+			: profile.deities
+				? await generateInvocations(
+						"Run",
+						prescriptions.run.category,
+						prescriptions.run.readiness_score,
+						prescriptions.run.warnings,
+						today,
+					)
+				: plainInvocations("Run")
 		: null;
 
 	const swimInvocations = prescriptions.swim
-		? profile.deities
-			? await generateInvocations(
-					"Swim",
-					prescriptions.swim.category,
-					prescriptions.swim.readiness_score,
-					prescriptions.swim.warnings,
-					today,
-				)
-			: plainInvocations("Swim")
+		? prescriptions.swim.status === "already_trained" && prescriptions.swim.restMessage
+			? profile.deities
+				? await quiesInvocation(
+						prescriptions.swim.restMessage.trainedSport,
+						prescriptions.swim.restMessage.alternateSport,
+						today,
+					)
+				: plainQuiesMessage(
+						prescriptions.swim.restMessage.trainedSport,
+						prescriptions.swim.restMessage.alternateSport,
+					)
+			: profile.deities
+				? await generateInvocations(
+						"Swim",
+						prescriptions.swim.category,
+						prescriptions.swim.readiness_score,
+						prescriptions.swim.warnings,
+						today,
+					)
+				: plainInvocations("Swim")
 		: null;
 
 	// Load compliance data for yesterday's prescriptions (for confirmation UI)

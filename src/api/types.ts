@@ -170,13 +170,36 @@ export interface SuggestedWorkoutBody {
 	form_pick_rationale?: string;
 }
 
+/**
+ * Suppression block emitted alongside `suggestion` when the requested sport
+ * has already been trained today. `suggestion` is still present (with
+ * segments: [], category: "rest") so older clients degrade gracefully;
+ * newer clients should branch on `status === "already_trained"` and render
+ * `rest_message` instead of the segment list. `invocation` is the
+ * server-generated Quies opening line for clients that want to display the
+ * pre-rendered deity (or plain, for non-deity profiles) message; clients
+ * may ignore it and render their own.
+ *
+ * Introduced in API version 0.2.0.
+ */
+export interface RestMessageBlock {
+	trained_sport: "Run" | "Swim";
+	trained_activity_id: string;
+	trained_activity_type: string;
+	trained_at: string;
+	alternate_sport: "Run" | "Swim" | null;
+	invocation: string;
+}
+
 export interface SuggestedResponse {
 	generated_at: string;
 	user_id: string;
 	date: string;
 	tz: string;
-	status: "ready";
+	status: "ready" | "already_trained";
 	suggestion: SuggestedWorkoutBody;
+	/** Present iff status === "already_trained". Introduced in 0.2.0. */
+	rest_message?: RestMessageBlock;
 }
 
 export interface TodayScheduledWorkout {

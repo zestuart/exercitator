@@ -56,7 +56,7 @@ const strydClient =
 function createMcpServer(): McpServer {
 	const server = new McpServer({
 		name: "exercitator",
-		version: "0.1.0",
+		version: "0.2.0",
 	});
 
 	registerAthleteTools(server, intervalsClient);
@@ -78,7 +78,7 @@ if (TRANSPORT === "stdio") {
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 	console.error("Exercitator MCP server running on stdio");
-	startApiServer({ defaultHost: "127.0.0.1", version: "0.1.0" });
+	startApiServer({ defaultHost: "127.0.0.1", version: "0.2.0" });
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +199,5 @@ if (TRANSPORT === "streamable-http") {
 		);
 	});
 
-	startApiServer({ defaultHost: "0.0.0.0", version: "0.1.0" });
+	startApiServer({ defaultHost: "0.0.0.0", version: "0.2.0" });
 }

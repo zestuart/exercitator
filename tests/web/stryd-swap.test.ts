@@ -60,7 +60,6 @@ function baseSuggestion(overrides: Partial<WorkoutSuggestion> = {}): WorkoutSugg
 	};
 }
 
-
 describe("applyStrydRecommendation", () => {
 	it("category 'rest' returns the engine suggestion tagged 'exercitator' (no Stryd call)", async () => {
 		const client = await loggedInClient();

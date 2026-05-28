@@ -328,6 +328,7 @@ export async function applyStrydSwapIfEnabled(
 	if (
 		suggestion.sport !== "Run" ||
 		suggestion.status === "awaiting_input" ||
+		suggestion.status === "already_trained" ||
 		profile.runRecommendationSource !== "stryd" ||
 		!strydClient ||
 		!(suggestion.power_context.ftp > 0)

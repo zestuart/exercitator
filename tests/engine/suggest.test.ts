@@ -120,6 +120,260 @@ describe("suggestWorkout integration", () => {
 		expect(withCp.power_context.source).toBe("stryd");
 	});
 
+	it("short-circuits to already_trained when a Run already exists today", () => {
+		const now = new Date("2026-05-27T18:00:00-07:00");
+		const todayLocal = "2026-05-27T07:51:34";
+		const data = {
+			activities: [
+				{
+					id: "i151968721",
+					start_date_local: todayLocal,
+					type: "Run",
+					moving_time: 2262,
+					distance: 6203.77,
+					icu_training_load: 54,
+					icu_atl: 38.9,
+					icu_ctl: 25.7,
+					average_heartrate: 145,
+					max_heartrate: 159,
+					icu_hr_zone_times: null,
+					perceived_exertion: 3,
+					power_load: 54,
+					hr_load: 43,
+					icu_weighted_avg_watts: 266,
+					icu_average_watts: 264,
+					icu_ftp: 286,
+					icu_rolling_ftp: 315,
+					power_field: "Power",
+					stream_types: ["Power", "StrydLSS"],
+					device_name: "Garmin fenix 8",
+					total_elevation_gain: 111,
+					icu_intensity: 93,
+					external_id: "23032918336",
+					source: "GARMIN_CONNECT",
+					session_rpe: 113,
+					kg_lifted: null,
+				},
+			],
+			wellness: [],
+			runSettings: {
+				type: "Run",
+				ftp: 286,
+				lthr: 163,
+				threshold_pace: null,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+			swimSettings: {
+				type: "Swim",
+				ftp: null,
+				lthr: 140,
+				threshold_pace: 106,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+		};
+
+		const result = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			now,
+			undefined,
+			undefined,
+			"0",
+			"America/Los_Angeles",
+		);
+
+		expect(result.status).toBe("already_trained");
+		expect(result.restMessage).toBeDefined();
+		expect(result.restMessage?.trainedSport).toBe("Run");
+		expect(result.restMessage?.trainedActivityId).toBe("i151968721");
+		expect(result.restMessage?.alternateSport).toBe("Swim");
+		expect(result.segments).toEqual([]);
+		expect(result.category).toBe("rest");
+		expect(result.total_duration_secs).toBe(0);
+	});
+
+	it("sets alternateSport to null when both sports trained today", () => {
+		const now = new Date("2026-05-27T20:00:00-07:00");
+		const data = {
+			activities: [
+				{
+					id: "run1",
+					start_date_local: "2026-05-27T07:00:00",
+					type: "Run",
+					moving_time: 1800,
+					distance: 5000,
+					icu_training_load: 40,
+					icu_atl: 30,
+					icu_ctl: 25,
+					average_heartrate: 140,
+					max_heartrate: 155,
+					icu_hr_zone_times: null,
+					perceived_exertion: 3,
+					power_load: 40,
+					hr_load: 35,
+					icu_weighted_avg_watts: null,
+					icu_average_watts: null,
+					icu_ftp: null,
+					icu_rolling_ftp: null,
+					power_field: null,
+					stream_types: null,
+					device_name: null,
+					total_elevation_gain: 0,
+					icu_intensity: null,
+					external_id: null,
+					source: null,
+					session_rpe: null,
+					kg_lifted: null,
+				},
+				{
+					id: "swim1",
+					start_date_local: "2026-05-27T18:00:00",
+					type: "Swim",
+					moving_time: 1500,
+					distance: 1500,
+					icu_training_load: 20,
+					icu_atl: 30,
+					icu_ctl: 25,
+					average_heartrate: 130,
+					max_heartrate: 145,
+					icu_hr_zone_times: null,
+					perceived_exertion: null,
+					power_load: null,
+					hr_load: 20,
+					icu_weighted_avg_watts: null,
+					icu_average_watts: null,
+					icu_ftp: null,
+					icu_rolling_ftp: null,
+					power_field: null,
+					stream_types: null,
+					device_name: null,
+					total_elevation_gain: 0,
+					icu_intensity: null,
+					external_id: null,
+					source: null,
+					session_rpe: null,
+					kg_lifted: null,
+				},
+			],
+			wellness: [],
+			runSettings: {
+				type: "Run",
+				ftp: 286,
+				lthr: 163,
+				threshold_pace: null,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+			swimSettings: {
+				type: "Swim",
+				ftp: null,
+				lthr: 140,
+				threshold_pace: 106,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+		};
+
+		const runResult = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			now,
+			undefined,
+			undefined,
+			"0",
+			"America/Los_Angeles",
+		);
+		expect(runResult.status).toBe("already_trained");
+		expect(runResult.restMessage?.alternateSport).toBe(null);
+
+		const swimResult = suggestWorkoutFromData(
+			data as never,
+			"Swim",
+			now,
+			undefined,
+			undefined,
+			"0",
+			"America/Los_Angeles",
+		);
+		expect(swimResult.status).toBe("already_trained");
+		expect(swimResult.restMessage?.alternateSport).toBe(null);
+	});
+
+	it("does not short-circuit when only the other sport was trained today", () => {
+		const now = new Date("2026-05-27T18:00:00-07:00");
+		const data = {
+			activities: [
+				{
+					id: "swim1",
+					start_date_local: "2026-05-27T07:00:00",
+					type: "Swim",
+					moving_time: 1500,
+					distance: 1500,
+					icu_training_load: 20,
+					icu_atl: 30,
+					icu_ctl: 25,
+					average_heartrate: 130,
+					max_heartrate: 145,
+					icu_hr_zone_times: null,
+					perceived_exertion: 3,
+					power_load: null,
+					hr_load: 20,
+					icu_weighted_avg_watts: null,
+					icu_average_watts: null,
+					icu_ftp: null,
+					icu_rolling_ftp: null,
+					power_field: null,
+					stream_types: null,
+					device_name: null,
+					total_elevation_gain: 0,
+					icu_intensity: null,
+					external_id: null,
+					source: null,
+					session_rpe: null,
+					kg_lifted: null,
+				},
+			],
+			wellness: [],
+			runSettings: {
+				type: "Run",
+				ftp: 286,
+				lthr: 163,
+				threshold_pace: null,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+			swimSettings: {
+				type: "Swim",
+				ftp: null,
+				lthr: 140,
+				threshold_pace: 106,
+				hr_zones: null,
+				pace_zones: null,
+				power_zones: null,
+			},
+		};
+
+		const result = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			now,
+			undefined,
+			undefined,
+			"0",
+			"America/Los_Angeles",
+		);
+
+		expect(result.status).not.toBe("already_trained");
+		expect(result.restMessage).toBeUndefined();
+	});
+
 	it("trusts Stryd CP regardless of age — no rolling-FTP override", () => {
 		const data = {
 			activities: loadFixture("activities-14d.json"),

@@ -368,7 +368,7 @@ function renderCard(
 	const sportEndpoint = suggestion.sport.toLowerCase();
 
 	return `
-	<div class="card ${sportClass}" style="--card-accent: ${accent}">
+	<div class="card ${sportClass}" id="card-${sportEndpoint}" style="--card-accent: ${accent}">
 		<div class="card-accent"></div>
 		<div class="card-body">
 			<div class="card-header">
@@ -409,6 +409,54 @@ function renderCard(
 				${formText ? `<button class="send-btn form-btn" data-form-text="${escapeHtml(formText)}" style="--btn-accent: #c8d600">&#x1F4CB; Copy FORM Text</button>` : ""}
 			</div>
 			${renderComplianceSection(compliance, sport, sportEndpoint)}
+		</div>
+	</div>`;
+}
+
+function renderQuiesCard(
+	suggestion: WorkoutSuggestion,
+	invocations: Invocations,
+	sportClass: string,
+	accent: string,
+): string {
+	const sportTag = suggestion.sport === "Run" ? "CURSUS" : "NATATIO";
+	const rm = suggestion.restMessage;
+	const alternate = rm?.alternateSport ?? null;
+	const swapCta = alternate
+		? `<a class="quies-swap" href="#card-${alternate.toLowerCase()}">Swap to ${alternate} &darr;</a>`
+		: "";
+
+	const trainedAtPretty = rm?.trainedAt
+		? `<span class="quies-trained-at">Logged today: ${escapeHtml(rm.trainedActivityType)} at ${escapeHtml(rm.trainedAt.slice(11, 16))}</span>`
+		: "";
+
+	return `
+	<div class="card ${sportClass} card-quies" id="card-${suggestion.sport.toLowerCase()}" style="--card-accent: ${accent}">
+		<div class="card-accent"></div>
+		<div class="card-body">
+			<div class="card-header">
+				<div class="card-header-top">
+					<span class="sport-tag">${sportTag}</span>
+				</div>
+				<h2 class="card-title">${escapeHtml(suggestion.title)}</h2>
+				<div class="card-meta">
+					<span class="meta-pill meta-pill-rest">rest</span>
+					${trainedAtPretty}
+				</div>
+			</div>
+
+			<blockquote class="invocation invocation-quies" style="border-left-color: ${accent}">
+				<p>${escapeHtml(invocations.opening)}</p>
+			</blockquote>
+
+			<div class="quies-actions">
+				${swapCta}
+			</div>
+
+			<div class="rationale-section">
+				<h3 class="rationale-header">${escapeHtml(invocations.rationale_header)}</h3>
+				<p class="rationale-text">${escapeHtml(suggestion.rationale)}</p>
+			</div>
 		</div>
 	</div>`;
 }
@@ -494,31 +542,38 @@ export function renderPage(data: RenderData): string {
 	const showStryd = profile.stryd;
 	const runCard =
 		data.run && data.runInvocations
-			? renderCard(
-					data.run,
-					data.runInvocations,
-					"card-run",
-					runAccent,
-					data.runHrZones,
-					showStryd,
-					runOnlyWarnings,
-					data.runCompliance,
-				)
+			? data.run.status === "already_trained"
+				? renderQuiesCard(data.run, data.runInvocations, "card-run", runAccent)
+				: renderCard(
+						data.run,
+						data.runInvocations,
+						"card-run",
+						runAccent,
+						data.runHrZones,
+						showStryd,
+						runOnlyWarnings,
+						data.runCompliance,
+					)
 			: "";
-	const swimFormText = data.swim ? buildFormDescription(data.swim) : undefined;
+	const swimFormText =
+		data.swim && data.swim.status !== "already_trained"
+			? buildFormDescription(data.swim)
+			: undefined;
 	const swimCard =
 		data.swim && data.swimInvocations
-			? renderCard(
-					data.swim,
-					data.swimInvocations,
-					"card-swim",
-					swimAccent,
-					data.swimHrZones,
-					false,
-					swimOnlyWarnings,
-					data.swimCompliance,
-					swimFormText,
-				)
+			? data.swim.status === "already_trained"
+				? renderQuiesCard(data.swim, data.swimInvocations, "card-swim", swimAccent)
+				: renderCard(
+						data.swim,
+						data.swimInvocations,
+						"card-swim",
+						swimAccent,
+						data.swimHrZones,
+						false,
+						swimOnlyWarnings,
+						data.swimCompliance,
+						swimFormText,
+					)
 			: "";
 
 	// Apollo's closing — rendered once at the bottom of the page
@@ -920,6 +975,49 @@ body {
 	padding: 1rem;
 	line-height: 1.5;
 	border: none;
+}
+
+/* --- Quies suppression card --- */
+
+.card-quies .meta-pill-rest {
+	background: rgba(180, 180, 180, 0.15);
+	color: #888;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.quies-trained-at {
+	font-size: 0.75rem;
+	color: #888;
+	font-family: var(--font-mono);
+	margin-left: 0.5rem;
+}
+
+.invocation-quies {
+	font-size: 1.05rem;
+	padding: 1rem 1.2rem;
+}
+
+.quies-actions {
+	margin: 1.2rem 0 0.5rem;
+	text-align: center;
+}
+
+.quies-swap {
+	display: inline-block;
+	padding: 0.5rem 1.2rem;
+	border-radius: 6px;
+	border: 1px solid var(--gold);
+	color: var(--gold);
+	text-decoration: none;
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 0.95rem;
+	transition: background 0.2s ease;
+}
+
+.quies-swap:hover {
+	background: var(--gold-glow);
 }
 
 /* --- Warnings --- */

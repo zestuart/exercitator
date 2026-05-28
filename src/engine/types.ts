@@ -152,6 +152,20 @@ export interface AwaitingInput {
 	prompt: string;
 }
 
+/**
+ * Suppression metadata when the requested sport is already trained today.
+ * `alternateSport` is the opposite sport — null if both sports have already
+ * been trained today (rest-only). Render layer may further hide the swap
+ * CTA when the user's profile doesn't have the alternate sport configured.
+ */
+export interface RestMessage {
+	trainedSport: "Run" | "Swim";
+	trainedActivityId: string;
+	trainedActivityType: string;
+	trainedAt: string;
+	alternateSport: "Run" | "Swim" | null;
+}
+
 /** Complete workout suggestion returned by the engine */
 export interface WorkoutSuggestion {
 	sport: "Run" | "Swim";
@@ -168,10 +182,19 @@ export interface WorkoutSuggestion {
 	power_context: PowerContext;
 	warnings: string[];
 	vigil?: VigilSummary;
-	/** 'ready' (default) or 'awaiting_input' when cross-training strain is unknown. */
-	status?: "ready" | "awaiting_input";
+	/**
+	 * Suggestion status:
+	 *   'ready'            — engine produced a prescription (default).
+	 *   'awaiting_input'   — cross-training strain unknown; blocked on RPE.
+	 *   'already_trained'  — requested sport already done today; show the
+	 *                        Quies suppression card and the swap CTA
+	 *                        (renderer hides segments).
+	 */
+	status?: "ready" | "awaiting_input" | "already_trained";
 	/** Present when status is 'awaiting_input'. */
 	awaitingInput?: AwaitingInput;
+	/** Present when status is 'already_trained'. */
+	restMessage?: RestMessage;
 	/**
 	 * Where the segments came from. Set by Praescriptor's Stryd swap layer
 	 * (src/web/prescriptions.ts) when the user has `runRecommendationSource:
