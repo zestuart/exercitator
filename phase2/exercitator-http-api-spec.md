@@ -1,10 +1,11 @@
 # Exercitator HTTP API — Service Specification
 
-**Version**: 0.2 (2026-04-24)
+**Version**: 0.2 (2026-04-24); see also v0.2.1 amendments described inline (suppression status + invocation block, both 2026-05-27)
 **Status**: draft — supersedes v0.1 (2026-04-23)
 **Purpose**: Define the HTTP surface Exercitator exposes for native clients (primarily Excubitor iOS). Exercitator remains an MCP server for LLM-facing consumers; this document adds a parallel REST API so phones and watches can read training state without spinning up an MCP client.
 
 **v0.2 deltas from v0.1**: see §13.
+**v0.2.0 / v0.2.1 deltas** (2026-05-27): documented inline in §5.3.3 (`status: "already_trained"` + `rest_message` block; `invocation` block on every `ready` response). Cross-repo migration notes for Excubitor live at `notes/excubitor/api-0.2.0.md` and `notes/excubitor/api-0.2.1.md`.
 
 **Authoritative references**:
 - NOMENCLATOR entry: `EXERCITATOR` (MCP server: intervals.icu training analytics)
@@ -17,7 +18,7 @@
 
 Exercitator ingests analytics from intervals.icu and computes the athlete's training state: critical power (CP) from Stryd, readiness score, biomechanical injury warnings (Vigil), scheduled and prescribed workouts, and compliance against past prescriptions. The MCP surface (`src/tools/`) exposes these to LLMs. The Praescriptor surface (`src/web/`) renders them as HTML for tailnet-hosted browsers. This new REST surface exposes the same facts to native clients so the Excubitor iOS Exercise tab (`Exercitatio`) can display them without round-tripping through an LLM or scraping HTML.
 
-**Host**: Arca Ingens (QNAP NAS), inside the existing `exercitator-mcp` container (single binary, shared data model).
+**Host**: Cogitator (Mac Mini M4 Pro), inside the existing `exercitator-mcp` container (single binary, shared data model). Migrated from Arca Ingens 2026-04-04; see `deployment.md`.
 **Runtime**: Node.js + TypeScript — same as the existing MCP server. Config keys use no language-specific prefix (no `RUST_LOG`).
 **Deployment**: tailnet-only via a new Tailscale sidecar mirroring Praescriptor's pattern. Hostname `exercitator-api` → `exercitator-api.tail7ab379.ts.net`. The existing public MCP funnel is unchanged.
 **Clients**: Excubitor iOS (primary), watchOS (v2.5, forwarded via iOS companion).

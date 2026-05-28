@@ -24,5 +24,7 @@ Index of all subsidiary documentation files. See `CLAUDE.md` for core rules, wor
 | `phase3/exercitator-http-api-v0.3-delta.md` | HTTP API v0.3 — canonical wire contract (push-to-stryd, form-text) |
 | `phase3/exercitator-http-api-v0.3-amendment-proposal-2026-05-03.md` | Excubitor amendment proposal + §7 team response (calendar_id type drift) |
 | `phase3/exercitator-http-api-v0.3-amendment-resolution-2026-05-03.md` | Resolution memo for Excubitor team — types, struct template, verification (commit `bf1393b`) |
+| `notes/excubitor/api-0.2.0.md` | Cross-repo migration note for Excubitor/Nunc: decode `status: "already_trained"` + `rest_message` block |
+| `notes/excubitor/api-0.2.1.md` | Cross-repo migration note for Excubitor/Nunc: decode `invocation` block on every `ready` response |
 | `praescriptor-web-spec.md` | Praescriptor web UI specification |
 | `exercitator-api-spec.md` | HTTP API v0.1 draft (superseded — historical scaffolding only) |
