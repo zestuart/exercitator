@@ -285,9 +285,16 @@ This wraps the existing DSW engine (`src/engine/suggest.ts`). v0.1's claim that 
         "rest_duration_s": 120
       }
     ]
+  },
+  "invocation": {
+    "opening": "Before Diana, patroness of the swift and the steadfast, this prescription is laid. May each stride be measured, each breath purposeful, and the body obedient to the work set before it.",
+    "rationale_header": "Under Minerva's Counsel",
+    "closing": "Let Apollo, keeper of measure and truth, confirm through the data what the body already knows. The work is prescribed; the execution is yours."
   }
 }
 ```
+
+**`invocation` (added in API 0.2.1)**: server-rendered liturgical narration. Populated on every `status: "ready"` response. For profiles with `deities: true` (currently ze) the text invokes Diana (Run) or Amphitrite (Swim) as patron, Minerva for the rationale header, and Apollo for the closing — dynamically generated via Anthropic API when `ANTHROPIC_API_KEY` is set, static fallback otherwise. For `deities: false` profiles (Pam), the same shape carries plain English. Cache is shared with Praescriptor (sport + category + date key), so first-of-day calls cost one Anthropic round-trip and subsequent same-day calls are free. Clients may render it verbatim, substitute their own narration, or ignore it.
 
 When the engine is blocked on cross-training RPE (see `WorkoutSuggestion.status === "awaiting_input"` in `src/engine/types.ts`), the response is **HTTP 409** with the error envelope from §4. Clients submit RPE via §5.5 and re-poll.
 

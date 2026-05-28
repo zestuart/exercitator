@@ -20,7 +20,12 @@ import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
-import { plainQuiesMessage, quiesInvocation } from "../../web/invocations.js";
+import {
+	generateInvocations,
+	plainInvocations,
+	plainQuiesMessage,
+	quiesInvocation,
+} from "../../web/invocations.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { apiError, jsonResponse } from "../errors.js";
@@ -207,6 +212,18 @@ export async function handleDashboard(
 						swimSettings: data.swimSettings,
 					});
 				}
+				// API 0.2.1: include the patron-deity / plain invocation in
+				// the wire response so native clients (Excubitor) can render
+				// the same liturgical frame as Praescriptor.
+				const invocation = user.profile.deities
+					? await generateInvocations(
+							suggestion.sport,
+							suggestion.category,
+							suggestion.readiness_score,
+							suggestion.warnings,
+							today,
+						)
+					: plainInvocations(suggestion.sport);
 				suggestedResp = {
 					generated_at: now.toISOString(),
 					user_id: user.profile.id,
@@ -214,6 +231,7 @@ export async function handleDashboard(
 					tz,
 					status: "ready",
 					suggestion: suggestionToApi(suggestion, strydCp != null),
+					invocation,
 				};
 			}
 		} catch (err) {

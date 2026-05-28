@@ -17,7 +17,12 @@ import {
 } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
-import { plainQuiesMessage, quiesInvocation } from "../../web/invocations.js";
+import {
+	generateInvocations,
+	plainInvocations,
+	plainQuiesMessage,
+	quiesInvocation,
+} from "../../web/invocations.js";
 import { emitDsw } from "../../web/promus-dsw.js";
 import { applyStrydSwapIfEnabled } from "../../web/stryd-swap.js";
 import { cacheGet, cacheSet } from "../cache.js";
@@ -277,6 +282,19 @@ export async function handleWorkoutsSuggested(
 			});
 		}
 
+		// API 0.2.1: surface the same deity/plain invocations Praescriptor
+		// renders, sharing the module-level cache so first-of-day calls
+		// pay one Anthropic round-trip and subsequent calls are free.
+		const invocation = user.profile.deities
+			? await generateInvocations(
+					suggestion.sport,
+					suggestion.category,
+					suggestion.readiness_score,
+					suggestion.warnings,
+					localDateStr(now, tz),
+				)
+			: plainInvocations(suggestion.sport);
+
 		const body: SuggestedResponse = {
 			generated_at: now.toISOString(),
 			user_id: user.profile.id,
@@ -284,6 +302,7 @@ export async function handleWorkoutsSuggested(
 			tz,
 			status: "ready",
 			suggestion: suggestionToApi(suggestion, strydCp != null),
+			invocation,
 		};
 
 		cacheSet(user.profile.id, cacheKey, body);

@@ -191,6 +191,33 @@ export interface RestMessageBlock {
 	invocation: string;
 }
 
+/**
+ * Server-rendered liturgical narration accompanying a `status: "ready"`
+ * suggestion. Mirrors what Praescriptor renders on its cards: the patron
+ * deity's `opening` greeting (Diana for Run, Amphitrite for Swim, profiled
+ * by the workout's category + readiness + warnings), the `rationale_header`
+ * ("Under Minerva's Counsel") above the engine's rationale text, and
+ * Apollo's `closing` blessing.
+ *
+ * For profiles with `deities: false` (Pam), this block carries plain
+ * English instead — the field is always populated on `ready` responses
+ * so clients don't have to branch on the user's profile to know whether
+ * to render it. Clients may ignore this entirely and substitute their
+ * own narration.
+ *
+ * Cache: identical to Praescriptor's invocations cache — keyed by
+ * (sport, category, date) and shared across the process. First-of-day
+ * `/dashboard` or `/workouts/suggested` calls cost one Anthropic API
+ * round-trip; subsequent same-day calls are free.
+ *
+ * Introduced in API version 0.2.1.
+ */
+export interface InvocationBlock {
+	opening: string;
+	rationale_header: string;
+	closing: string;
+}
+
 export interface SuggestedResponse {
 	generated_at: string;
 	user_id: string;
@@ -200,6 +227,8 @@ export interface SuggestedResponse {
 	suggestion: SuggestedWorkoutBody;
 	/** Present iff status === "already_trained". Introduced in 0.2.0. */
 	rest_message?: RestMessageBlock;
+	/** Present iff status === "ready". Introduced in 0.2.1. */
+	invocation?: InvocationBlock;
 }
 
 export interface TodayScheduledWorkout {

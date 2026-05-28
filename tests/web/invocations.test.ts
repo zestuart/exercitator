@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	generateInvocations,
+	plainInvocations,
 	plainQuiesMessage,
 	quiesInvocation,
 } from "../../src/web/invocations.js";
@@ -41,6 +42,22 @@ describe("generateInvocations", () => {
 		expect(result.opening.length).toBeGreaterThan(10);
 		expect(result.closing.length).toBeGreaterThan(10);
 		expect(result.rationale_header.length).toBeGreaterThan(5);
+	});
+});
+
+describe("plainInvocations (Pam path)", () => {
+	it("produces no deity references for Run", () => {
+		const result = plainInvocations("Run");
+		expect(result.opening).not.toMatch(/Diana|Amphitrite|Minerva|Apollo|Quies/);
+		expect(result.opening).toMatch(/running/i);
+		expect(result.rationale_header).toBe("Rationale");
+	});
+
+	it("produces no deity references for Swim", () => {
+		const result = plainInvocations("Swim");
+		expect(result.opening).not.toMatch(/Diana|Amphitrite|Minerva|Apollo|Quies/);
+		expect(result.opening).toMatch(/swimming/i);
+		expect(result.rationale_header).toBe("Rationale");
 	});
 });
 
