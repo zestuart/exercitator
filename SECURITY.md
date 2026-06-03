@@ -27,9 +27,25 @@
 
 ## Outstanding
 
-_No outstanding findings._
+### 2026-06-02 — Accepted risk: `prompt()` in compliance activity picker (Low)
+
+**Finding** (SAST diff, Gemini 2.5 Pro): the multi-activity branch of the compliance confirm flow in `src/web/render.ts` (`clientJs`, `.confirm-btn` handler) seeds a `window.prompt()` with intervals.icu-sourced activity names and submits the typed value as `activityId`. A crafted activity name could social-engineer a user into typing sensitive data, which would then transit to `/api/compliance/confirm`.
+
+**Status**: Accepted-risk, 2026-06-02. Rationale:
+- Narrow threat model — requires write access to the athlete's intervals.icu calendar; both users (ze, pam) are solo athletes whose calendars are author-controlled.
+- Backend allowlist `^[A-Za-z0-9_-]{1,64}$` (`src/api/validate.ts:isValidIntervalsId`) rejects any non-id value before path-interpolation; the typed payload never reaches the upstream.
+- Existing `replace(/[\r\n]/g, " ")` strip already neutralises newline injection into the dialog.
+- Praescriptor is tailnet-only (no funnel); device-level Tailscale access control is the outer gate.
+
+**Follow-up**: replace the `prompt()` with a DOM picker (`<select>` / clickable list) — tracked in [GitHub issue #35](https://github.com/zestuart/exercitator/issues/35). When that lands, this entry moves to Remediated.
 
 ## Remediated
+
+### 2026-06-02 — Inlined-script XSS hardening (Medium)
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 22 | Medium | XSS via unescaped `userId` interpolated into the inlined Praescriptor client JS (`src/web/render.ts:clientJs`) — the slug was server-interpolated into single-quoted `fetch()` path strings (`'${prefix}/api/…'`). Non-exploitable in practice (`getUserProfile` whitelists the slug to `ze`/`pam`; anything else 404s before render), but a defence-in-depth gap. | Emit the slug as a JSON literal (`const __userId = ${JSON.stringify(userId)}`) and build `prefix` + all 8 API paths via client-side concatenation, so the value is data by construction regardless of what reaches the function. 4 new vitest cases (`tests/web/source-chip.test.ts`) lock the JSON-literal encoding and break-out resistance. Surfaced by the SAST diff scan during the 2026-06-02 fallback-chip deploy. |
 
 ### 2026-05-03 — SAST cleanup (round 3)
 

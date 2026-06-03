@@ -254,9 +254,45 @@ function renderSourceChip(suggestion: WorkoutSuggestion): string {
 	if (suggestion.prescriptionSource === "exercitator-fallback") {
 		const reason = suggestion.fallbackReason ?? "unknown";
 		const vendor = suggestion.fallbackVendor === "form" ? "FORM" : "Stryd";
-		return `<span class="source-chip source-chip-fallback">Source: Exercitator (${vendor} unavailable: ${escapeHtml(reason)})</span>`;
+		const message = humaniseFallbackReason(reason, vendor);
+		// Raw slug stays in the tooltip so diagnostics aren't lost.
+		return `<span class="source-chip source-chip-fallback" title="${escapeHtml(`${vendor} fallback: ${reason}`)}">Source: Exercitator — ${escapeHtml(message)}</span>`;
 	}
 	return "";
+}
+
+/**
+ * Turn a machine `fallbackReason` slug into a plain-English explanation for
+ * the source chip. The raw slug is preserved in the chip's tooltip (and on
+ * the HTTP API as `fallback_reason`) for diagnostics; this is purely the
+ * human-facing phrasing. `vendor` is the display name ("Stryd" | "FORM").
+ */
+export function humaniseFallbackReason(reason: string, vendor: string): string {
+	switch (reason) {
+		case "stride_rejected_on_recovery":
+			return `${vendor} only offered stride workouts today — skipped because it's a recovery day. Using Exercitator's own recovery prescription instead.`;
+		case "picker_rejected_all_candidates":
+			return `No suitable ${vendor} workout for today's session — using Exercitator's own prescription.`;
+		case "empty_workouts_array":
+			return `${vendor} returned no workouts for this category — using Exercitator's own prescription.`;
+		case "network_error":
+			return `Couldn't reach ${vendor} — using Exercitator's own prescription.`;
+		case "unknown_error":
+		case "unknown":
+			return `${vendor} was unavailable — using Exercitator's own prescription.`;
+	}
+	if (reason.startsWith("204_no_content_")) {
+		return `${vendor} had no workout in this category — using Exercitator's own prescription.`;
+	}
+	if (reason.startsWith("unsafe_") || reason.startsWith("malformed_")) {
+		return `A ${vendor} workout failed a safety check — using Exercitator's own prescription.`;
+	}
+	if (reason.startsWith("http_")) {
+		const code = reason.slice("http_".length);
+		return `${vendor} request failed (HTTP ${code}) — using Exercitator's own prescription.`;
+	}
+	// Unrecognised slug: fall back to the old phrasing so nothing is silently lost.
+	return `${vendor} unavailable (${reason}) — using Exercitator's own prescription.`;
 }
 
 function renderVigilSection(vigil: VigilSummary | undefined): string {
@@ -1341,9 +1377,15 @@ body {
 // Inlined client JS for send button (user-prefixed API paths)
 // ---------------------------------------------------------------------------
 
-function clientJs(userId: string): string {
-	const prefix = `/${userId}`;
+export function clientJs(userId: string): string {
+	// Emit the user slug as a JSON literal and build the API prefix on the
+	// client, so the value is treated as data and cannot break out of the
+	// surrounding string context. userId is whitelisted to known slugs
+	// upstream (getUserProfile), but this keeps the inlined script safe by
+	// construction regardless of what reaches here. See lessons.md 2026-06-02.
 	return `
+const __userId = ${JSON.stringify(userId)};
+const prefix = '/' + __userId;
 document.cookie = 'tz=' + Intl.DateTimeFormat().resolvedOptions().timeZone
 	+ ';path=/;max-age=31536000;SameSite=Lax';
 
@@ -1351,7 +1393,7 @@ document.getElementById('refresh-btn')?.addEventListener('click', async function
 	this.disabled = true;
 	this.classList.add('spinning');
 	try {
-		const res = await fetch('${prefix}/api/refresh', { method: 'POST' });
+		const res = await fetch(prefix + '/api/refresh', { method: 'POST' });
 		if (res.ok) {
 			window.location.reload();
 			return;
@@ -1383,13 +1425,13 @@ document.querySelectorAll('.send-btn:not(.stryd-btn):not(.form-btn)').forEach(bt
 
 		try {
 			const forceParam = isSent ? '?force=true' : '';
-			const res = await fetch('${prefix}/api/send/' + sport + forceParam, { method: 'POST' });
+			const res = await fetch(prefix + '/api/send/' + sport + forceParam, { method: 'POST' });
 			const data = await res.json();
 
 			if (data.duplicate) {
 				this.disabled = false;
 				if (confirm(data.message)) {
-					const retry = await fetch('${prefix}/api/send/' + sport + '?force=true', { method: 'POST' });
+					const retry = await fetch(prefix + '/api/send/' + sport + '?force=true', { method: 'POST' });
 					const retryData = await retry.json();
 					if (retryData.success) {
 						this.textContent = '\\u2713 Sent to calendar';
@@ -1437,7 +1479,7 @@ document.querySelectorAll('.compliance-confirm').forEach(el => {
 		this.disabled = true;
 		this.textContent = 'Finding activity\\u2026';
 		try {
-			const listRes = await fetch('${prefix}/api/compliance/activities?date=' + date + '&sport=' + sportUpper);
+			const listRes = await fetch(prefix + '/api/compliance/activities?date=' + date + '&sport=' + sportUpper);
 			const activities = await listRes.json();
 
 			if (activities.length === 0) {
@@ -1454,7 +1496,7 @@ document.querySelectorAll('.compliance-confirm').forEach(el => {
 			if (!actId) { this.disabled = false; this.textContent = 'I completed this'; return; }
 
 			this.textContent = 'Assessing\\u2026';
-			const res = await fetch('${prefix}/api/compliance/confirm', {
+			const res = await fetch(prefix + '/api/compliance/confirm', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ date, sport: sportUpper, activityId: actId })
@@ -1474,7 +1516,7 @@ document.querySelectorAll('.compliance-confirm').forEach(el => {
 		const reason = prompt('Why did you skip? (optional)');
 		this.disabled = true;
 		try {
-			await fetch('${prefix}/api/compliance/skip', {
+			await fetch(prefix + '/api/compliance/skip', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ date, sport: sportUpper, reason: reason || null })
@@ -1522,13 +1564,13 @@ document.querySelectorAll('.stryd-btn').forEach(btn => {
 
 		try {
 			const forceParam = isSent ? '?force=true' : '';
-			const res = await fetch('${prefix}/api/stryd/' + sport + forceParam, { method: 'POST' });
+			const res = await fetch(prefix + '/api/stryd/' + sport + forceParam, { method: 'POST' });
 			const data = await res.json();
 
 			if (data.duplicate) {
 				this.disabled = false;
 				if (confirm(data.message)) {
-					const retry = await fetch('${prefix}/api/stryd/' + sport + '?force=true', { method: 'POST' });
+					const retry = await fetch(prefix + '/api/stryd/' + sport + '?force=true', { method: 'POST' });
 					const retryData = await retry.json();
 					if (retryData.success) {
 						this.textContent = '\\u2713 Sent to Stryd';

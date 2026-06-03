@@ -544,7 +544,7 @@ export class StrydClient {
 		// can't inject path traversal or other URL-shape mischief.
 		if (!/^\d+$/.test(recommendationSetId)) {
 			throw new Error(
-				`StrydClient.markRecommendationSelected: invalid recommendationSetId (must be digits only)`,
+				"StrydClient.markRecommendationSelected: invalid recommendationSetId (must be digits only)",
 			);
 		}
 

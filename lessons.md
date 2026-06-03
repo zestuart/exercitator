@@ -447,3 +447,15 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 - Every new env var needs a paired docker-compose forwarder. **Pre-deploy checklist for any new credential env**: (1) `.env.example` updated, (2) `docker-compose.yml environment:` block updated for every consuming service, (3) post-deploy log tail confirming the startup log line you wrote in the code actually appears.
 - The "client ready" / "credentials not set" startup log line was the lifesaver here. Every external-vendor client startup should emit one log line, success-or-skip — silent-skip is the worst failure mode.
 - Generalise: when a new piece of code reads `process.env.X`, search `docker-compose.yml` for `X` before commit. Codify in the external-coach-integration-playbook.
+
+## 2026-06-02 — Fallback-chip deploy: diff SAST surfaced a pre-existing inlined-script XSS
+
+**What happened**: A small change to humanise the Praescriptor fallback source-chip (raw slug `stride_rejected_on_recovery` → plain English) touched `src/web/render.ts`. The `--mode diff` SAST scan therefore brought the whole file into scope and flagged a Medium XSS: `clientJs` server-interpolated the user slug into single-quoted `fetch()` path strings (`'${prefix}/api/…'`). A second run then flagged a Low `prompt()` social-engineering vector in the compliance picker.
+
+**Root cause**: pre-existing code. `clientJs` built the API prefix by raw-interpolating `userId` into emitted JS string literals. Not exploitable today — `getUserProfile` whitelists the slug to `ze`/`pam` and anything else 404s before render — but a defence-in-depth gap that the diff scan correctly surfaces whenever the file is edited.
+
+**Fix**: emit the slug as a JSON literal (`const __userId = ${JSON.stringify(userId)}`) and build `prefix` + all 8 API paths via client-side concatenation — safe by construction regardless of input. Added 4 vitest cases in `tests/web/source-chip.test.ts` locking the JSON-literal encoding and break-out resistance. The Low `prompt()` finding was accepted-risk per the 2026-05-25 SAST-stop discipline (narrow threat model, backend `^[A-Za-z0-9_-]{1,64}$` allowlist rejects the payload, tailnet-only) and tracked as a GitHub follow-up for a DOM-picker replacement; recorded in SECURITY.md § Outstanding.
+
+**Prevention**:
+- Inlined client JS must treat every server-supplied value as data: `JSON.stringify` into a `const`, then concatenate — never interpolate a bare value into an emitted JS string literal. Applies to any future `clientJs`-style helper.
+- Reaffirms the 2026-05-25 rule: on a diff-SAST that surfaces pre-existing issues in a touched file, fix High/Medium that have a clean fix, explicitly accept Low with rationale + a filed follow-up, and stop — don't let one file's edit balloon into an open-ended audit.
