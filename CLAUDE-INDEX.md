@@ -6,6 +6,7 @@ Index of all subsidiary documentation files. See `CLAUDE.md` for core rules, wor
 |------|-------------|
 | `CLAUDE.md` | Core rules, workflow, conventions — slim operating manual with pointers |
 | `architecture.md` | File map, module responsibilities, key patterns (extracted from CLAUDE.md 2026-05-12) |
+| `decision-model.md` | How a workout is chosen — readiness weights, data sources, category ladder + guards, vendor swap (human-facing + Claude reference) |
 | `deployment.md` | Cogitator deploy procedure, networking, container/volume layout (extracted from CLAUDE.md 2026-05-12) |
 | `CHANGELOG.md` | Keep a Changelog format, all user-visible changes |
 | `lessons.md` | Chronological post-mortem log (append-only) |

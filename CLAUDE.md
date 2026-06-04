@@ -32,6 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Two co-located containers off the same codebase: **Exercitator** (MCP server + HTTP API) and **Praescriptor** (web UI). The DSW (Daily Suggested Workout) engine lives under `src/engine/` and is imported by all three surfaces — no network calls between containers. Vigil (biomechanical injury warning) hangs off `src/engine/vigil/`. Compliance tracking persists prescriptions and grades execution under `src/compliance/`.
 
 Full file map, module responsibilities, and key patterns: see **`architecture.md`**.
+How a workout is actually chosen — readiness weights, data sources, the category ladder and its guards, and the vendor swap — see **`decision-model.md`**.
 
 ## Philosophy
 
@@ -98,6 +99,7 @@ Sections that exceed comfortable inline reading get extracted to their own files
 CLAUDE.md         — core rules, workflow, conventions (this file)
 CLAUDE-INDEX.md   — index of all subsidiary files
 architecture.md   — file map, module responsibilities, key patterns
+decision-model.md — how a workout is chosen: readiness weights, data sources, category ladder, swap
 deployment.md     — Cogitator deploy procedure, networking, volumes
 SECURITY.md       — security surfaces, outstanding findings, remediation history
 lessons.md        — chronological post-mortem log (append-only)
