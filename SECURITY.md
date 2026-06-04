@@ -28,6 +28,16 @@
 
 ## Outstanding
 
+### 2026-06-04 — Accepted risk: unbounded response buffering in API clients (Medium)
+
+**Finding** (SAST diff, Gemini 2.5 Pro): `parseBoundedJson` (`src/promus/client.ts`) and the inline `res.text()` reads across the API clients buffer the **entire** HTTP response into memory before the size cap (`MAX_JSON_RESPONSE_BYTES`) is checked — so a compromised/misbehaving upstream sending a huge body could OOM the Node process (DoS) before the check fires. Pre-existing and codebase-wide (`src/promus/client.ts`, `src/stryd/client.ts`, `src/form/client.ts`, `src/intervals.ts`); surfaced when the 2026-06-04 Vigor Vitae change touched `promus/client.ts`.
+
+**Status**: Accepted-risk, 2026-06-04. Rationale:
+- All upstreams are trusted in-house (Promus, tailnet) or authenticated (Stryd/FORM/intervals); exploitation requires a compromised upstream, not untrusted input.
+- Pre-existing codebase-wide pattern, not introduced by the change being deployed.
+
+**Follow-up**: a streaming reader with an incremental cap already exists — `readBoundedText` (`src/web/promus-dsw.ts:68`, `res.body.getReader()` + cancel-on-overflow). Extract it to a shared util and adopt it in all four clients' JSON parse paths; update the client test mocks (currently stub `{ text }`) to provide `body.getReader()`. Tracked in [GitHub issue #37](https://github.com/zestuart/exercitator/issues/37).
+
 ### 2026-06-03 — Accepted risk: TOCTOU race in workout send paths (Medium)
 
 **Finding** (SAST diff, Gemini 2.5 Pro): `sendToStryd` (`src/web/send-stryd.ts`) and `sendToIntervals` (`src/web/send.ts`) check `getSendEvent` for an existing same-day send, then make awaited external API calls (`createWorkout`/`scheduleWorkout` or the intervals `POST`), then call `persistSendEvent`. The check→persist window spans network I/O, so two concurrent requests for the same `(user, date, sport, target)` can both pass the check and create duplicate calendar entries, bypassing the one-per-day dedup. Pre-existing; surfaced when the 2026-06-03 timezone/status-guard fix touched both files.

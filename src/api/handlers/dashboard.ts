@@ -77,6 +77,7 @@ export async function handleDashboard(
 		const readiness = computeReadiness(data.wellness, data.activities, now, {
 			ftp: ftpForReadiness,
 			health: data.health,
+			vigorVitae: data.vigorVitae,
 		});
 		const strydCpUpdatedAt =
 			strydCpInput?.ageDays != null
@@ -97,6 +98,8 @@ export async function handleDashboard(
 				data.wellness,
 				data.wellness.length >= 3,
 				data.health,
+				data.vigorVitae,
+				data.vigorVitaeLevel,
 			),
 			injury_warning: injuryWarningFromVigil(vigil),
 			critical_power: criticalPowerFromContext(powerContext, strydCp, strydCpUpdatedAt),

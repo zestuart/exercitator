@@ -52,6 +52,20 @@ export interface WhoopHrvNightly {
 	method: string;
 }
 
+/** Latest Vigor Vitae value. Mirrors Promus `VigorVitaeCurrentResponse`. */
+export interface VigorVitaeCurrent {
+	/** Timestamp of the value (unix seconds). */
+	ts: number;
+	/** Latest integrated Body-Battery-style value, 0–100. */
+	value: number;
+	/** Categorical band per Promus thresholds: high | moderate | low | drained. */
+	level: string;
+	/** value(now) − value(now − 60min); null when integration covered < 60 min. */
+	trend_60min_pt: number | null;
+	/** Method version pin (e.g. "vigor-vitae-t6-v2"). */
+	method: string;
+}
+
 export interface PromusConfig {
 	apiKey: string;
 	baseUrl?: string;
@@ -125,5 +139,18 @@ export class PromusClient {
 		const params = new URLSearchParams({ days: String(days) });
 		const path = `/api/whoop/${encodeURIComponent(serial)}/hrv_nightly?${params}`;
 		return this.getJson<WhoopHrvNightly[]>(path, "getWhoopHrvNightly");
+	}
+
+	/**
+	 * Fetch the latest Vigor Vitae value — Promus's in-house Body-Battery-style
+	 * integrated recovery metric (0–100). This is NOT a WHOOP-derived score; it
+	 * is computed by Promus's own integrator from the raw strap signals, so it is
+	 * the canonical in-house "recovery now" reading. Used as the acute component
+	 * of the readiness score (it mean-reverts, so it is a strong now/last-night
+	 * indicator but a weak trend indicator — trend lives in TSB + HRV-vs-baseline).
+	 */
+	async getVigorVitaeCurrent(serial: string): Promise<VigorVitaeCurrent> {
+		const path = `/api/whoop/${encodeURIComponent(serial)}/vigor_vitae/current`;
+		return this.getJson<VigorVitaeCurrent>(path, "getVigorVitaeCurrent");
 	}
 }

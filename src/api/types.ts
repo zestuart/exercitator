@@ -29,6 +29,14 @@ export interface ReadinessBlock {
 		soreness: ComponentStatus;
 		fatigue: ComponentStatus;
 	};
+	/**
+	 * Promus Vigor Vitae (in-house Body-Battery recovery, 0–100) — the acute
+	 * component now driving the readiness score for `promus-whoop` users. Null
+	 * when unavailable (non-WHOOP user, or VV read failed → score fell back to
+	 * the sleep-duration band). The `sleep` badge above still reflects real
+	 * sleep duration.
+	 */
+	vigor_vitae: { value: number; level: string } | null;
 }
 
 export interface InjuryWarningFlag {

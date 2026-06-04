@@ -566,6 +566,8 @@ async function handleMainPage(
 		runHrZones: prescriptions.runHrZones,
 		swimHrZones: prescriptions.swimHrZones,
 		dataSource: prescriptions.dataSource,
+		vigorVitae: prescriptions.vigorVitae,
+		vigorVitaeLevel: prescriptions.vigorVitaeLevel,
 		generatedAt: prescriptions.generated_at,
 		tz,
 		runCompliance,

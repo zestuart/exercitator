@@ -50,6 +50,10 @@ export interface Prescription {
 	/** HR zone ceilings from intervals.icu swim sport settings. */
 	swimHrZones: number[] | null;
 	dataSource: DataSource;
+	/** Promus Vigor Vitae (0–100) + level at generation time — the acute term
+	 *  driving readiness. Null for non-WHOOP users or when the VV read failed. */
+	vigorVitae: number | null;
+	vigorVitaeLevel: string | null;
 	generated_at: string;
 }
 
@@ -191,6 +195,8 @@ export async function generatePrescriptions(
 		runHrZones: hasSport("Run") ? data.runSettings.hr_zones : null,
 		swimHrZones: hasSport("Swim") ? data.swimSettings.hr_zones : null,
 		dataSource,
+		vigorVitae: data.vigorVitae,
+		vigorVitaeLevel: data.vigorVitaeLevel,
 		generated_at: now.toISOString(),
 	};
 

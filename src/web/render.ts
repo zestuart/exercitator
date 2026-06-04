@@ -22,6 +22,10 @@ export interface RenderData {
 	swimHrZones: number[] | null;
 	dataSource: DataSource;
 	generatedAt: string;
+	/** Promus Vigor Vitae (0–100) + level, the acute term driving readiness.
+	 *  Null for non-WHOOP users or when the VV read failed. */
+	vigorVitae?: number | null;
+	vigorVitaeLevel?: string | null;
 	/** IANA timezone for display formatting (e.g. "America/Los_Angeles"). */
 	tz?: string;
 	/** Yesterday's compliance data for the confirmation/traffic light UI. */
@@ -669,11 +673,20 @@ export function renderPage(data: RenderData): string {
 	// sport-specific) — render it once in the page header. Prefer run, fall
 	// back to swim when an athlete only has one sport configured.
 	const headerReadiness = data.run?.readiness_score ?? data.swim?.readiness_score ?? null;
+	// Vigor Vitae (acute recovery term). Shown under the score so its trial
+	// contribution is visible. Server-rendered + escaped.
+	const vvNote =
+		data.vigorVitae != null
+			? `<div class="page-readiness-vv">VV ${Math.round(data.vigorVitae)}${
+					data.vigorVitaeLevel ? ` &middot; ${escapeHtml(data.vigorVitaeLevel)}` : ""
+				}</div>`
+			: "";
 	const readinessBlock =
 		headerReadiness != null
 			? `<div class="page-readiness">
 					<div class="page-readiness-score">${headerReadiness}</div>
 					<div class="page-readiness-label">readiness</div>
+					${vvNote}
 				</div>`
 			: "";
 
@@ -1025,6 +1038,14 @@ body {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	margin-top: 0.15rem;
+}
+
+.page-readiness-vv {
+	font-size: 0.6rem;
+	color: var(--text-dim);
+	letter-spacing: 0.06em;
+	margin-top: 0.1rem;
+	opacity: 0.85;
 }
 
 /* --- Invocations --- */

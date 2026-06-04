@@ -518,7 +518,7 @@ describe("computeReadiness — Promus WHOOP health source", () => {
 		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
 		const result = computeReadiness(wellness, restedActivities, NOW, { health: healthSeries() });
 		// Good sleep (7h45m) and HRV above 7-day mean → both components high.
-		expect(result.components.sleep).toBeGreaterThan(80);
+		expect(result.components.vigor).toBeGreaterThan(80);
 		expect(result.components.hrv).toBeGreaterThan(75);
 	});
 
@@ -539,8 +539,8 @@ describe("computeReadiness — Promus WHOOP health source", () => {
 			health: healthSeries(),
 		});
 		// Identical: the poisoned intervals value never reaches the Sleep component.
-		expect(withHealth.components.sleep).toBe(baseline.components.sleep);
-		expect(withHealth.components.sleep).toBeGreaterThan(80);
+		expect(withHealth.components.vigor).toBe(baseline.components.vigor);
+		expect(withHealth.components.vigor).toBeGreaterThan(80);
 		// And no "Sleep below 7 hours (0h18m)" warning is emitted.
 		expect(withHealth.warnings.some((w) => w.includes("0h18m"))).toBe(false);
 	});
@@ -558,6 +558,53 @@ describe("computeReadiness — Promus WHOOP health source", () => {
 			makeWellness({ id: "2026-03-23", ctl: 50, atl: 30, sleepScore: 92, hrv: 60 }),
 		];
 		const result = computeReadiness(wellness, restedActivities, NOW, { health: [] });
-		expect(result.components.sleep).toBe(92);
+		expect(result.components.vigor).toBe(92);
+	});
+
+	it("uses Vigor Vitae as the acute (vigor) component when supplied", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		// Sleep band would score >80 (7h45m); VV of 40 must override the slot.
+		const result = computeReadiness(wellness, restedActivities, NOW, {
+			health: healthSeries(),
+			vigorVitae: 40,
+		});
+		expect(result.components.vigor).toBe(40);
+	});
+
+	it("clamps Vigor Vitae into 0–100 for the vigor component", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		expect(
+			computeReadiness(wellness, restedActivities, NOW, { vigorVitae: 150 }).components.vigor,
+		).toBe(100);
+		expect(
+			computeReadiness(wellness, restedActivities, NOW, { vigorVitae: -5 }).components.vigor,
+		).toBe(0);
+	});
+
+	it("falls back to the sleep-duration band for the vigor slot when VV is null", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		const withVv = computeReadiness(wellness, restedActivities, NOW, {
+			health: healthSeries(),
+			vigorVitae: null,
+		});
+		const withoutVv = computeReadiness(wellness, restedActivities, NOW, {
+			health: healthSeries(),
+		});
+		// VV null ⇒ identical to omitting it ⇒ sleep band fills the slot (>80).
+		expect(withVv.components.vigor).toBe(withoutVv.components.vigor);
+		expect(withVv.components.vigor).toBeGreaterThan(80);
+	});
+
+	it("still emits the sleep-duration warning even when VV scores the slot", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		const shortNight = healthSeries();
+		shortNight[shortNight.length - 1] = { date: "2026-03-23", sleepSecs: 16200, hrvRmssd: 66 }; // 4h30m
+		// VV high (90) drives the score, but the sleep WARNING reads real duration.
+		const result = computeReadiness(wellness, restedActivities, NOW, {
+			health: shortNight,
+			vigorVitae: 90,
+		});
+		expect(result.components.vigor).toBe(90);
+		expect(result.warnings.some((w) => w.includes("Sleep below 7 hours (4h30m)"))).toBe(true);
 	});
 });

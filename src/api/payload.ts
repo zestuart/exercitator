@@ -68,6 +68,8 @@ export function readinessFromEngine(
 	wellness: WellnessRecord[],
 	hasEnoughData: boolean,
 	health?: NightlyHealth[],
+	vigorVitae?: number | null,
+	vigorVitaeLevel?: string | null,
 ): ReadinessBlock {
 	const maybeScore = hasEnoughData ? score : null;
 	const tier = tierForScore(maybeScore);
@@ -115,6 +117,10 @@ export function readinessFromEngine(
 			soreness: sorenessStatus,
 			fatigue: fatigueStatus,
 		},
+		vigor_vitae:
+			vigorVitae != null
+				? { value: Math.round(vigorVitae), level: vigorVitaeLevel ?? "unknown" }
+				: null,
 	};
 }
 

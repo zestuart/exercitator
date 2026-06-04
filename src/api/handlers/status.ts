@@ -63,6 +63,7 @@ export async function handleStatus(
 		const readiness = computeReadiness(data.wellness, data.activities, now, {
 			ftp: ftpForReadiness,
 			health: data.health,
+			vigorVitae: data.vigorVitae,
 		});
 		// Convert the engine-shape CP into the API DTO shape — `updatedAt` is
 		// the real Stryd CP creation timestamp (not now()), letting clients
@@ -99,6 +100,8 @@ export async function handleStatus(
 				data.wellness,
 				data.wellness.length >= 3,
 				data.health,
+				data.vigorVitae,
+				data.vigorVitaeLevel,
 			),
 			injury_warning: injuryWarningFromVigil(vigil),
 			critical_power: criticalPowerFromContext(

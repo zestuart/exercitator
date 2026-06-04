@@ -33,7 +33,8 @@ function baseTrainingData(overrides: Partial<TrainingData> = {}): TrainingData {
 function stubClient(opts: {
 	sleep?: { wake_date: string; duration_s: number | null }[];
 	hrv?: { wake_day_utc: string; rmssd_median_ms: number | null }[];
-	throwOn?: "sleep" | "hrv";
+	vigor?: { value: number; level: string };
+	throwOn?: "sleep" | "hrv" | "vigor";
 }): PromusClient {
 	return {
 		async getWhoopSleep() {
@@ -43,6 +44,19 @@ function stubClient(opts: {
 		async getWhoopHrvNightly() {
 			if (opts.throwOn === "hrv") throw new Error("network timeout");
 			return opts.hrv ?? [];
+		},
+		async getVigorVitaeCurrent() {
+			if (opts.throwOn === "vigor")
+				throw new Error("Promus getVigorVitaeCurrent failed (HTTP 500)");
+			return opts.vigor
+				? {
+						ts: 0,
+						value: opts.vigor.value,
+						level: opts.vigor.level,
+						trend_60min_pt: null,
+						method: "t6",
+					}
+				: { ts: 0, value: 0, level: "drained", trend_60min_pt: null, method: "t6" };
 		},
 	} as unknown as PromusClient;
 }
@@ -83,7 +97,7 @@ describe("fetchHealthTelemetry", () => {
 			promusClient: null,
 			whoopSerial: null,
 		});
-		expect(res).toEqual({ health: [] });
+		expect(res).toEqual({ health: [], vigorVitae: null, vigorVitaeLevel: null });
 	});
 
 	it("hard-fails when today's WHOOP night is absent", async () => {
@@ -103,6 +117,31 @@ describe("fetchHealthTelemetry", () => {
 		const res = await fetchHealthTelemetry(NOW, "UTC", opts(client));
 		expect(res.error).toBeUndefined();
 		expect(res.health.find((h) => h.date === "2026-06-03")?.sleepSecs).toBe(27000);
+	});
+
+	it("reads Vigor Vitae on the success path", async () => {
+		const client = stubClient({
+			sleep: [{ wake_date: "2026-06-03", duration_s: 27000 }],
+			hrv: [{ wake_day_utc: "2026-06-03", rmssd_median_ms: 60 }],
+			vigor: { value: 88.5, level: "high" },
+		});
+		const res = await fetchHealthTelemetry(NOW, "UTC", opts(client));
+		expect(res.error).toBeUndefined();
+		expect(res.vigorVitae).toBe(88.5);
+		expect(res.vigorVitaeLevel).toBe("high");
+	});
+
+	it("treats a Vigor Vitae failure as non-fatal — health still returned", async () => {
+		const client = stubClient({
+			sleep: [{ wake_date: "2026-06-03", duration_s: 27000 }],
+			hrv: [{ wake_day_utc: "2026-06-03", rmssd_median_ms: 60 }],
+			throwOn: "vigor",
+		});
+		const res = await fetchHealthTelemetry(NOW, "UTC", opts(client));
+		expect(res.error).toBeUndefined();
+		expect(res.health.find((h) => h.date === "2026-06-03")?.sleepSecs).toBe(27000);
+		expect(res.vigorVitae).toBeNull();
+		expect(res.vigorVitaeLevel).toBeNull();
 	});
 
 	it("hard-fails with an HTTP reason on a transport error", async () => {

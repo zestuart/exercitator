@@ -197,6 +197,7 @@ export async function handleWorkoutsSuggested(
 			const pc = detectPowerSource(data.activities);
 			const readiness = computeReadiness(data.wellness, data.activities, now, {
 				health: data.health,
+				vigorVitae: data.vigorVitae,
 			});
 			const sel = selectSport(data.activities, readiness.score, now, pc);
 			sport = sel.sport;

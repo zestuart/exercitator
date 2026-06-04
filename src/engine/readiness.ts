@@ -30,9 +30,16 @@ export interface ReadinessOptions {
 	 *  a sport-isolated recency. */
 	sport?: "Run" | "Swim";
 	/** Overnight WHOOP telemetry for `promus-whoop` users. When non-empty, the
-	 *  Sleep and HRV components (and their warnings) read from it instead of
-	 *  intervals.icu wellness. Empty/undefined keeps the wellness source. */
+	 *  HRV component (and warnings) and the sleep-duration warnings read from it
+	 *  instead of intervals.icu wellness. Empty/undefined keeps the wellness source. */
 	health?: NightlyHealth[];
+	/** Promus Vigor Vitae (in-house Body-Battery recovery, 0–100) at request time.
+	 *  When present it IS the acute readiness component (the "now / last-night"
+	 *  recovery signal), replacing the sleep-duration band in the score. Null →
+	 *  fall back to the sleep-duration band. It mean-reverts, so trend is carried
+	 *  by TSB + HRV-vs-baseline, NOT by this value. The sleep-duration band still
+	 *  drives the sleep warnings + multi-night sleep-debt regardless. */
+	vigorVitae?: number | null;
 }
 
 export interface ReadinessResult {
@@ -44,7 +51,9 @@ export interface ReadinessResult {
 	rebuild: boolean;
 	components: {
 		tsb: number;
-		sleep: number;
+		/** Acute recovery slot: Vigor Vitae when available, else the sleep-duration
+		 *  band. Named `vigor` because VV is the canonical source for this term. */
+		vigor: number;
 		hrv: number;
 		recency: number;
 		subjective: number;
@@ -230,7 +239,8 @@ function computeSubjective(wellness: WellnessRecord[]): number | null {
 const NEUTRAL = 50;
 
 const WEIGHT_TSB = 0.3;
-const WEIGHT_SLEEP = 0.2;
+/** Acute recovery slot (Vigor Vitae, else sleep-duration band). */
+const WEIGHT_VIGOR = 0.2;
 const WEIGHT_HRV = 0.2;
 const WEIGHT_RECENCY = 0.15;
 const WEIGHT_SUBJECTIVE = 0.15;
@@ -252,21 +262,27 @@ export function computeReadiness(
 	const tsbResult = computeTsb(wellness, options.ftp);
 	const tsb = tsbResult?.score ?? null;
 	const rebuild = tsbResult?.rebuild ?? false;
-	const sleep = computeSleep(wellness, health);
+	// Acute recovery slot. Vigor Vitae (Promus in-house Body-Battery) is the
+	// canonical "now / last-night" recovery signal and takes the slot when
+	// present; otherwise fall back to the sleep-duration band. `sleepBand` is
+	// kept separately because the sleep warnings + multi-night sleep-debt always
+	// read real sleep duration, regardless of which signal scores the slot.
+	const sleepBand = computeSleep(wellness, health);
+	const vigor = options.vigorVitae != null ? clamp(options.vigorVitae, 0, 100) : sleepBand;
 	const hrv = computeHrv(wellness, health);
 	const recency = computeRecency(activities, now, options.sport);
 	const subjective = computeSubjective(wellness);
 
 	const components = {
 		tsb: tsb ?? NEUTRAL,
-		sleep: sleep ?? NEUTRAL,
+		vigor: vigor ?? NEUTRAL,
 		hrv: hrv ?? NEUTRAL,
 		recency: recency ?? NEUTRAL,
 		subjective: subjective ?? NEUTRAL,
 	};
 
 	// Count how many components have real data
-	const realCount = [tsb, sleep, hrv, recency, subjective].filter((c) => c != null).length;
+	const realCount = [tsb, vigor, hrv, recency, subjective].filter((c) => c != null).length;
 	if (realCount < 3) {
 		warnings.push("Limited wellness data — suggestion may be less accurate");
 	}
@@ -279,7 +295,7 @@ export function computeReadiness(
 	if (realCount >= 3) {
 		const parts: Array<[number | null, number]> = [
 			[tsb, WEIGHT_TSB],
-			[sleep, WEIGHT_SLEEP],
+			[vigor, WEIGHT_VIGOR],
 			[hrv, WEIGHT_HRV],
 			[recency, WEIGHT_RECENCY],
 			[subjective, WEIGHT_SUBJECTIVE],
@@ -295,7 +311,7 @@ export function computeReadiness(
 		score = clamp(
 			Math.round(
 				components.tsb * WEIGHT_TSB +
-					components.sleep * WEIGHT_SLEEP +
+					components.vigor * WEIGHT_VIGOR +
 					components.hrv * WEIGHT_HRV +
 					components.recency * WEIGHT_RECENCY +
 					components.subjective * WEIGHT_SUBJECTIVE,
@@ -320,7 +336,7 @@ export function computeReadiness(
 		);
 	}
 
-	if (sleep != null && sleep < 70) {
+	if (sleepBand != null && sleepBand < 70) {
 		const secs = useHealth ? latestHealthSleepSecs(health as NightlyHealth[]) : null;
 		if (useHealth) {
 			if (secs != null && secs < 25200) {

@@ -53,6 +53,27 @@ describe("PromusClient", () => {
 		expect((fetchMock.mock.calls[0] as [string])[0]).toContain("hrv_nightly?days=7");
 	});
 
+	it("GETs the Vigor Vitae current endpoint", async () => {
+		const body = {
+			ts: 1780578600,
+			value: 99.89,
+			level: "high",
+			trend_60min_pt: -0.1,
+			method: "t6",
+		};
+		const fetchMock = vi.fn(async () => ({
+			ok: true,
+			status: 200,
+			text: async () => JSON.stringify(body),
+		}));
+		vi.stubGlobal("fetch", fetchMock);
+
+		const out = await client.getVigorVitaeCurrent("TEST-WHOOP-SERIAL");
+		expect(out.value).toBe(99.89);
+		expect(out.level).toBe("high");
+		expect((fetchMock.mock.calls[0] as [string])[0]).toContain("/vigor_vitae/current");
+	});
+
 	it("throws with the status code on a non-2xx response", async () => {
 		mockFetchOnce("upstream boom", { status: 503 });
 		await expect(client.getWhoopSleep("S", "2026-06-01", "2026-06-03")).rejects.toThrow(/HTTP 503/);

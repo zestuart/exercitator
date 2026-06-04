@@ -76,6 +76,14 @@ export interface TrainingData {
 	 */
 	health: NightlyHealth[];
 	/**
+	 * Promus Vigor Vitae (in-house Body-Battery recovery, 0–100) at fetch time,
+	 * and its categorical level. Best-effort: null for non-`promus-whoop` users
+	 * or when the VV read failed. Drives the acute readiness component (it
+	 * mean-reverts, so it is a now/last-night signal, not a trend signal).
+	 */
+	vigorVitae: number | null;
+	vigorVitaeLevel: string | null;
+	/**
 	 * Set when a `promus-whoop` user's overnight telemetry could not be obtained
 	 * (Promus unreachable/non-2xx, or no WHOOP night for today). When present,
 	 * the engine returns a `health_unavailable` suggestion instead of prescribing
@@ -128,6 +136,8 @@ export async function fetchTrainingData(
 		runSettings,
 		swimSettings,
 		health: healthResult.health,
+		vigorVitae: healthResult.vigorVitae,
+		vigorVitaeLevel: healthResult.vigorVitaeLevel,
 		healthError: healthResult.error,
 	};
 }
@@ -147,14 +157,21 @@ export async function fetchHealthTelemetry(
 	now: Date,
 	tz: string | undefined,
 	opts: HealthFetchOptions | undefined,
-): Promise<{ health: NightlyHealth[]; error?: { reason: string; message: string } }> {
+): Promise<{
+	health: NightlyHealth[];
+	vigorVitae: number | null;
+	vigorVitaeLevel: string | null;
+	error?: { reason: string; message: string };
+}> {
 	if (!opts || opts.healthSource !== "promus-whoop") {
-		return { health: [] };
+		return { health: [], vigorVitae: null, vigorVitaeLevel: null };
 	}
 	const { promusClient, whoopSerial } = opts;
 	if (!promusClient || !whoopSerial) {
 		return {
 			health: [],
+			vigorVitae: null,
+			vigorVitaeLevel: null,
 			error: {
 				reason: "promus_not_configured",
 				message:
@@ -168,11 +185,33 @@ export async function fetchHealthTelemetry(
 
 	let sleepRows: Awaited<ReturnType<PromusClient["getWhoopSleep"]>>;
 	let hrvRows: Awaited<ReturnType<PromusClient["getWhoopHrvNightly"]>>;
+	// Vigor Vitae is best-effort: fetched concurrently but its failure is NEVER
+	// fatal (caught to null inline). A missing VV falls back to the sleep-duration
+	// band for the acute readiness component — it must not block a prescription.
+	let vigorVitae: number | null = null;
+	let vigorVitaeLevel: string | null = null;
 	try {
-		[sleepRows, hrvRows] = await Promise.all([
-			promusClient.getWhoopSleep(whoopSerial, start, today),
-			promusClient.getWhoopHrvNightly(whoopSerial, 7),
+		const [core, vv] = await Promise.all([
+			Promise.all([
+				promusClient.getWhoopSleep(whoopSerial, start, today),
+				promusClient.getWhoopHrvNightly(whoopSerial, 7),
+			]),
+			// `Promise.resolve().then(...)` so a *synchronous* throw (e.g. the
+			// method missing on a stub) also becomes a rejection the .catch can
+			// trap — VV must never disturb the core sleep/HRV result or its error.
+			Promise.resolve()
+				.then(() => promusClient.getVigorVitaeCurrent(whoopSerial))
+				.catch((err) => {
+					const m = err instanceof Error ? err.message : String(err);
+					console.warn(`fetchHealthTelemetry: Vigor Vitae unavailable (non-fatal): ${m}`);
+					return null;
+				}),
 		]);
+		[sleepRows, hrvRows] = core;
+		if (vv) {
+			vigorVitae = vv.value;
+			vigorVitaeLevel = vv.level;
+		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		const reason = /\bHTTP (\d{3})\b/.test(msg)
@@ -182,6 +221,8 @@ export async function fetchHealthTelemetry(
 				: "promus_error";
 		return {
 			health: [],
+			vigorVitae: null,
+			vigorVitaeLevel: null,
 			error: {
 				reason,
 				message: "Could not reach Promus to read last night's WHOOP telemetry.",
@@ -196,6 +237,8 @@ export async function fetchHealthTelemetry(
 	if (!todayRow || todayRow.sleepSecs == null) {
 		return {
 			health,
+			vigorVitae,
+			vigorVitaeLevel,
 			error: {
 				reason: "whoop_today_missing",
 				message:
@@ -204,7 +247,7 @@ export async function fetchHealthTelemetry(
 		};
 	}
 
-	return { health };
+	return { health, vigorVitae, vigorVitaeLevel };
 }
 
 /**
@@ -384,6 +427,7 @@ export function suggestWorkoutFromData(
 	const readiness = computeReadiness(wellness, activities, now, {
 		ftp: powerContext.ftp > 0 ? powerContext.ftp : undefined,
 		health: data.health,
+		vigorVitae: data.vigorVitae,
 	});
 
 	// Suppression short-circuit: if the user has already done the requested
@@ -577,7 +621,10 @@ export async function suggestWorkout(
 	const strydCp = await fetchStrydCpInput(strydClient ?? null, now);
 
 	const powerContext = detectPowerSource(data.activities);
-	const readiness = computeReadiness(data.wellness, data.activities, now, { health: data.health });
+	const readiness = computeReadiness(data.wellness, data.activities, now, {
+		health: data.health,
+		vigorVitae: data.vigorVitae,
+	});
 	const sportSelection = selectSport(data.activities, readiness.score, now, powerContext);
 
 	return suggestWorkoutFromData(
