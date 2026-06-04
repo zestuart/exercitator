@@ -58,7 +58,7 @@ src/
     server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
     routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
     prescriptions.ts    — per-user prescription generator with day-level cache
-    send.ts             — push workout to intervals.icu calendar with per-user dedup
+    send.ts             — push workout to intervals.icu calendar with per-user dedup. Both send paths regenerate via generatePrescriptions with the athlete tz + vendor clients (a missing tz computes "today" in container-UTC → wrong-day WHOOP window) and refuse any non-`ready` status with 422 {not_sendable} (never push the awaiting_input/already_trained/health_unavailable placeholder).
     send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup). On Stryd-sourced runs, also fires markStrydRecommendationSelected as a preference signal.
     stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets). For Stryd-sourced runs, round-trips suggestion.strydOriginalWorkout verbatim instead of reconstructing from flattened segments (preserves block-repeat structure + exact intensity_percent bands).
     stryd-swap.ts       — apply Stryd's served workout to a run suggestion. applyStrydRecommendation (per-run) + applyStrydSwapIfEnabled (gate + apply, centralised so all Run-producing surfaces share the gate). Replaces rationale with Stryd desc, neutralises terrain, filters engine-narrative warnings.
