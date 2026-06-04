@@ -49,7 +49,15 @@ const ZE_PROFILE: UserProfile = {
 	apiKeyEnv: "INTERVALS_ICU_API_KEY",
 	strydEmailEnv: null,
 	strydPasswordEnv: null,
+	formEmailEnv: null,
+	formPasswordEnv: null,
+	promusApiKeyEnv: null,
+	whoopSerialEnv: null,
 };
+
+function fakeUrl(path = "/api/users/ze/status"): URL {
+	return new URL(path, "http://localhost");
+}
 
 function makeMockIntervals(): IntervalsClient {
 	const activities = loadFixture("activities-14d.json");
@@ -83,7 +91,7 @@ describe("handleStatus", () => {
 			form: null,
 		};
 		const res = fakeRes();
-		await handleStatus(fakeReq(), res, user);
+		await handleStatus(fakeReq(), res, user, fakeUrl());
 		expect(res._status).toBe(200);
 		const body = JSON.parse(res._body ?? "{}");
 		expect(body.user_id).toBe("ze");
@@ -106,7 +114,7 @@ describe("handleStatus", () => {
 			_headers: Record<string, string>;
 			_status?: number;
 		};
-		await handleStatus(fakeReq(), res, user);
+		await handleStatus(fakeReq(), res, user, fakeUrl());
 		expect(res._headers["Cache-Control"]).toContain("private");
 	});
 });

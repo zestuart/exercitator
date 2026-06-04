@@ -64,11 +64,22 @@ export async function handleDashboard(
 
 		// Status block
 		const powerContext = detectPowerSource(data.activities);
-		const readiness = computeReadiness(data.wellness, data.activities, now, {
-			health: data.health,
-		});
 		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
 		const strydCp = strydCpInput?.cp ?? null;
+		// Same readiness inputs as the prescription (primary sport + Stryd CP) so
+		// the status-block headline matches the suggested block and Praescriptor —
+		// see status.ts for the recency-weight rationale.
+		const primarySport: "Run" | "Swim" = user.profile.sports.includes("Run") ? "Run" : "Swim";
+		const ftpForReadiness = strydCpInput
+			? Math.round(strydCpInput.cp)
+			: powerContext.ftp > 0
+				? powerContext.ftp
+				: undefined;
+		const readiness = computeReadiness(data.wellness, data.activities, now, {
+			ftp: ftpForReadiness,
+			sport: primarySport,
+			health: data.health,
+		});
 		const strydCpUpdatedAt =
 			strydCpInput?.ageDays != null
 				? new Date(now.getTime() - strydCpInput.ageDays * 86_400_000).toISOString()
@@ -83,7 +94,12 @@ export async function handleDashboard(
 			generated_at: now.toISOString(),
 			user_id: user.profile.id,
 			athlete_id: user.intervals.athleteId,
-			readiness: readinessFromEngine(readiness.score, data.wellness, data.wellness.length >= 3),
+			readiness: readinessFromEngine(
+				readiness.score,
+				data.wellness,
+				data.wellness.length >= 3,
+				data.health,
+			),
 			injury_warning: injuryWarningFromVigil(vigil),
 			critical_power: criticalPowerFromContext(powerContext, strydCp, strydCpUpdatedAt),
 			training_load: trainingLoadFromActivities(data.wellness, data.activities, now),

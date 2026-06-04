@@ -72,7 +72,11 @@ describe("mergeWhoopHealth", () => {
 describe("fetchHealthTelemetry", () => {
 	const NOW = new Date("2026-06-03T09:00:00Z");
 	const opts = (client: PromusClient) =>
-		({ promusClient: client, whoopSerial: "TEST-WHOOP-SERIAL", healthSource: "promus-whoop" }) as const;
+		({
+			promusClient: client,
+			whoopSerial: "TEST-WHOOP-SERIAL",
+			healthSource: "promus-whoop",
+		}) as const;
 
 	it("returns empty (no error) for non-promus-whoop users", async () => {
 		const res = await fetchHealthTelemetry(NOW, "UTC", {

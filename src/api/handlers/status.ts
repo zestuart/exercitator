@@ -22,11 +22,13 @@ import {
 } from "../payload.js";
 import type { UserContext } from "../router.js";
 import type { StatusResponse } from "../types.js";
+import { resolveTz } from "../tz.js";
 
 export async function handleStatus(
 	_req: IncomingMessage,
 	res: ServerResponse,
 	user: UserContext,
+	url: URL,
 ): Promise<void> {
 	const cached = cacheGet<StatusResponse>(user.profile.id, "status");
 	if (cached) {
@@ -36,21 +38,35 @@ export async function handleStatus(
 	}
 
 	try {
-		const data = await fetchTrainingData(
-			user.intervals,
-			undefined,
-			healthFetchOptionsFor(user.profile),
-		);
+		// Resolve the athlete tz (from ?tz or the intervals profile) so the WHOOP
+		// 7-day window + today anchor align with /dashboard and Praescriptor.
+		// Passing tz: undefined here previously computed the window in the
+		// container's UTC, shifting the HRV mean / latest night and yielding a
+		// readiness score that disagreed with the dashboard (71 vs 75).
+		const tz = await resolveTz(user, url);
+		const data = await fetchTrainingData(user.intervals, tz, healthFetchOptionsFor(user.profile));
 		const now = new Date();
 		const powerContext = detectPowerSource(data.activities);
-		// Status is an informational readout, not a prescription, so it does not
-		// hard-fail on missing WHOOP data — it reports readiness from the most
-		// recent available night (data.health). On a full Promus outage
-		// (data.health empty) the readiness engine falls back to wellness.
+		const strydCp = await fetchStrydCpInput(user.stryd ?? null, now);
+		// Compute readiness with the SAME inputs the prescription uses (primary
+		// sport for same-sport recency + Stryd CP as ftp for the rebuild floor)
+		// so the headline number matches Praescriptor and the suggested block —
+		// a whole-athlete recency (all sports) otherwise disagreed by the recency
+		// weight (e.g. 68 vs 75 when the athlete cross-trained but hasn't run).
+		// Status is informational, not a prescription, so it does not hard-fail
+		// on missing WHOOP data — it reports from the most recent available night
+		// (data.health); on a full Promus outage it falls back to wellness.
+		const primarySport: "Run" | "Swim" = user.profile.sports.includes("Run") ? "Run" : "Swim";
+		const ftpForReadiness = strydCp
+			? Math.round(strydCp.cp)
+			: powerContext.ftp > 0
+				? powerContext.ftp
+				: undefined;
 		const readiness = computeReadiness(data.wellness, data.activities, now, {
+			ftp: ftpForReadiness,
+			sport: primarySport,
 			health: data.health,
 		});
-		const strydCp = await fetchStrydCpInput(user.stryd ?? null, now);
 		// Convert the engine-shape CP into the API DTO shape — `updatedAt` is
 		// the real Stryd CP creation timestamp (not now()), letting clients
 		// detect stale CP without a separate API call.
@@ -65,7 +81,7 @@ export async function handleStatus(
 			: { watts: null as number | null, updatedAt: null as string | null };
 
 		const isRunSport = user.profile.sports.includes("Run");
-		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now) : null;
+		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now, tz) : null;
 
 		// Fire-and-forget Vigil backfill on first call for this athlete.
 		// runVigilBackfillIfNeeded short-circuits when (a) no Stryd creds,
@@ -81,7 +97,12 @@ export async function handleStatus(
 			generated_at: now.toISOString(),
 			user_id: user.profile.id,
 			athlete_id: user.intervals.athleteId,
-			readiness: readinessFromEngine(readiness.score, data.wellness, data.wellness.length >= 3),
+			readiness: readinessFromEngine(
+				readiness.score,
+				data.wellness,
+				data.wellness.length >= 3,
+				data.health,
+			),
 			injury_warning: injuryWarningFromVigil(vigil),
 			critical_power: criticalPowerFromContext(
 				powerContext,

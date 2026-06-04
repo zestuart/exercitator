@@ -102,7 +102,7 @@ export async function handleApiRequest(
 	// Phase 3 fills these in.
 	if (req.method === "GET" && subPath === "/status") {
 		const { handleStatus } = await import("./handlers/status.js");
-		await handleStatus(req, res, user);
+		await handleStatus(req, res, user, url);
 		return;
 	}
 

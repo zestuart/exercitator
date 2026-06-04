@@ -36,6 +36,59 @@ describe("readinessFromEngine", () => {
 		expect(out.tier).toBe("unknown");
 		expect(out.advisory).toBe("grey");
 	});
+
+	it("derives hrv + sleep component badges from WHOOP health when present", () => {
+		// intervals wellness has null hrv/sleep (the ze situation post-fix), but
+		// WHOOP health carries real values — badges must read WHOOP, not "unknown".
+		const wellness = [
+			{
+				id: "2026-06-03",
+				ctl: 25,
+				atl: 28,
+				restingHR: null,
+				hrv: null,
+				sleepSecs: null,
+				sleepScore: null,
+				readiness: null,
+				weight: null,
+				soreness: 3,
+				fatigue: 3,
+				stress: null,
+			},
+		];
+		const health = [
+			{ date: "2026-06-02", sleepSecs: 27000, hrvRmssd: 63 },
+			{ date: "2026-06-03", sleepSecs: 27360, hrvRmssd: 74 }, // 7h36m, RMSSD 74
+		];
+		const out = readinessFromEngine(75, wellness, true, health);
+		expect(out.components.hrv).toBe("ok"); // 74 ms ≥ 40
+		expect(out.components.sleep).toBe("ok"); // 7h36m ≥ 6h
+		// Subjective still from intervals wellness.
+		expect(out.components.soreness).toBe("ok");
+	});
+
+	it("flags low WHOOP sleep + HRV", () => {
+		const wellness = [
+			{
+				id: "2026-06-03",
+				ctl: 25,
+				atl: 28,
+				restingHR: null,
+				hrv: null,
+				sleepSecs: null,
+				sleepScore: null,
+				readiness: null,
+				weight: null,
+				soreness: null,
+				fatigue: null,
+				stress: null,
+			},
+		];
+		const health = [{ date: "2026-06-03", sleepSecs: 16200, hrvRmssd: 31 }]; // 4h30m, RMSSD 31
+		const out = readinessFromEngine(40, wellness, true, health);
+		expect(out.components.hrv).toBe("low");
+		expect(out.components.sleep).toBe("low");
+	});
 });
 
 describe("criticalPowerFromContext", () => {

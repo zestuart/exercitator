@@ -8,6 +8,7 @@
 import { groupPairSegments } from "../engine/segment-groups.js";
 import type {
 	ActivitySummary,
+	NightlyHealth,
 	PowerContext,
 	WellnessRecord,
 	WorkoutSegment,
@@ -33,6 +34,15 @@ import type {
 // Readiness
 // ---------------------------------------------------------------------------
 
+/** Most recent element's accessor value that is non-null, scanning from the end. */
+function lastNonNull<T>(items: T[], get: (item: T) => number | null): number | null {
+	for (let i = items.length - 1; i >= 0; i--) {
+		const v = get(items[i]);
+		if (v != null) return v;
+	}
+	return null;
+}
+
 function tierForScore(score: number | null): ReadinessTier {
 	if (score === null) return "unknown";
 	if (score >= 60) return "ready";
@@ -57,14 +67,31 @@ export function readinessFromEngine(
 	score: number,
 	wellness: WellnessRecord[],
 	hasEnoughData: boolean,
+	health?: NightlyHealth[],
 ): ReadinessBlock {
 	const maybeScore = hasEnoughData ? score : null;
 	const tier = tierForScore(maybeScore);
 	const latest = wellness.length > 0 ? wellness[wellness.length - 1] : undefined;
 
-	const hrvStatus = latest?.hrv == null ? "unknown" : (latest.hrv as number) < 40 ? "low" : "ok";
-	const sleepStatus =
-		latest?.sleepScore != null
+	// HRV + Sleep component badges must follow the same source as the readiness
+	// score: WHOOP telemetry for `promus-whoop` users (non-empty `health`), else
+	// intervals.icu wellness. Without this the score reflects WHOOP while the
+	// badges read the (now-null) intervals fields and show "unknown" — the
+	// Nunc/Excubitor mismatch surfaced 2026-06-03.
+	const useHealth = health != null && health.length > 0;
+	const latestHealthHrv = useHealth ? lastNonNull(health, (h) => h.hrvRmssd) : null;
+	const latestHealthSleepSecs = useHealth ? lastNonNull(health, (h) => h.sleepSecs) : null;
+
+	const hrvValue = useHealth ? latestHealthHrv : (latest?.hrv ?? null);
+	const hrvStatus = hrvValue == null ? "unknown" : hrvValue < 40 ? "low" : "ok";
+
+	const sleepStatus = useHealth
+		? latestHealthSleepSecs == null
+			? "unknown"
+			: latestHealthSleepSecs < 6 * 3600
+				? "low"
+				: "ok"
+		: latest?.sleepScore != null
 			? latest.sleepScore < 60
 				? "low"
 				: "ok"
