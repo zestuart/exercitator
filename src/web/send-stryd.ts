@@ -58,13 +58,40 @@ export async function sendToStryd(
 
 		if (!strydClient.isAuthenticated) await strydClient.login();
 
-		const prescriptions = await generatePrescriptions(client, profile);
+		// Forward strydClient + tz so the regeneration (a) computes "today" in
+		// the athlete timezone — not UTC, which after local 17:00 PDT rolls to
+		// tomorrow and targets a WHOOP night that hasn't happened yet, yielding
+		// a spurious health_unavailable — and (b) runs the Stryd swap so a cold
+		// cache pushes the rendered Stryd recommendation, not raw engine output.
+		// formClient stays undefined: Stryd pushes are run-only. See lessons.md
+		// 2026-06-03.
+		const prescriptions = await generatePrescriptions(client, profile, strydClient, undefined, tz);
 		const suggestion = prescriptions.run;
 
 		if (!suggestion) {
 			jsonResponse(res, 400, {
 				success: false,
 				error: `No run prescription available for ${profile.displayName}`,
+			});
+			return;
+		}
+
+		// Refuse to push anything that isn't a real prescription. The web render
+		// has dedicated cards for these statuses; the send path must not serialise
+		// the placeholder (e.g. the "Health telemetry unavailable" rest card) into
+		// a junk Stryd calendar entry. 422 (not 409) — the client auto-retries 409
+		// with ?force=true, which would loop on the same unavailable state.
+		if (suggestion.status && suggestion.status !== "ready") {
+			const message =
+				suggestion.healthUnavailableMessage ?? `Workout not sendable (${suggestion.status}).`;
+			jsonResponse(res, 422, {
+				success: false,
+				not_sendable: true,
+				status: suggestion.status,
+				message,
+				// `error` mirrors `message` for the web client, which surfaces
+				// `data.error` on the non-duplicate failure path.
+				error: message,
 			});
 			return;
 		}

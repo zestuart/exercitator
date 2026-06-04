@@ -215,3 +215,55 @@ describe("sendToStryd response wire types", () => {
 		expect(body.calendar_id).toBe(calendarId);
 	});
 });
+
+describe("sendToStryd argument forwarding and status guard", () => {
+	beforeEach(() => {
+		_resetDb();
+		generatePrescriptionsMock.mockReset();
+		toStrydWorkoutMock.mockReset();
+		toStrydWorkoutMock.mockReturnValue({ name: "stub", duration: 2400, blocks: [] });
+	});
+	afterEach(() => _resetDb());
+
+	it("forwards strydClient and tz to generatePrescriptions", async () => {
+		// Regression for 2026-06-03: the regen omitted both args, so it computed
+		// "today" in UTC (wrong day → health_unavailable) and skipped the Stryd
+		// swap on a cold cache. Pin the call site.
+		generatePrescriptionsMock.mockResolvedValue({ run: makeSuggestion(), swim: null });
+		const res = fakeRes();
+		const stryd = makeStrydClientStub({ workoutId: 1, calendarId: 2 });
+
+		await sendToStryd(intervalsClient, PROFILE, stryd, res, false, "America/Los_Angeles");
+
+		expect(generatePrescriptionsMock).toHaveBeenCalledWith(
+			intervalsClient,
+			PROFILE,
+			stryd,
+			undefined,
+			"America/Los_Angeles",
+		);
+	});
+
+	it("refuses a health_unavailable suggestion (422, no Stryd writes)", async () => {
+		generatePrescriptionsMock.mockResolvedValue({
+			run: {
+				...makeSuggestion(),
+				status: "health_unavailable",
+				healthUnavailableMessage: "WHOOP not synced.",
+			},
+			swim: null,
+		});
+		const res = fakeRes();
+		const stryd = makeStrydClientStub({ workoutId: 1, calendarId: 2 });
+
+		await sendToStryd(intervalsClient, PROFILE, stryd, res, false, "America/Los_Angeles");
+
+		expect(res._status).toBe(422);
+		const body = JSON.parse(res._body ?? "{}");
+		expect(body.not_sendable).toBe(true);
+		expect(body.status).toBe("health_unavailable");
+		expect(body.error).toBe("WHOOP not synced.");
+		expect(stryd.createWorkout).not.toHaveBeenCalled();
+		expect(stryd.scheduleWorkout).not.toHaveBeenCalled();
+	});
+});

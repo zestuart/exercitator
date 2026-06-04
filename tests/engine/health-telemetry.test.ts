@@ -123,6 +123,24 @@ describe("fetchHealthTelemetry", () => {
 		});
 		expect(res.error?.reason).toBe("promus_not_configured");
 	});
+
+	it("resolves 'today' in the athlete tz, not UTC, for an evening push west of UTC", async () => {
+		// Regression for 2026-06-03: a "Send to Stryd" at 21:10 PDT regenerated
+		// with tz omitted (→ UTC), so "today" became 4 June and the WHOOP night
+		// (which hadn't happened) read as missing → health_unavailable placeholder
+		// pushed. The athlete-tz path must still see 3 June and succeed.
+		const now = new Date("2026-06-04T04:10:29Z"); // 21:10 PDT on 2026-06-03
+		const client = stubClient({
+			sleep: [{ wake_date: "2026-06-03", duration_s: 27000 }],
+			hrv: [{ wake_day_utc: "2026-06-03", rmssd_median_ms: 60 }],
+		});
+		// Athlete-tz path (correct): today = 2026-06-03 → night present → success.
+		const ok = await fetchHealthTelemetry(now, "America/Los_Angeles", opts(client));
+		expect(ok.error).toBeUndefined();
+		// UTC path (the bug): today = 2026-06-04 → night absent → hard-fail.
+		const bad = await fetchHealthTelemetry(now, "UTC", opts(client));
+		expect(bad.error?.reason).toBe("whoop_today_missing");
+	});
 });
 
 describe("suggestWorkoutFromData — health_unavailable short-circuit", () => {

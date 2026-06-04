@@ -28,6 +28,17 @@
 
 ## Outstanding
 
+### 2026-06-03 — Accepted risk: TOCTOU race in workout send paths (Medium)
+
+**Finding** (SAST diff, Gemini 2.5 Pro): `sendToStryd` (`src/web/send-stryd.ts`) and `sendToIntervals` (`src/web/send.ts`) check `getSendEvent` for an existing same-day send, then make awaited external API calls (`createWorkout`/`scheduleWorkout` or the intervals `POST`), then call `persistSendEvent`. The check→persist window spans network I/O, so two concurrent requests for the same `(user, date, sport, target)` can both pass the check and create duplicate calendar entries, bypassing the one-per-day dedup. Pre-existing; surfaced when the 2026-06-03 timezone/status-guard fix touched both files.
+
+**Status**: Accepted-risk, 2026-06-03. Rationale:
+- Both surfaces are OAuth-gated (streamable-http) / bearer-scoped (HTTP API); the only callers are the two solo athletes (ze, pam) acting on their own data — no untrusted attacker.
+- Praescriptor is tailnet-only; device-level Tailscale access control is the outer gate.
+- The realistic trigger is the single authenticated user double-clicking; the impact is a user-deletable duplicate entry. The dedup is a UX convenience, not a security control.
+
+**Follow-up**: add a `UNIQUE(user_id, date, sport, target)` constraint to `send_events` (`src/db.ts`) and refactor both paths to INSERT-first (claim the slot atomically before the external call; on constraint violation return the existing 409 duplicate response; update the row with `external_id`/meta after success). An in-process lock is insufficient — `send-stryd`/`send` run in two separate containers (`exercitator-mcp`, `praescriptor-web`) sharing one SQLite volume, so the DB constraint is the load-bearing fix. Tracked in [GitHub issue #36](https://github.com/zestuart/exercitator/issues/36).
+
 ### 2026-06-03 — Accepted risk: no range validation on `update_wellness` scaled fields (Medium)
 
 **Finding** (SAST diff, Gemini 2.5 Pro): the `update_wellness` MCP tool (`src/tools/wellness.ts`) types its scaled subjective fields as `z.number().optional()` with no bounds — `sleepQuality`, `mood`, `soreness`, `fatigue`, `stress` (intervals.icu 1–4 dropdowns) and `readiness` (0–100). An out-of-range value (e.g. `soreness: 9000`) is accepted and forwarded verbatim to the upstream `intervals.icu` wellness PUT, where it could corrupt the daily record or drive unexpected behaviour in consumers that lack defensive clamping. Surfaced when the 2026-06-03 field-scale corrections made the intended ranges explicit in the descriptions.

@@ -60,6 +60,26 @@ export async function sendToIntervals(
 			return;
 		}
 
+		// Refuse to push anything that isn't a real prescription (awaiting_input /
+		// already_trained / health_unavailable). The web render shows dedicated
+		// cards for these; the send path must not push the placeholder. 422 (not
+		// 409) — the client auto-retries 409 with ?force=true. See lessons.md
+		// 2026-06-03.
+		if (suggestion.status && suggestion.status !== "ready") {
+			const message =
+				suggestion.healthUnavailableMessage ?? `Workout not sendable (${suggestion.status}).`;
+			jsonResponse(res, 422, {
+				success: false,
+				not_sendable: true,
+				status: suggestion.status,
+				message,
+				// `error` mirrors `message` for the web client, which surfaces
+				// `data.error` on the non-duplicate failure path.
+				error: message,
+			});
+			return;
+		}
+
 		const event = {
 			category: "WORKOUT",
 			start_date_local: `${today}T00:00:00`,
