@@ -230,6 +230,44 @@ describe("formWorkoutToSegments — Power fixture (Come Around Again and Again)"
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining("alien-effort-level"));
 		warn.mockRestore();
 	});
+
+	it("humanises the postSet group heading to 'Post-set' (not raw camelCase)", () => {
+		const synthetic: FormWorkoutBody = {
+			...ENDURANCE,
+			setGroups: [
+				{
+					groupType: "postSet",
+					roundDistance: 100,
+					roundsCount: 1,
+					sets: [
+						{
+							intervalDistance: 100,
+							intervalsCount: 1,
+							strokeType: "freestyle",
+							effort: {
+								level: "easy",
+								pace: null,
+								percentage: null,
+								rpeLevel: null,
+								splitRange: null,
+								zone: null,
+							},
+							rest: null,
+							equipment: [],
+							drill: null,
+							endDrill: null,
+							endStrokeType: null,
+							headCoachFocusMode: null,
+							description: "",
+						},
+					],
+				},
+			],
+		};
+		const out = formWorkoutToSegments(synthetic, SETTINGS);
+		expect(out).toHaveLength(1);
+		expect(out[0].name).toBe("Post-set");
+	});
 });
 
 describe("formWorkoutToSegments — edge cases", () => {

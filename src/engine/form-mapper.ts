@@ -303,6 +303,8 @@ function groupTypeToSegmentName(groupType: string): string {
 			return "Pre-set";
 		case "main":
 			return "Main set";
+		case "postSet":
+			return "Post-set";
 		default:
 			return groupType;
 	}

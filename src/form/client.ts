@@ -185,7 +185,7 @@ export interface FormSet {
 }
 
 export interface FormSetGroup {
-	groupType: "warmup" | "preSet" | "main" | "cooldown" | string;
+	groupType: "warmup" | "preSet" | "main" | "postSet" | "cooldown" | string;
 	roundDistance: number;
 	roundsCount: number;
 	sets: FormSet[];
