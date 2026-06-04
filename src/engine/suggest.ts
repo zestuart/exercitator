@@ -375,9 +375,14 @@ export function suggestWorkoutFromData(
 		};
 	}
 
+	// Whole-athlete readiness: no `sport` filter, so the recency component
+	// reflects time since the LAST activity of ANY sport. This is a deliberate
+	// multi-sport choice — a hard ride or swim should temper today's run
+	// readiness (and the displayed number is identical across the Run/Swim
+	// cards, Praescriptor header, and the HTTP API status/dashboard/suggested
+	// blocks). The engine's category gating reads this same score.
 	const readiness = computeReadiness(wellness, activities, now, {
 		ftp: powerContext.ftp > 0 ? powerContext.ftp : undefined,
-		sport,
 		health: data.health,
 	});
 

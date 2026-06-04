@@ -66,10 +66,9 @@ export async function handleDashboard(
 		const powerContext = detectPowerSource(data.activities);
 		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
 		const strydCp = strydCpInput?.cp ?? null;
-		// Same readiness inputs as the prescription (primary sport + Stryd CP) so
-		// the status-block headline matches the suggested block and Praescriptor —
-		// see status.ts for the recency-weight rationale.
-		const primarySport: "Run" | "Swim" = user.profile.sports.includes("Run") ? "Run" : "Swim";
+		// Whole-athlete readiness (no sport filter) with the prescription's
+		// {ftp, health} inputs, so the status block, suggested block, and
+		// Praescriptor header all report one number — see status.ts.
 		const ftpForReadiness = strydCpInput
 			? Math.round(strydCpInput.cp)
 			: powerContext.ftp > 0
@@ -77,7 +76,6 @@ export async function handleDashboard(
 				: undefined;
 		const readiness = computeReadiness(data.wellness, data.activities, now, {
 			ftp: ftpForReadiness,
-			sport: primarySport,
 			health: data.health,
 		});
 		const strydCpUpdatedAt =

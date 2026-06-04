@@ -22,9 +22,12 @@ export interface ReadinessOptions {
 	/** Athlete's current FTP/CP in watts. When provided alongside CTL,
 	 *  the rebuild detection can lift the TSB component floor. */
 	ftp?: number;
-	/** Target sport for the prescription. When provided, recency filters to
-	 *  same-sport activities only — a cross-sport activity shouldn't suppress
-	 *  readiness for a different prescription. */
+	/** Optional sport filter for the recency component: when set, only same-sport
+	 *  activities count toward "time since last activity". NOTE: the prescription
+	 *  + HTTP API paths intentionally DO NOT pass this — readiness is a
+	 *  whole-athlete recovery metric (cross-sport fatigue counts), shown
+	 *  identically on every surface. Retained for direct callers/tests that want
+	 *  a sport-isolated recency. */
 	sport?: "Run" | "Swim";
 	/** Overnight WHOOP telemetry for `promus-whoop` users. When non-empty, the
 	 *  Sleep and HRV components (and their warnings) read from it instead of

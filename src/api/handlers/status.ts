@@ -48,15 +48,13 @@ export async function handleStatus(
 		const now = new Date();
 		const powerContext = detectPowerSource(data.activities);
 		const strydCp = await fetchStrydCpInput(user.stryd ?? null, now);
-		// Compute readiness with the SAME inputs the prescription uses (primary
-		// sport for same-sport recency + Stryd CP as ftp for the rebuild floor)
-		// so the headline number matches Praescriptor and the suggested block —
-		// a whole-athlete recency (all sports) otherwise disagreed by the recency
-		// weight (e.g. 68 vs 75 when the athlete cross-trained but hasn't run).
-		// Status is informational, not a prescription, so it does not hard-fail
-		// on missing WHOOP data — it reports from the most recent available night
+		// Whole-athlete readiness (no sport filter) so the recency component spans
+		// all sports — this is the multi-sport recovery indicator the Nunc tab and
+		// Praescriptor show, and it uses the same {ftp, health} inputs as the
+		// prescription so every surface reports one number. Status is
+		// informational, not a prescription, so it does not hard-fail on missing
+		// WHOOP data — it reports from the most recent available night
 		// (data.health); on a full Promus outage it falls back to wellness.
-		const primarySport: "Run" | "Swim" = user.profile.sports.includes("Run") ? "Run" : "Swim";
 		const ftpForReadiness = strydCp
 			? Math.round(strydCp.cp)
 			: powerContext.ftp > 0
@@ -64,7 +62,6 @@ export async function handleStatus(
 				: undefined;
 		const readiness = computeReadiness(data.wellness, data.activities, now, {
 			ftp: ftpForReadiness,
-			sport: primarySport,
 			health: data.health,
 		});
 		// Convert the engine-shape CP into the API DTO shape — `updatedAt` is
