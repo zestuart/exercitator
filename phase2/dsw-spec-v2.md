@@ -1,5 +1,14 @@
 # Daily Suggested Workout — Implementation Specification v2
 
+> **⚠️ HISTORICAL DESIGN SPEC — some details have since changed.** This document
+> predates the 2026-06-03 wellness-scale and readiness corrections. In particular,
+> the `WellnessRecord` scales below are stale: intervals.icu stores
+> `soreness`/`fatigue`/`stress`/`mood`/`sleepQuality` on a **1–4** dropdown (not
+> 1–10/1–5) and `readiness` as **0–100** (device-provided). The Subjective
+> readiness component no longer uses the intervals `readiness` field — it is
+> soreness+fatigue self-report only, inverted via `((4 - value) / 3) * 100`.
+> For current behaviour see `CHANGELOG.md`, `architecture.md`, and the code.
+
 ## Overview
 
 Add a new MCP tool `suggest_workout` to Exercitator that generates a personalised
