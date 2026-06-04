@@ -201,20 +201,23 @@ function computeRecency(
 	return 100 / (1 + Math.exp(-0.15 * (hoursSince - 24)));
 }
 
-/** Subjective component: average of inverted fatigue, inverted soreness, and readiness.
- *  All values are normalised to 0–100 before averaging.
- *  - fatigue/soreness: intervals.icu 0–10 scale, inverted (10 - value) then × 10
- *  - readiness: Oura/Garmin 0–100 scale, used directly */
+/** Subjective component: average of inverted fatigue and inverted soreness.
+ *  Both are normalised to 0–100 before averaging.
+ *  - fatigue/soreness: intervals.icu 1–4 dropdown (low=1, avg=2, high=3, extreme=4),
+ *    inverted onto 0–100 via ((4 - value) / 3) * 100 so low=1→100, extreme=4→0
+ *
+ *  The intervals.icu `readiness` field (Oura/Garmin device-synced 0–100) is
+ *  deliberately NOT used: its provenance is the same unreliable third-party sync
+ *  that drove Sleep + HRV onto the Promus WHOOP feed (lessons.md 2026-06-03), and
+ *  it is null for our users in practice. Subjective is now self-report only. */
 function computeSubjective(wellness: WellnessRecord[]): number | null {
 	// Use most recent record with any subjective data
 	for (let i = wellness.length - 1; i >= 0; i--) {
 		const w = wellness[i];
 		const values: number[] = [];
-		// fatigue/soreness are 0–10 (intervals.icu manual entry) — invert and scale to 0–100
-		if (w.fatigue != null) values.push((10 - w.fatigue) * 10);
-		if (w.soreness != null) values.push((10 - w.soreness) * 10);
-		// readiness is 0–100 (Oura/Garmin) — use directly
-		if (w.readiness != null) values.push(w.readiness);
+		// fatigue/soreness are 1–4 (intervals.icu manual entry) — invert and scale to 0–100
+		if (w.fatigue != null) values.push(((4 - w.fatigue) / 3) * 100);
+		if (w.soreness != null) values.push(((4 - w.soreness) / 3) * 100);
 
 		if (values.length > 0) {
 			const avg = values.reduce((a, b) => a + b, 0) / values.length;

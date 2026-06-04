@@ -484,3 +484,16 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 **Prevention**:
 - When you change the source feeding a metric, grep for EVERY place that re-derives or re-displays that metric — not just the canonical computation. Score and badge, header and DTO, web and native client are separate code paths; a source swap must update all of them in one change.
 - Any two surfaces that show "the same" number must call the shared computation with identical inputs. `computeReadiness` takes `{ sport, ftp, health }`; omitting any of them silently produces a different number. Prefer passing the full input set everywhere, or compute once and reuse.
+
+## 2026-06-03 — Soreness/fatigue read on a 0–10 scale, but intervals.icu stores 1–4
+
+**What happened**: ze flagged soreness as "high" in intervals.icu, yet the HTTP API `/status` readiness block badged soreness (and fatigue) as `"ok"`. Live wellness showed `soreness: 3` and `fatigue: 3` for 2026-06-02/03. The qualitative dropdown (low/avg/high/extreme) stores integers 1–4, so "high" = 3.
+
+**Root cause**: both consumers assumed a 0–10 scale. (1) The API badge logic `value >= 6 ? "low" : "ok"` (`src/api/payload.ts`) — with a 1–4 domain the `>= 6` branch is unreachable, so soreness/fatigue could *never* badge `"low"`. (2) The subjective readiness component `(10 - value) * 10` (`src/engine/readiness.ts`) — "high" (3) mapped to 70, *above* the 50 neutral, so self-reported soreness/fatigue **raised** readiness and the `subjective < 40` warning essentially never fired. The wrong scale was also baked into a stale memory note and the `update_wellness` tool's field descriptions (1-10).
+
+**Fix**: badge flags `"low"` at `>= 3` (high/extreme); the subjective component inverts via `((4 - value) / 3) * 100` (low=1→100, avg=2→67, high=3→33, extreme=4→0). Updated the `update_wellness` tool descriptions to state the 1-4 scale, and corrected the `reference_intervals_icu` memory. Two existing tests encoded the old assumption (a payload test asserting `soreness: 3` → `"ok"`, a readiness test using out-of-range `fatigue: 8`) and were corrected. Added 4 readiness + 3 payload vitest cases pinning the 1–4 mapping and the warning trigger.
+
+**Prevention**:
+- When a field's provenance is a third-party UI with a fixed-vocabulary control (dropdown/segmented picker), confirm the integer encoding against a *live* record before writing threshold logic — don't infer the numeric range from the field name or a units-style guess.
+- A threshold that can never be reached within a field's actual domain is a silent dead branch. When the domain is small and known, sanity-check that each output (`"low"`/`"ok"`) is reachable.
+- Subjective inputs that influence readiness must move it in the intended *direction*: a regression test now asserts higher soreness/fatigue lowers the score, which would have caught the inverted mapping immediately.

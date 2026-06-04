@@ -37,12 +37,32 @@ export function registerWellnessTools(server: McpServer, client: IntervalsClient
 			restingHR: z.number().optional().describe("Resting heart rate in bpm"),
 			hrv: z.number().optional().describe("Heart rate variability (ms)"),
 			sleepSecs: z.number().optional().describe("Sleep duration in seconds"),
-			sleepQuality: z.number().optional().describe("Sleep quality (1-5)"),
-			mood: z.number().optional().describe("Mood (1-5)"),
-			readiness: z.number().optional().describe("Readiness (1-10)"),
-			soreness: z.number().optional().describe("Soreness (1-10, higher = more sore)"),
-			fatigue: z.number().optional().describe("Fatigue (1-10, higher = more fatigued)"),
-			stress: z.number().optional().describe("Stress (1-10, higher = more stressed)"),
+			sleepQuality: z
+				.number()
+				.optional()
+				.describe("Sleep quality on intervals.icu's 1-4 scale: 1=great, 2=good, 3=avg, 4=poor"),
+			mood: z
+				.number()
+				.optional()
+				.describe("Mood on intervals.icu's 1-4 scale: 1=great, 2=good, 3=avg, 4=poor"),
+			readiness: z
+				.number()
+				.optional()
+				.describe(
+					"Readiness 0-100 (device-provided by Oura/Garmin). Stored on intervals.icu; not used in Exercitator's readiness score.",
+				),
+			soreness: z
+				.number()
+				.optional()
+				.describe("Soreness on intervals.icu's 1-4 scale: 1=low, 2=avg, 3=high, 4=extreme"),
+			fatigue: z
+				.number()
+				.optional()
+				.describe("Fatigue on intervals.icu's 1-4 scale: 1=low, 2=avg, 3=high, 4=extreme"),
+			stress: z
+				.number()
+				.optional()
+				.describe("Stress on intervals.icu's 1-4 scale: 1=low, 2=avg, 3=high, 4=extreme"),
 		},
 		async ({ date, ...fields }) => {
 			const body: Record<string, unknown> = {};

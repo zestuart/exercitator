@@ -63,8 +63,9 @@ describe("readinessFromEngine", () => {
 		const out = readinessFromEngine(75, wellness, true, health);
 		expect(out.components.hrv).toBe("ok"); // 74 ms ≥ 40
 		expect(out.components.sleep).toBe("ok"); // 7h36m ≥ 6h
-		// Subjective still from intervals wellness.
-		expect(out.components.soreness).toBe("ok");
+		// Subjective still from intervals wellness: soreness 3 = "high" on the
+		// 1–4 dropdown → "low" badge (was wrongly "ok" under the old 0–10 read).
+		expect(out.components.soreness).toBe("low");
 	});
 
 	it("flags low WHOOP sleep + HRV", () => {
@@ -88,6 +89,48 @@ describe("readinessFromEngine", () => {
 		const out = readinessFromEngine(40, wellness, true, health);
 		expect(out.components.hrv).toBe("low");
 		expect(out.components.sleep).toBe("low");
+	});
+
+	// soreness/fatigue badges read intervals.icu's 1–4 dropdown (low=1, avg=2,
+	// high=3, extreme=4). REGRESSION (2026-06-03): the old >= 6 threshold assumed
+	// a 0–10 scale, so high/extreme was unreachable and always badged "ok".
+	function wellnessWith(soreness: number | null, fatigue: number | null) {
+		return [
+			{
+				id: "2026-06-03",
+				ctl: 25,
+				atl: 28,
+				restingHR: null,
+				hrv: null,
+				sleepSecs: null,
+				sleepScore: null,
+				readiness: null,
+				weight: null,
+				soreness,
+				fatigue,
+				stress: null,
+			},
+		];
+	}
+
+	it("badges 'high' (3) and 'extreme' (4) soreness/fatigue as low", () => {
+		const high = readinessFromEngine(75, wellnessWith(3, 3), true);
+		expect(high.components.soreness).toBe("low");
+		expect(high.components.fatigue).toBe("low");
+		const extreme = readinessFromEngine(75, wellnessWith(4, 4), true);
+		expect(extreme.components.soreness).toBe("low");
+		expect(extreme.components.fatigue).toBe("low");
+	});
+
+	it("badges 'low' (1) and 'avg' (2) soreness/fatigue as ok", () => {
+		expect(readinessFromEngine(75, wellnessWith(1, 1), true).components.soreness).toBe("ok");
+		expect(readinessFromEngine(75, wellnessWith(2, 2), true).components.fatigue).toBe("ok");
+	});
+
+	it("badges absent soreness/fatigue as unknown", () => {
+		const out = readinessFromEngine(75, wellnessWith(null, null), true);
+		expect(out.components.soreness).toBe("unknown");
+		expect(out.components.fatigue).toBe("unknown");
 	});
 });
 

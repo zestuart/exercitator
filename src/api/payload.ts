@@ -100,8 +100,10 @@ export function readinessFromEngine(
 					? "low"
 					: "ok"
 				: "unknown";
-	const sorenessStatus = latest?.soreness == null ? "unknown" : latest.soreness >= 6 ? "low" : "ok";
-	const fatigueStatus = latest?.fatigue == null ? "unknown" : latest.fatigue >= 6 ? "low" : "ok";
+	// soreness/fatigue are intervals.icu's 1–4 dropdown (low=1, avg=2, high=3, extreme=4);
+	// flag "low" at high/extreme (>= 3), not the old 0–10 assumption (>= 6, unreachable).
+	const sorenessStatus = latest?.soreness == null ? "unknown" : latest.soreness >= 3 ? "low" : "ok";
+	const fatigueStatus = latest?.fatigue == null ? "unknown" : latest.fatigue >= 3 ? "low" : "ok";
 
 	return {
 		score: maybeScore,

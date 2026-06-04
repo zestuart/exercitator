@@ -28,6 +28,18 @@
 
 ## Outstanding
 
+### 2026-06-03 — Accepted risk: no range validation on `update_wellness` scaled fields (Medium)
+
+**Finding** (SAST diff, Gemini 2.5 Pro): the `update_wellness` MCP tool (`src/tools/wellness.ts`) types its scaled subjective fields as `z.number().optional()` with no bounds — `sleepQuality`, `mood`, `soreness`, `fatigue`, `stress` (intervals.icu 1–4 dropdowns) and `readiness` (0–100). An out-of-range value (e.g. `soreness: 9000`) is accepted and forwarded verbatim to the upstream `intervals.icu` wellness PUT, where it could corrupt the daily record or drive unexpected behaviour in consumers that lack defensive clamping. Surfaced when the 2026-06-03 field-scale corrections made the intended ranges explicit in the descriptions.
+
+**Status**: Accepted-risk, 2026-06-03. Rationale:
+- The tool is OAuth-authenticated (streamable-http); the only callers are the two solo athletes (ze, pam) writing their own records — no untrusted input path.
+- `computeReadiness` (`src/engine/readiness.ts`) clamps soreness/fatigue to `[0,100]` after the 1–4 inversion, so a junk value cannot distort the in-house readiness score; `stress`/`mood`/`sleepQuality`/`readiness` are not consumed by the engine at all.
+- intervals.icu performs its own server-side validation on the wellness PUT.
+- Exercitator's MCP surface, while funnel-public, gates writes behind the OAuth passphrase.
+
+**Follow-up**: add `.int()` + range validation that preserves the documented `-1` clear-sentinel (allowed set `{-1} ∪ valid-range` per field, e.g. `.refine(v => v === -1 || (v >= 1 && v <= 4))`). A naive `.min(1).max(4)` must NOT be used — it would reject `-1` and silently break field-clearing (`wellness.ts:30`). Tracked for a future hardening pass.
+
 ### 2026-06-02 — Accepted risk: `prompt()` in compliance activity picker (Low)
 
 **Finding** (SAST diff, Gemini 2.5 Pro): the multi-activity branch of the compliance confirm flow in `src/web/render.ts` (`clientJs`, `.confirm-btn` handler) seeds a `window.prompt()` with intervals.icu-sourced activity names and submits the typed value as `activityId`. A crafted activity name could social-engineer a user into typing sensitive data, which would then transit to `/api/compliance/confirm`.

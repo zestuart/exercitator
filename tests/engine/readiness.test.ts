@@ -96,7 +96,7 @@ describe("computeReadiness", () => {
 				hrv: 42,
 				sleepSecs: 14400,
 				sleepScore: null,
-				fatigue: 8,
+				fatigue: 4, // intervals.icu "extreme" on the 1–4 dropdown
 			}),
 		];
 		const activities = [
@@ -365,6 +365,134 @@ describe("computeReadiness", () => {
 		// Without renormalisation, subjective→NEUTRAL would cap score around 90.
 		// With renormalisation, present-components average is much higher.
 		expect(result.score).toBeGreaterThan(90);
+	});
+
+	// ── Subjective scale: intervals.icu 1–4 soreness/fatigue ───────────
+	// REGRESSION (2026-06-03): intervals.icu stores these as a four-step
+	// dropdown — low=1, avg=2, high=3, extreme=4 — NOT 0–10. The old
+	// (10 - value) * 10 inversion read "high" (3) as 70 (above neutral), so
+	// self-reported soreness/fatigue *raised* readiness and never warned.
+	// The fix maps 1–4 onto 0–100 via ((4 - value) / 3) * 100.
+
+	const subjectiveHrvHistory = [
+		makeWellness({ id: "2026-03-18", hrv: 55 }),
+		makeWellness({ id: "2026-03-19", hrv: 55 }),
+		makeWellness({ id: "2026-03-20", hrv: 55 }),
+		makeWellness({ id: "2026-03-21", hrv: 55 }),
+		makeWellness({ id: "2026-03-22", hrv: 55 }),
+	];
+	const subjectiveActivities = [
+		makeActivity({ start_date_local: "2026-03-21T20:00:00", moving_time: 3600 }),
+	];
+	function readinessWithSubjective(soreness: number, fatigue: number) {
+		return computeReadiness(
+			[
+				...subjectiveHrvHistory,
+				makeWellness({
+					id: "2026-03-23",
+					ctl: 50,
+					atl: 40,
+					hrv: 55,
+					sleepScore: 85,
+					soreness,
+					fatigue,
+				}),
+			],
+			subjectiveActivities,
+			NOW,
+		);
+	}
+
+	it("maps 'high' (3) below neutral and emits the elevated warning", () => {
+		const high = readinessWithSubjective(3, 3);
+		// ((4 - 3) / 3) * 100 = 33.3 for each → subjective component ~33
+		expect(high.components.subjective).toBeCloseTo(33.33, 1);
+		expect(high.warnings).toContain("Self-reported fatigue or soreness is elevated");
+	});
+
+	it("maps 'extreme' (4) to zero subjective", () => {
+		expect(readinessWithSubjective(4, 4).components.subjective).toBe(0);
+	});
+
+	it("maps 'low' (1) to full subjective and stays quiet", () => {
+		const low = readinessWithSubjective(1, 1);
+		expect(low.components.subjective).toBe(100);
+		expect(low.warnings).not.toContain("Self-reported fatigue or soreness is elevated");
+	});
+
+	it("higher soreness/fatigue yields a lower overall readiness score", () => {
+		expect(readinessWithSubjective(3, 3).score).toBeLessThan(readinessWithSubjective(1, 1).score);
+	});
+
+	// ── intervals.icu `readiness` field is NOT used ───────────────────
+	// The Oura/Garmin-synced `readiness` field (0–100) was dropped from the
+	// Subjective component (provenance is the same unreliable third-party sync
+	// that moved Sleep + HRV onto Promus WHOOP). Subjective is self-report only.
+
+	it("ignores the intervals.icu readiness field entirely", () => {
+		const withReadiness = computeReadiness(
+			[
+				...subjectiveHrvHistory,
+				makeWellness({
+					id: "2026-03-23",
+					ctl: 50,
+					atl: 40,
+					hrv: 55,
+					sleepScore: 85,
+					soreness: null,
+					fatigue: null,
+					readiness: 95, // device readiness present, but no self-report
+				}),
+			],
+			subjectiveActivities,
+			NOW,
+		);
+		const withoutReadiness = computeReadiness(
+			[
+				...subjectiveHrvHistory,
+				makeWellness({
+					id: "2026-03-23",
+					ctl: 50,
+					atl: 40,
+					hrv: 55,
+					sleepScore: 85,
+					soreness: null,
+					fatigue: null,
+					readiness: null,
+				}),
+			],
+			subjectiveActivities,
+			NOW,
+		);
+		// No self-report → Subjective has no data → NEUTRAL fallback, not 95.
+		expect(withReadiness.components.subjective).toBe(50);
+		expect(withReadiness.score).toBe(withoutReadiness.score);
+	});
+
+	it("readiness field does not dilute a self-reported subjective value", () => {
+		// soreness/fatigue both 3 → subjective ~33. A high readiness (100) would,
+		// if averaged in, lift it to ~55 — assert it stays ~33.
+		const base = {
+			id: "2026-03-23",
+			ctl: 50,
+			atl: 40,
+			hrv: 55,
+			sleepScore: 85,
+			soreness: 3,
+			fatigue: 3,
+		} as const;
+		const withReadiness = computeReadiness(
+			[...subjectiveHrvHistory, makeWellness({ ...base, readiness: 100 })],
+			subjectiveActivities,
+			NOW,
+		);
+		const withoutReadiness = computeReadiness(
+			[...subjectiveHrvHistory, makeWellness({ ...base, readiness: null })],
+			subjectiveActivities,
+			NOW,
+		);
+		expect(withReadiness.components.subjective).toBeCloseTo(33.33, 1);
+		expect(withReadiness.components.subjective).toBe(withoutReadiness.components.subjective);
 	});
 });
 
