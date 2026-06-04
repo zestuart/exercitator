@@ -50,6 +50,37 @@ export interface WellnessRecord {
 	stress: number | null;
 }
 
+/**
+ * One night of overnight health telemetry, sourced from Promus WHOOP for users
+ * flagged `healthSource: "promus-whoop"`. Feeds the Sleep and HRV readiness
+ * components in place of intervals.icu wellness. `date` is the wake date
+ * (YYYY-MM-DD) the night is attributed to — the key readiness joins on.
+ */
+export interface NightlyHealth {
+	date: string;
+	/** Total sleep duration in seconds (WHOOP `duration_s`). */
+	sleepSecs: number | null;
+	/** Nightly median RMSSD in ms (WHOOP `rmssd_median_ms`). */
+	hrvRmssd: number | null;
+}
+
+/**
+ * Thrown when a `promus-whoop` user's overnight health telemetry cannot be
+ * obtained — Promus unreachable/non-2xx, or no WHOOP night present for today's
+ * wake date. Callers convert this into a `health_unavailable` suggestion
+ * rather than producing a prescription from degraded readiness inputs.
+ */
+export class HealthUnavailableError extends Error {
+	constructor(
+		message: string,
+		/** Machine-readable reason for surfacing on the blocked card. */
+		readonly reason: string,
+	) {
+		super(message);
+		this.name = "HealthUnavailableError";
+	}
+}
+
 /** Sport-specific settings from intervals.icu */
 export interface SportSettings {
 	type: string;
@@ -189,12 +220,20 @@ export interface WorkoutSuggestion {
 	 *   'already_trained'  — requested sport already done today; show the
 	 *                        Quies suppression card and the swap CTA
 	 *                        (renderer hides segments).
+	 *   'health_unavailable' — a `promus-whoop` user's overnight WHOOP telemetry
+	 *                        is missing for today or Promus is unreachable; we
+	 *                        refuse to prescribe from degraded readiness inputs
+	 *                        (renderer hides segments and shows a sync prompt).
 	 */
-	status?: "ready" | "awaiting_input" | "already_trained";
+	status?: "ready" | "awaiting_input" | "already_trained" | "health_unavailable";
 	/** Present when status is 'awaiting_input'. */
 	awaitingInput?: AwaitingInput;
 	/** Present when status is 'already_trained'. */
 	restMessage?: RestMessage;
+	/** Present when status is 'health_unavailable': machine-readable cause. */
+	healthUnavailableReason?: string;
+	/** Present when status is 'health_unavailable': user-facing explanation. */
+	healthUnavailableMessage?: string;
 	/**
 	 * Where the segments came from. Set by Praescriptor's Stryd swap layer
 	 * (src/web/prescriptions.ts) when the user has `runRecommendationSource:

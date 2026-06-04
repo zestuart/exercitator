@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { startApiServer } from "./api/server.js";
 import { authEnabled, createOAuthHandler, validateBearer } from "./auth.js";
+import { healthFetchOptionsFor } from "./health-source.js";
 import { IntervalsClient } from "./intervals.js";
 import { StrydClient } from "./stryd/client.js";
 import { registerActivityTools } from "./tools/activities.js";
@@ -21,6 +22,7 @@ import { registerComplianceTools } from "./tools/compliance.js";
 import { registerEventTools } from "./tools/events.js";
 import { registerSuggestTools } from "./tools/suggest.js";
 import { registerWellnessTools } from "./tools/wellness.js";
+import { getUserProfile } from "./users.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -49,6 +51,12 @@ const strydClient =
 		? new StrydClient({ email: STRYD_EMAIL, password: STRYD_PASSWORD })
 		: null;
 
+// Health telemetry: the public MCP server is single-user (ze). Resolve ze's
+// profile so suggest_workout reads Sleep + HRV from Promus WHOOP (hard-failing
+// when today's night is missing) exactly as Praescriptor and the HTTP API do.
+const zeProfile = getUserProfile("ze");
+const healthOptions = zeProfile ? healthFetchOptionsFor(zeProfile) : undefined;
+
 // ---------------------------------------------------------------------------
 // Server factory — each connection gets its own McpServer instance
 // ---------------------------------------------------------------------------
@@ -56,14 +64,14 @@ const strydClient =
 function createMcpServer(): McpServer {
 	const server = new McpServer({
 		name: "exercitator",
-		version: "0.2.1",
+		version: "0.2.2",
 	});
 
 	registerAthleteTools(server, intervalsClient);
 	registerActivityTools(server, intervalsClient);
 	registerWellnessTools(server, intervalsClient);
 	registerEventTools(server, intervalsClient);
-	registerSuggestTools(server, intervalsClient, strydClient);
+	registerSuggestTools(server, intervalsClient, strydClient, healthOptions);
 	registerComplianceTools(server);
 
 	return server;
@@ -78,7 +86,7 @@ if (TRANSPORT === "stdio") {
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 	console.error("Exercitator MCP server running on stdio");
-	startApiServer({ defaultHost: "127.0.0.1", version: "0.2.1" });
+	startApiServer({ defaultHost: "127.0.0.1", version: "0.2.2" });
 }
 
 // ---------------------------------------------------------------------------
@@ -199,5 +207,5 @@ if (TRANSPORT === "streamable-http") {
 		);
 	});
 
-	startApiServer({ defaultHost: "0.0.0.0", version: "0.2.1" });
+	startApiServer({ defaultHost: "0.0.0.0", version: "0.2.2" });
 }

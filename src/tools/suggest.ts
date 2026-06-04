@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { cacheGet } from "../db.js";
+import type { HealthFetchOptions } from "../engine/suggest.js";
 import { suggestWorkout } from "../engine/suggest.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -23,6 +24,7 @@ export function registerSuggestTools(
 	server: McpServer,
 	client: IntervalsClient,
 	strydClient?: StrydClient | null,
+	health?: HealthFetchOptions,
 ): void {
 	server.tool(
 		"suggest_workout",
@@ -37,7 +39,7 @@ export function registerSuggestTools(
 		{},
 		async () => {
 			const tz = await getAthleteTz(client);
-			const suggestion = await suggestWorkout(client, tz, strydClient ?? null);
+			const suggestion = await suggestWorkout(client, tz, strydClient ?? null, health);
 			return {
 				content: [{ type: "text", text: JSON.stringify(suggestion, null, 2) }],
 			};

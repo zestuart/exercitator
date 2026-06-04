@@ -19,6 +19,7 @@ import {
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
+import { healthFetchOptionsFor } from "../../health-source.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
 import {
 	generateInvocations,
@@ -59,11 +60,13 @@ export async function handleDashboard(
 	const now = new Date();
 
 	try {
-		const data = await fetchTrainingData(user.intervals, tz);
+		const data = await fetchTrainingData(user.intervals, tz, healthFetchOptionsFor(user.profile));
 
 		// Status block
 		const powerContext = detectPowerSource(data.activities);
-		const readiness = computeReadiness(data.wellness, data.activities, now);
+		const readiness = computeReadiness(data.wellness, data.activities, now, {
+			health: data.health,
+		});
 		const strydCpInput = await fetchStrydCpInput(user.stryd ?? null, now);
 		const strydCp = strydCpInput?.cp ?? null;
 		const strydCpUpdatedAt =
@@ -135,6 +138,7 @@ export async function handleDashboard(
 		// Suggested block — run the engine with the already-fetched data
 		let suggestedResp: SuggestedResponse | null = null;
 		let awaitingInput: DashboardResponse["awaiting_input"] = null;
+		let healthUnavailable: DashboardResponse["health_unavailable"] = null;
 		let suggestion: WorkoutSuggestion;
 		try {
 			suggestion = suggestWorkoutFromData(
@@ -153,6 +157,13 @@ export async function handleDashboard(
 					activity_name: suggestion.awaitingInput.activityName,
 					activity_type: suggestion.awaitingInput.activityType,
 					prompt: suggestion.awaitingInput.prompt,
+				};
+			} else if (suggestion.status === "health_unavailable") {
+				// Hard-fail (promus-whoop): no suggested block until WHOOP syncs.
+				healthUnavailable = {
+					reason: suggestion.healthUnavailableReason ?? "unknown",
+					message:
+						suggestion.healthUnavailableMessage ?? "Overnight health telemetry is unavailable.",
 				};
 			} else if (suggestion.status === "already_trained" && suggestion.restMessage) {
 				// Suppression short-circuit (API 0.2.0). Skip vendor swap
@@ -243,6 +254,7 @@ export async function handleDashboard(
 			today: todayBlock,
 			suggested: suggestedResp,
 			awaiting_input: awaitingInput,
+			health_unavailable: healthUnavailable,
 		};
 		jsonResponse(res, 200, body);
 	} catch (err) {

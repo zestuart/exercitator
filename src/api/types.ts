@@ -223,12 +223,25 @@ export interface SuggestedResponse {
 	user_id: string;
 	date: string;
 	tz: string;
-	status: "ready" | "already_trained";
+	status: "ready" | "already_trained" | "health_unavailable";
 	suggestion: SuggestedWorkoutBody;
 	/** Present iff status === "already_trained". Introduced in 0.2.0. */
 	rest_message?: RestMessageBlock;
 	/** Present iff status === "ready". Introduced in 0.2.1. */
 	invocation?: InvocationBlock;
+	/** Present iff status === "health_unavailable". Introduced in 0.2.2. */
+	health_unavailable?: HealthUnavailableBlock;
+}
+
+/**
+ * Why a prescription could not be produced: the user's overnight WHOOP
+ * telemetry (Sleep + HRV source) is missing for today or Promus is
+ * unreachable. The engine hard-fails rather than prescribe from degraded
+ * readiness inputs. Introduced in 0.2.2.
+ */
+export interface HealthUnavailableBlock {
+	reason: string;
+	message: string;
 }
 
 export interface TodayScheduledWorkout {
@@ -272,6 +285,8 @@ export interface DashboardResponse {
 		activity_type: string;
 		prompt: string;
 	} | null;
+	/** Present when the suggested block hard-failed on missing WHOOP telemetry. */
+	health_unavailable: HealthUnavailableBlock | null;
 }
 
 // ---------------------------------------------------------------------------

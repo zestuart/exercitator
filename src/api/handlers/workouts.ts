@@ -16,6 +16,7 @@ import {
 	suggestWorkoutFromData,
 } from "../../engine/suggest.js";
 import type { ActivitySummary, WorkoutSuggestion } from "../../engine/types.js";
+import { healthFetchOptionsFor } from "../../health-source.js";
 import { applyFormSwapIfEnabled } from "../../web/form-swap.js";
 import {
 	generateInvocations,
@@ -180,7 +181,7 @@ export async function handleWorkoutsSuggested(
 
 	try {
 		const now = new Date();
-		const data = await fetchTrainingData(user.intervals, tz);
+		const data = await fetchTrainingData(user.intervals, tz, healthFetchOptionsFor(user.profile));
 
 		// Authoritative CP from Stryd's foot pod when credentials are present —
 		// drives the stryd_direct wire enum and overrides intervals.icu's FTP.
@@ -194,7 +195,9 @@ export async function handleWorkoutsSuggested(
 			sport = sportParam;
 		} else {
 			const pc = detectPowerSource(data.activities);
-			const readiness = computeReadiness(data.wellness, data.activities, now);
+			const readiness = computeReadiness(data.wellness, data.activities, now, {
+				health: data.health,
+			});
 			const sel = selectSport(data.activities, readiness.score, now, pc);
 			sport = sel.sport;
 			sportSelectionReason = sel.reason;
@@ -212,6 +215,19 @@ export async function handleWorkoutsSuggested(
 
 		if (suggestion.status === "awaiting_input") {
 			emitAwaitingInput(res, suggestion);
+			return;
+		}
+
+		// Health-telemetry hard-fail (promus-whoop users): no prescription until
+		// the WHOOP night syncs. 503 — an upstream data dependency is unavailable.
+		if (suggestion.status === "health_unavailable") {
+			apiError(res, 503, "health telemetry unavailable", {
+				health_unavailable: {
+					reason: suggestion.healthUnavailableReason ?? "unknown",
+					message:
+						suggestion.healthUnavailableMessage ?? "Overnight health telemetry is unavailable.",
+				},
+			});
 			return;
 		}
 

@@ -459,3 +459,16 @@ A new `sast-baseline-2026-04-29` tag was placed on the deploy commit so future d
 **Prevention**:
 - Inlined client JS must treat every server-supplied value as data: `JSON.stringify` into a `const`, then concatenate — never interpolate a bare value into an emitted JS string literal. Applies to any future `clientJs`-style helper.
 - Reaffirms the 2026-05-25 rule: on a diff-SAST that surfaces pre-existing issues in a touched file, fix High/Medium that have a clean fix, explicitly accept Low with rationale + a filed follow-up, and stop — don't let one file's edit balloon into an open-ended audit.
+
+## 2026-06-03 — intervals.icu Oura-sync logged an 18-minute "night", suppressing a real prescription
+
+**What happened**: ze's run prescription read `readiness_score: 58` with a warning `Sleep below 7 hours (0h18m)`, and the engine downgraded the day to `base`/easy — diverging from what Stryd's app offered (a 26-min fartlek, "Dash & Dine"). The 18-minute figure was wrong: ze had slept normally. By the time we pulled the live wellness record, intervals.icu showed `sleepSecs: null` for all seven days, yet the same records carried Oura-derived `hrv`/`restingHR`/`avgSleepingHR`/`spo2` — so Oura was syncing physiology but the *sleep-duration* field was mis-mapping (a fragment landing as "main sleep", then nulled on the next sync).
+
+**Root cause**: the readiness engine's Sleep + HRV components sourced from intervals.icu wellness (`/athlete/{id}/wellness`), whose sleep field is populated by Oura's direct-API sync. That sync is outside our control and demonstrably unreliable for sleep duration. A single bad nightly value flows straight into `computeSleep` and silently caps the day's prescription.
+
+**Fix**: moved the Sleep + HRV readiness components to the in-house Promus WHOOP strap feed for `healthSource: "promus-whoop"` users (ze). New `src/promus/client.ts` (stateless bearer client) + `src/health-source.ts` (per-profile options builder) + `NightlyHealth` plumbed through `fetchTrainingData` → `computeReadiness`. WHOOP `duration_s` drives duration-based sleep; `rmssd_median_ms` drives HRV-vs-7-day-mean. TSB/Recency/Subjective still come from intervals. When today's WHOOP night is missing (strap not synced) or Promus is unreachable, the suggestion hard-fails with `status: "health_unavailable"` rather than prescribing from degraded inputs. A regression test (`tests/engine/readiness.test.ts`) asserts a poisoned `sleepSecs: 1080` no longer reaches the Sleep component when WHOOP health is present.
+
+**Prevention**:
+- A readiness input whose provenance is a third-party sync we don't control (Oura→intervals) is a latent single point of failure. Where an in-house equivalent exists (Promus WHOOP), prefer it and hard-fail loudly on absence rather than degrade silently.
+- `WHOOP_SERIAL` is a new env var — added to `.env.example` AND both `docker-compose.yml` service `environment:` blocks per the 2026-05-26 docker-compose-forwarder rule. Confirm the `"Promus client ready"` / `"…falls back to intervals"` startup log line after deploy.
+- Strictest staleness policy was chosen deliberately (require today's night): a morning prescription before the strap syncs will block. If that proves too aggressive in practice, relax to "transport error OR stale >2 days" — the knob lives in `fetchHealthTelemetry`.

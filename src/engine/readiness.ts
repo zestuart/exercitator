@@ -3,7 +3,7 @@
  * This is the primary gate that determines workout intensity.
  */
 
-import type { ActivitySummary, WellnessRecord } from "./types.js";
+import type { ActivitySummary, NightlyHealth, WellnessRecord } from "./types.js";
 
 const RUN_TYPES = ["Run", "VirtualRun", "TrailRun", "Treadmill"];
 const SWIM_TYPES = ["Swim", "OpenWaterSwim", "VirtualSwim"];
@@ -26,6 +26,10 @@ export interface ReadinessOptions {
 	 *  same-sport activities only — a cross-sport activity shouldn't suppress
 	 *  readiness for a different prescription. */
 	sport?: "Run" | "Swim";
+	/** Overnight WHOOP telemetry for `promus-whoop` users. When non-empty, the
+	 *  Sleep and HRV components (and their warnings) read from it instead of
+	 *  intervals.icu wellness. Empty/undefined keeps the wellness source. */
+	health?: NightlyHealth[];
 }
 
 export interface ReadinessResult {
@@ -53,6 +57,16 @@ function clamp(value: number, min: number, max: number): number {
 function lerp(value: number, inMin: number, inMax: number, outMin: number, outMax: number): number {
 	const t = (value - inMin) / (inMax - inMin);
 	return outMin + t * (outMax - outMin);
+}
+
+/** Format a duration in seconds as "Hh MMm" (e.g. 24360 → "6h46m"). */
+function formatHm(secs: number): string {
+	const hours = secs / 3600;
+	const h = Math.floor(hours);
+	const m = Math.round((hours % 1) * 60)
+		.toString()
+		.padStart(2, "0");
+	return `${h}h${m}m`;
 }
 
 /** TSB component: CTL - ATL, normalised. TSB +20 → 100, TSB -20 → 0.
@@ -84,8 +98,31 @@ function computeTsb(
 	return null;
 }
 
-/** Sleep component: sleepScore direct, or sleepSecs (5h→0, 8h→100). */
-function computeSleep(wellness: WellnessRecord[]): number | null {
+/** Most recent night's sleep duration (seconds) from WHOOP telemetry, or null. */
+function latestHealthSleepSecs(health: NightlyHealth[]): number | null {
+	for (let i = health.length - 1; i >= 0; i--) {
+		if (health[i].sleepSecs != null) return health[i].sleepSecs;
+	}
+	return null;
+}
+
+/** Chronological RMSSD series (ms) from WHOOP telemetry. */
+function healthHrvSeries(health: NightlyHealth[]): number[] {
+	return health.filter((h) => h.hrvRmssd != null).map((h) => h.hrvRmssd as number);
+}
+
+/**
+ * Sleep component. For `promus-whoop` users (non-empty `health`) it is derived
+ * purely from WHOOP sleep duration (5h→0, 8h→100) — WHOOP exposes no sleep
+ * "score", so the duration path is canonical. Otherwise it falls back to
+ * intervals.icu wellness (sleepScore direct, else sleepSecs).
+ */
+function computeSleep(wellness: WellnessRecord[], health?: NightlyHealth[]): number | null {
+	if (health && health.length > 0) {
+		const secs = latestHealthSleepSecs(health);
+		if (secs == null) return null;
+		return clamp(lerp(secs / 3600, 5, 8, 0, 100), 0, 100);
+	}
 	// Use most recent (last entry is typically today or yesterday)
 	for (let i = wellness.length - 1; i >= 0; i--) {
 		const w = wellness[i];
@@ -100,9 +137,13 @@ function computeSleep(wellness: WellnessRecord[]): number | null {
 	return null;
 }
 
-/** HRV component: today's HRV vs 7-day mean. */
-function computeHrv(wellness: WellnessRecord[]): number | null {
-	const hrvValues = wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
+/** HRV component: today's HRV vs 7-day mean. WHOOP RMSSD when `health` is
+ *  present, else intervals.icu wellness HRV. */
+function computeHrv(wellness: WellnessRecord[], health?: NightlyHealth[]): number | null {
+	const hrvValues =
+		health && health.length > 0
+			? healthHrvSeries(health)
+			: wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
 	if (hrvValues.length === 0) return null;
 
 	const mean = hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length;
@@ -196,11 +237,17 @@ export function computeReadiness(
 ): ReadinessResult {
 	const warnings: string[] = [];
 
+	// When WHOOP telemetry is supplied (promus-whoop users) the Sleep and HRV
+	// components and their warnings read from it; intervals.icu wellness still
+	// drives TSB and Subjective. Empty → wellness source throughout.
+	const health = options.health;
+	const useHealth = !!(health && health.length > 0);
+
 	const tsbResult = computeTsb(wellness, options.ftp);
 	const tsb = tsbResult?.score ?? null;
 	const rebuild = tsbResult?.rebuild ?? false;
-	const sleep = computeSleep(wellness);
-	const hrv = computeHrv(wellness);
+	const sleep = computeSleep(wellness, health);
+	const hrv = computeHrv(wellness, health);
 	const recency = computeRecency(activities, now, options.sport);
 	const subjective = computeSubjective(wellness);
 
@@ -257,50 +304,69 @@ export function computeReadiness(
 	// informational only, surfaced to the athlete via the suggestion.
 
 	if (hrv != null && hrv < 50) {
-		const hrvValues = wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
+		const hrvValues = useHealth
+			? healthHrvSeries(health as NightlyHealth[])
+			: wellness.filter((w) => w.hrv != null).map((w) => w.hrv as number);
 		const mean = hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length;
 		const today = hrvValues[hrvValues.length - 1];
 		warnings.push(
-			`HRV below 7-day baseline (${today}ms vs ${Math.round(mean)}ms mean) — recovery may be incomplete`,
+			`HRV below 7-day baseline (${Math.round(today)}ms vs ${Math.round(mean)}ms mean) — recovery may be incomplete`,
 		);
 	}
 
 	if (sleep != null && sleep < 70) {
-		for (let i = wellness.length - 1; i >= 0; i--) {
-			const w = wellness[i];
-			if (w.sleepSecs != null && w.sleepSecs < 25200) {
-				const hours = w.sleepSecs / 3600;
-				const h = Math.floor(hours);
-				const m = Math.round((hours % 1) * 60)
-					.toString()
-					.padStart(2, "0");
-				warnings.push(`Sleep below 7 hours (${h}h${m}m) — consider lighter intensity`);
-				break;
+		const secs = useHealth ? latestHealthSleepSecs(health as NightlyHealth[]) : null;
+		if (useHealth) {
+			if (secs != null && secs < 25200) {
+				warnings.push(`Sleep below 7 hours (${formatHm(secs)}) — consider lighter intensity`);
 			}
-			if (w.sleepScore != null && w.sleepScore < 75) {
-				warnings.push(`Sleep score low (${w.sleepScore}) — consider lighter intensity`);
-				break;
+		} else {
+			for (let i = wellness.length - 1; i >= 0; i--) {
+				const w = wellness[i];
+				if (w.sleepSecs != null && w.sleepSecs < 25200) {
+					warnings.push(
+						`Sleep below 7 hours (${formatHm(w.sleepSecs)}) — consider lighter intensity`,
+					);
+					break;
+				}
+				if (w.sleepScore != null && w.sleepScore < 75) {
+					warnings.push(`Sleep score low (${w.sleepScore}) — consider lighter intensity`);
+					break;
+				}
 			}
 		}
 	}
 
 	// Multi-night sleep trend: 3+ recent nights of poor sleep (< 7h or score < 75).
-	// Only considers the last 3 wellness records that have sleep data — these are
-	// typically consecutive nights, but we don't enforce strict date adjacency since
-	// wellness records may have gaps (e.g. no device worn one night).
+	// Only considers the last 3 records that have sleep data — typically
+	// consecutive nights, but we don't enforce strict date adjacency since data
+	// may have gaps (e.g. strap not worn one night).
 	let sleepDebt = false;
-	const recentSleep = wellness.filter((w) => w.sleepSecs != null || w.sleepScore != null).slice(-3);
-	if (recentSleep.length >= 3) {
-		const poorNights = recentSleep.filter(
-			(w) =>
-				(w.sleepSecs != null && w.sleepSecs < 25200) || (w.sleepScore != null && w.sleepScore < 75),
-		);
-		if (poorNights.length >= 3) {
+	if (useHealth) {
+		const recentNightSecs = (health as NightlyHealth[])
+			.filter((h) => h.sleepSecs != null)
+			.slice(-3)
+			.map((h) => h.sleepSecs as number);
+		if (recentNightSecs.length >= 3 && recentNightSecs.filter((s) => s < 25200).length >= 3) {
 			sleepDebt = true;
 			warnings.push("Sleep debt accumulating — 3+ recent nights of poor sleep");
 		}
+	} else {
+		const recentSleep = wellness
+			.filter((w) => w.sleepSecs != null || w.sleepScore != null)
+			.slice(-3);
+		if (recentSleep.length >= 3) {
+			const poorNights = recentSleep.filter(
+				(w) =>
+					(w.sleepSecs != null && w.sleepSecs < 25200) ||
+					(w.sleepScore != null && w.sleepScore < 75),
+			);
+			if (poorNights.length >= 3) {
+				sleepDebt = true;
+				warnings.push("Sleep debt accumulating — 3+ recent nights of poor sleep");
+			}
+		}
 	}
-
 	if (tsb != null && tsb < 30) {
 		warnings.push("Training stress balance is negative — fatigue exceeds fitness");
 	}

@@ -14,6 +14,7 @@ import {
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
 import type { FormClient } from "../form/client.js";
+import { healthFetchOptionsFor } from "../health-source.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
 import { enrichLowFidelityActivities } from "../stryd/enricher.js";
@@ -85,7 +86,7 @@ export async function generatePrescriptions(
 		return cached.prescription;
 	}
 
-	const data = await fetchTrainingData(client, tz);
+	const data = await fetchTrainingData(client, tz, healthFetchOptionsFor(profile));
 	const preEnrichIds = new Set(data.activities.map((a) => a.id));
 
 	// Stryd enrichment only for users with stryd: true

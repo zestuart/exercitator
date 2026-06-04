@@ -10,6 +10,7 @@ import { computeReadiness } from "../../engine/readiness.js";
 import { fetchStrydCpInput, fetchTrainingData } from "../../engine/suggest.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
 import { runVigilPipeline } from "../../engine/vigil/index.js";
+import { healthFetchOptionsFor } from "../../health-source.js";
 import { cacheGet, cacheSet } from "../cache.js";
 import { apiError, jsonResponse } from "../errors.js";
 import {
@@ -35,10 +36,20 @@ export async function handleStatus(
 	}
 
 	try {
-		const data = await fetchTrainingData(user.intervals);
+		const data = await fetchTrainingData(
+			user.intervals,
+			undefined,
+			healthFetchOptionsFor(user.profile),
+		);
 		const now = new Date();
 		const powerContext = detectPowerSource(data.activities);
-		const readiness = computeReadiness(data.wellness, data.activities, now);
+		// Status is an informational readout, not a prescription, so it does not
+		// hard-fail on missing WHOOP data — it reports readiness from the most
+		// recent available night (data.health). On a full Promus outage
+		// (data.health empty) the readiness engine falls back to wellness.
+		const readiness = computeReadiness(data.wellness, data.activities, now, {
+			health: data.health,
+		});
 		const strydCp = await fetchStrydCpInput(user.stryd ?? null, now);
 		// Convert the engine-shape CP into the API DTO shape — `updatedAt` is
 		// the real Stryd CP creation timestamp (not now()), letting clients

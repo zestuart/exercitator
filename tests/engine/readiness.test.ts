@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeReadiness } from "../../src/engine/readiness.js";
-import type { ActivitySummary, WellnessRecord } from "../../src/engine/types.js";
+import type { ActivitySummary, NightlyHealth, WellnessRecord } from "../../src/engine/types.js";
 
 function makeWellness(overrides: Partial<WellnessRecord> = {}): WellnessRecord {
 	return {
@@ -365,5 +365,71 @@ describe("computeReadiness", () => {
 		// Without renormalisation, subjective→NEUTRAL would cap score around 90.
 		// With renormalisation, present-components average is much higher.
 		expect(result.score).toBeGreaterThan(90);
+	});
+});
+
+describe("computeReadiness — Promus WHOOP health source", () => {
+	const restedActivities = [
+		makeActivity({ start_date_local: "2026-03-21T20:00:00", moving_time: 3600 }),
+	];
+
+	function healthSeries(): NightlyHealth[] {
+		// 7 nights, all ~7h45m sleep, RMSSD steady around 60, today slightly up.
+		return [
+			{ date: "2026-03-17", sleepSecs: 27900, hrvRmssd: 58 },
+			{ date: "2026-03-18", sleepSecs: 27900, hrvRmssd: 60 },
+			{ date: "2026-03-19", sleepSecs: 27900, hrvRmssd: 59 },
+			{ date: "2026-03-20", sleepSecs: 27900, hrvRmssd: 61 },
+			{ date: "2026-03-21", sleepSecs: 27900, hrvRmssd: 60 },
+			{ date: "2026-03-22", sleepSecs: 27900, hrvRmssd: 62 },
+			{ date: "2026-03-23", sleepSecs: 27900, hrvRmssd: 66 },
+		];
+	}
+
+	it("derives Sleep and HRV from WHOOP when health is supplied", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		const result = computeReadiness(wellness, restedActivities, NOW, { health: healthSeries() });
+		// Good sleep (7h45m) and HRV above 7-day mean → both components high.
+		expect(result.components.sleep).toBeGreaterThan(80);
+		expect(result.components.hrv).toBeGreaterThan(75);
+	});
+
+	it("REGRESSION: a corrupt intervals.icu sleepSecs does not influence readiness when WHOOP health is present", () => {
+		// The 2026-06-03 bug: intervals.icu carried an 18-minute (1080s) sleep
+		// that suppressed the prescription. With the WHOOP source, that value
+		// must be ignored entirely.
+		const poisoned = [
+			makeWellness({ id: "2026-03-23", ctl: 50, atl: 30, sleepSecs: 1080, sleepScore: null }),
+		];
+		const withHealth = computeReadiness(poisoned, restedActivities, NOW, {
+			health: healthSeries(),
+		});
+		const cleanWellness = [
+			makeWellness({ id: "2026-03-23", ctl: 50, atl: 30, sleepSecs: 27900, sleepScore: null }),
+		];
+		const baseline = computeReadiness(cleanWellness, restedActivities, NOW, {
+			health: healthSeries(),
+		});
+		// Identical: the poisoned intervals value never reaches the Sleep component.
+		expect(withHealth.components.sleep).toBe(baseline.components.sleep);
+		expect(withHealth.components.sleep).toBeGreaterThan(80);
+		// And no "Sleep below 7 hours (0h18m)" warning is emitted.
+		expect(withHealth.warnings.some((w) => w.includes("0h18m"))).toBe(false);
+	});
+
+	it("emits a duration-based sleep warning from WHOOP on a genuinely short night", () => {
+		const wellness = [makeWellness({ id: "2026-03-23", ctl: 50, atl: 30 })];
+		const shortNight = healthSeries();
+		shortNight[shortNight.length - 1] = { date: "2026-03-23", sleepSecs: 16200, hrvRmssd: 66 }; // 4h30m
+		const result = computeReadiness(wellness, restedActivities, NOW, { health: shortNight });
+		expect(result.warnings.some((w) => w.includes("Sleep below 7 hours (4h30m)"))).toBe(true);
+	});
+
+	it("falls back to intervals.icu wellness when health is empty", () => {
+		const wellness = [
+			makeWellness({ id: "2026-03-23", ctl: 50, atl: 30, sleepScore: 92, hrv: 60 }),
+		];
+		const result = computeReadiness(wellness, restedActivities, NOW, { health: [] });
+		expect(result.components.sleep).toBe(92);
 	});
 });

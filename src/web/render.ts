@@ -497,6 +497,46 @@ function renderQuiesCard(
 	</div>`;
 }
 
+/**
+ * Blocked card shown when a `promus-whoop` user's overnight WHOOP telemetry is
+ * unavailable for today (or Promus is unreachable). The engine refuses to
+ * prescribe from degraded readiness inputs; this surfaces why and what to do.
+ */
+function renderHealthUnavailableCard(
+	suggestion: WorkoutSuggestion,
+	sportClass: string,
+	accent: string,
+): string {
+	const sportTag = suggestion.sport === "Run" ? "CURSUS" : "NATATIO";
+	const message =
+		suggestion.healthUnavailableMessage ??
+		"Overnight health telemetry is unavailable. No prescription until it syncs.";
+	return `
+	<div class="card ${sportClass} card-health-unavailable" id="card-${suggestion.sport.toLowerCase()}" style="--card-accent: ${accent}">
+		<div class="card-accent"></div>
+		<div class="card-body">
+			<div class="card-header">
+				<div class="card-header-top">
+					<span class="sport-tag">${sportTag}</span>
+				</div>
+				<h2 class="card-title">${escapeHtml(suggestion.title)}</h2>
+				<div class="card-meta">
+					<span class="meta-pill meta-pill-rest">no telemetry</span>
+				</div>
+			</div>
+
+			<blockquote class="invocation invocation-quies" style="border-left-color: ${accent}">
+				<p>${escapeHtml(message)}</p>
+			</blockquote>
+
+			<div class="rationale-section">
+				<h3 class="rationale-header">Health source</h3>
+				<p class="rationale-text">Sleep and HRV come from your WHOOP strap via Promus. Open the WHOOP app to sync last night, then refresh this page.</p>
+			</div>
+		</div>
+	</div>`;
+}
+
 function renderVigilDataSource(vigil: VigilSummary | null): string {
 	if (!vigil) return "";
 
@@ -578,18 +618,20 @@ export function renderPage(data: RenderData): string {
 	const showStryd = profile.stryd;
 	const runCard =
 		data.run && data.runInvocations
-			? data.run.status === "already_trained"
-				? renderQuiesCard(data.run, data.runInvocations, "card-run", runAccent)
-				: renderCard(
-						data.run,
-						data.runInvocations,
-						"card-run",
-						runAccent,
-						data.runHrZones,
-						showStryd,
-						runOnlyWarnings,
-						data.runCompliance,
-					)
+			? data.run.status === "health_unavailable"
+				? renderHealthUnavailableCard(data.run, "card-run", runAccent)
+				: data.run.status === "already_trained"
+					? renderQuiesCard(data.run, data.runInvocations, "card-run", runAccent)
+					: renderCard(
+							data.run,
+							data.runInvocations,
+							"card-run",
+							runAccent,
+							data.runHrZones,
+							showStryd,
+							runOnlyWarnings,
+							data.runCompliance,
+						)
 			: "";
 	const swimFormText =
 		data.swim && data.swim.status !== "already_trained"
@@ -597,19 +639,21 @@ export function renderPage(data: RenderData): string {
 			: undefined;
 	const swimCard =
 		data.swim && data.swimInvocations
-			? data.swim.status === "already_trained"
-				? renderQuiesCard(data.swim, data.swimInvocations, "card-swim", swimAccent)
-				: renderCard(
-						data.swim,
-						data.swimInvocations,
-						"card-swim",
-						swimAccent,
-						data.swimHrZones,
-						false,
-						swimOnlyWarnings,
-						data.swimCompliance,
-						swimFormText,
-					)
+			? data.swim.status === "health_unavailable"
+				? renderHealthUnavailableCard(data.swim, "card-swim", swimAccent)
+				: data.swim.status === "already_trained"
+					? renderQuiesCard(data.swim, data.swimInvocations, "card-swim", swimAccent)
+					: renderCard(
+							data.swim,
+							data.swimInvocations,
+							"card-swim",
+							swimAccent,
+							data.swimHrZones,
+							false,
+							swimOnlyWarnings,
+							data.swimCompliance,
+							swimFormText,
+						)
 			: "";
 
 	// Apollo's closing — rendered once at the bottom of the page

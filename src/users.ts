@@ -48,6 +48,21 @@ export interface UserProfile {
 	formEmailEnv: string | null;
 	/** Environment variable name for FORM password (null if no FORM access). */
 	formPasswordEnv: string | null;
+	/**
+	 * Optional override for the Sleep + HRV readiness telemetry source. When
+	 * `"promus-whoop"`, those two components are read from the in-house Promus
+	 * WHOOP strap feed instead of intervals.icu wellness (whose Oura-sync sleep
+	 * field proved unreliable — see lessons.md 2026-06-03). TSB, Recency, and
+	 * Subjective components still come from intervals/activities. If today's
+	 * WHOOP night is missing or Promus is unreachable, the suggestion hard-fails
+	 * with status `"health_unavailable"` rather than silently degrading.
+	 * Undefined keeps the intervals.icu wellness sleep/HRV (default for Pam).
+	 */
+	healthSource?: "promus-whoop";
+	/** Environment variable name for the Promus bearer token (null if unused). */
+	promusApiKeyEnv: string | null;
+	/** Environment variable name for this user's WHOOP strap serial (null if unused). */
+	whoopSerialEnv: string | null;
 }
 
 const PROFILES: UserProfile[] = [
@@ -64,6 +79,9 @@ const PROFILES: UserProfile[] = [
 		formPasswordEnv: "FORM_PASSWORD",
 		runRecommendationSource: "stryd",
 		swimRecommendationSource: "form",
+		healthSource: "promus-whoop",
+		promusApiKeyEnv: "PROMUS_API",
+		whoopSerialEnv: "WHOOP_SERIAL",
 	},
 	{
 		id: "pam",
@@ -76,6 +94,8 @@ const PROFILES: UserProfile[] = [
 		strydPasswordEnv: "STRYD_PASSWORD_PAM",
 		formEmailEnv: null,
 		formPasswordEnv: null,
+		promusApiKeyEnv: null,
+		whoopSerialEnv: null,
 	},
 ];
 

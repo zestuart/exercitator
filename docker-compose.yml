@@ -28,6 +28,7 @@ services:
       - PROMUS_API=${PROMUS_API:-}
       - PROMUS_URL=${PROMUS_URL:-}
       - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
+      - WHOOP_SERIAL=${WHOOP_SERIAL:-}
     deploy:
       resources:
         limits:
@@ -77,6 +78,7 @@ services:
       - PROMUS_API=${PROMUS_API:-}
       - PROMUS_URL=${PROMUS_URL:-}
       - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
+      - WHOOP_SERIAL=${WHOOP_SERIAL:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
       interval: 60s

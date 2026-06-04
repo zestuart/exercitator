@@ -9,6 +9,7 @@
 
 import { getVigilMetrics } from "../db.js";
 import type { IntervalsClient } from "../intervals.js";
+import type { PromusClient } from "../promus/client.js";
 import type { StrydClient } from "../stryd/client.js";
 import {
 	type CrossTrainingStrain,
@@ -24,6 +25,7 @@ import { applyStaleness, computeStaleness } from "./staleness.js";
 import { selectTerrain } from "./terrain-selector.js";
 import type {
 	ActivitySummary,
+	NightlyHealth,
 	PowerContext,
 	RestMessage,
 	SportSettings,
@@ -67,11 +69,35 @@ export interface TrainingData {
 	wellness: WellnessRecord[];
 	runSettings: SportSettings;
 	swimSettings: SportSettings;
+	/**
+	 * Overnight WHOOP health telemetry for `promus-whoop` users. Empty for
+	 * users on the default intervals.icu wellness source — readiness then reads
+	 * sleep/HRV from `wellness` as before.
+	 */
+	health: NightlyHealth[];
+	/**
+	 * Set when a `promus-whoop` user's overnight telemetry could not be obtained
+	 * (Promus unreachable/non-2xx, or no WHOOP night for today). When present,
+	 * the engine returns a `health_unavailable` suggestion instead of prescribing
+	 * from degraded readiness inputs.
+	 */
+	healthError?: { reason: string; message: string };
+}
+
+/**
+ * Promus health-telemetry inputs for `fetchTrainingData`. Omitted (or with a
+ * null client) for users on the default intervals.icu wellness source.
+ */
+export interface HealthFetchOptions {
+	promusClient: PromusClient | null;
+	whoopSerial: string | null;
+	healthSource?: "promus-whoop";
 }
 
 export async function fetchTrainingData(
 	client: IntervalsClient,
 	tz?: string,
+	health?: HealthFetchOptions,
 ): Promise<TrainingData> {
 	const now = new Date();
 	const d14Ago = new Date(now.getTime() - 14 * 86_400_000);
@@ -94,7 +120,123 @@ export async function fetchTrainingData(
 			.catch((): SportSettings => ({ type: "Swim", ...DEFAULT_SPORT_SETTINGS })),
 	]);
 
-	return { activities, wellness, runSettings, swimSettings };
+	const healthResult = await fetchHealthTelemetry(now, tz, health);
+
+	return {
+		activities,
+		wellness,
+		runSettings,
+		swimSettings,
+		health: healthResult.health,
+		healthError: healthResult.error,
+	};
+}
+
+/**
+ * Fetch and merge overnight WHOOP telemetry from Promus for a `promus-whoop`
+ * user. Returns `{ health: [] }` (no error) for users on the default
+ * intervals.icu source so the readiness engine keeps reading wellness.
+ *
+ * Hard-fail policy (per design 2026-06-03): a `promus-whoop` user MUST have a
+ * WHOOP night for today's local wake date. Any transport/non-2xx error, or a
+ * missing today-row, yields a `healthError` — the engine then refuses to
+ * prescribe rather than degrade silently. We never fall back to intervals.icu
+ * sleep/HRV for these users, because that is the unreliable source we removed.
+ */
+export async function fetchHealthTelemetry(
+	now: Date,
+	tz: string | undefined,
+	opts: HealthFetchOptions | undefined,
+): Promise<{ health: NightlyHealth[]; error?: { reason: string; message: string } }> {
+	if (!opts || opts.healthSource !== "promus-whoop") {
+		return { health: [] };
+	}
+	const { promusClient, whoopSerial } = opts;
+	if (!promusClient || !whoopSerial) {
+		return {
+			health: [],
+			error: {
+				reason: "promus_not_configured",
+				message:
+					"Health telemetry source is set to WHOOP but the Promus client or strap serial is not configured.",
+			},
+		};
+	}
+
+	const today = localDateStr(now, tz);
+	const start = localDateStr(new Date(now.getTime() - 7 * 86_400_000), tz);
+
+	let sleepRows: Awaited<ReturnType<PromusClient["getWhoopSleep"]>>;
+	let hrvRows: Awaited<ReturnType<PromusClient["getWhoopHrvNightly"]>>;
+	try {
+		[sleepRows, hrvRows] = await Promise.all([
+			promusClient.getWhoopSleep(whoopSerial, start, today),
+			promusClient.getWhoopHrvNightly(whoopSerial, 7),
+		]);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		const reason = /\bHTTP (\d{3})\b/.test(msg)
+			? `promus_http_${msg.match(/\bHTTP (\d{3})\b/)?.[1]}`
+			: /timeout|abort|fetch|network/i.test(msg)
+				? "promus_unreachable"
+				: "promus_error";
+		return {
+			health: [],
+			error: {
+				reason,
+				message: "Could not reach Promus to read last night's WHOOP telemetry.",
+			},
+		};
+	}
+
+	const health = mergeWhoopHealth(sleepRows, hrvRows);
+
+	// Hard-fail unless today's night is present (and carries real sleep).
+	const todayRow = health.find((h) => h.date === today);
+	if (!todayRow || todayRow.sleepSecs == null) {
+		return {
+			health,
+			error: {
+				reason: "whoop_today_missing",
+				message:
+					"WHOOP has not synced last night's sleep yet. Open the WHOOP app to sync, then refresh.",
+			},
+		};
+	}
+
+	return { health };
+}
+
+/**
+ * Merge WHOOP sleep rows (`wake_date`) and nightly-HRV rows (`wake_day_utc`)
+ * into a single per-date `NightlyHealth[]`, sorted ascending by date so the
+ * readiness "most recent night is last" convention holds.
+ */
+export function mergeWhoopHealth(
+	sleepRows: { wake_date: string; duration_s: number | null }[],
+	hrvRows: { wake_day_utc: string; rmssd_median_ms: number | null }[],
+): NightlyHealth[] {
+	const byDate = new Map<string, NightlyHealth>();
+	for (const s of sleepRows) {
+		byDate.set(s.wake_date, {
+			date: s.wake_date,
+			sleepSecs: s.duration_s ?? null,
+			hrvRmssd: null,
+		});
+	}
+	for (const h of hrvRows) {
+		const existing = byDate.get(h.wake_day_utc);
+		if (existing) {
+			existing.hrvRmssd = h.rmssd_median_ms ?? null;
+		} else {
+			byDate.set(h.wake_day_utc, {
+				date: h.wake_day_utc,
+				sleepSecs: null,
+				hrvRmssd: h.rmssd_median_ms ?? null,
+			});
+		}
+	}
+	return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ---------------------------------------------------------------------------
@@ -208,9 +350,35 @@ export function suggestWorkoutFromData(
 			);
 		}
 	}
+	// Health-telemetry hard-fail: a `promus-whoop` user whose overnight WHOOP
+	// data is missing for today (or Promus is unreachable) gets no prescription.
+	// Readiness here would be computed from degraded sleep/HRV inputs, so we
+	// short-circuit before computeReadiness rather than after.
+	if (data.healthError) {
+		return {
+			sport,
+			category: "rest",
+			title: "Health telemetry unavailable",
+			rationale: data.healthError.message,
+			total_duration_secs: 0,
+			estimated_load: 0,
+			segments: [],
+			readiness_score: 0,
+			sport_selection_reason: sportSelectionReason ?? `Forced: ${sport}`,
+			terrain: "any",
+			terrain_rationale: "Suppressed — health telemetry unavailable",
+			power_context: powerContext,
+			warnings: [data.healthError.message],
+			status: "health_unavailable",
+			healthUnavailableReason: data.healthError.reason,
+			healthUnavailableMessage: data.healthError.message,
+		};
+	}
+
 	const readiness = computeReadiness(wellness, activities, now, {
 		ftp: powerContext.ftp > 0 ? powerContext.ftp : undefined,
 		sport,
+		health: data.health,
 	});
 
 	// Suppression short-circuit: if the user has already done the requested
@@ -396,14 +564,15 @@ export async function suggestWorkout(
 	client: IntervalsClient,
 	tz?: string,
 	strydClient?: StrydClient | null,
+	health?: HealthFetchOptions,
 ): Promise<WorkoutSuggestion> {
-	const data = await fetchTrainingData(client, tz);
+	const data = await fetchTrainingData(client, tz, health);
 	const now = new Date();
 
 	const strydCp = await fetchStrydCpInput(strydClient ?? null, now);
 
 	const powerContext = detectPowerSource(data.activities);
-	const readiness = computeReadiness(data.wellness, data.activities, now);
+	const readiness = computeReadiness(data.wellness, data.activities, now, { health: data.health });
 	const sportSelection = selectSport(data.activities, readiness.score, now, powerContext);
 
 	return suggestWorkoutFromData(

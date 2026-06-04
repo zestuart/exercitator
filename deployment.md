@@ -80,7 +80,8 @@ rm -f /tmp/exercitator.tar.gz
 | `EXERCITATOR_API_KEYS` | optional | exercitator | HTTP API bearer keys; unset → listener disabled |
 | `TAILSCALE_AUTH_KEY` | yes | tailscale-* sidecars | reusable preauth key (in praefectura/docs/tailscale.md) |
 | `ANTHROPIC_API_KEY` | optional | praescriptor | dynamic deity invocations; static fallback if unset |
-| `PROMUS_API` / `PROMUS_URL` | optional | exercitator, praescriptor | DSW emission bearer + base URL (default `https://promus.tail7ab379.ts.net`) |
+| `PROMUS_API` / `PROMUS_URL` | optional | exercitator, praescriptor | DSW emission bearer + base URL (default `https://promus.tail7ab379.ts.net`); also reused as the bearer for the WHOOP health-telemetry reads |
+| `WHOOP_SERIAL` | required for ze | exercitator, praescriptor | WHOOP strap serial (Maverick) for the Promus health source. With `healthSource: "promus-whoop"`, ze's Sleep + HRV come from this strap; unset → ze's suggestions hard-fail with `health_unavailable` |
 | `PROMUS_FORM_DSW_ENABLED` | optional | exercitator, praescriptor | `"1"` or `"true"` enables FORM-side DSW emission. Stays off until Promus accepts `vendor_recommendation_set` (Promus #168, shipped 2026-05-26). Currently **set to `1` on Cogitator**. |
 
 **Rule**: when a code change reads a new env var, this table + the relevant `environment:` blocks in `docker-compose.yml` must be updated in the same commit. A grep for the var name in `docker-compose.yml` is the cheapest pre-commit check.

@@ -270,6 +270,7 @@ export async function applyFormSwapIfEnabled(
 		suggestion.sport !== "Swim" ||
 		suggestion.status === "awaiting_input" ||
 		suggestion.status === "already_trained" ||
+		suggestion.status === "health_unavailable" ||
 		profile.swimRecommendationSource !== "form" ||
 		!formClient ||
 		!(swimSettings.threshold_pace && swimSettings.threshold_pace > 0)
