@@ -1,11 +1,12 @@
 # Exercitator HTTP API — Service Specification
 
-**Version**: 0.2 (2026-04-24); see also v0.2.1 amendments described inline (suppression status + invocation block, both 2026-05-27)
+**Version**: 0.2 (2026-04-24); see also v0.2.1 + v0.2.2 amendments described inline (suppression status + invocation block 2026-05-27; `health_unavailable` status + whole-athlete readiness 2026-06-03)
 **Status**: draft — supersedes v0.1 (2026-04-23)
 **Purpose**: Define the HTTP surface Exercitator exposes for native clients (primarily Excubitor iOS). Exercitator remains an MCP server for LLM-facing consumers; this document adds a parallel REST API so phones and watches can read training state without spinning up an MCP client.
 
 **v0.2 deltas from v0.1**: see §13.
 **v0.2.0 / v0.2.1 deltas** (2026-05-27): documented inline in §5.3.3 (`status: "already_trained"` + `rest_message` block; `invocation` block on every `ready` response). Cross-repo migration notes for Excubitor live at `notes/excubitor/api-0.2.0.md` and `notes/excubitor/api-0.2.1.md`.
+**v0.2.2 deltas** (2026-06-03): documented inline in §5.3.3 (`status: "health_unavailable"` + `health_unavailable` block; `/workouts/suggested` returns **503** for that state; `/dashboard` carries a top-level `health_unavailable`). Readiness `score` is now **whole-athlete** (recency spans all sports, no per-sport filter) and its Sleep + HRV inputs/components come from the Promus WHOOP strap feed for `healthSource: "promus-whoop"` users (ze), not intervals.icu wellness. Cross-repo migration note: `notes/excubitor/api-0.2.2.md`.
 
 **Authoritative references**:
 - NOMENCLATOR entry: `EXERCITATOR` (MCP server: intervals.icu training analytics)
@@ -204,10 +205,10 @@ Field semantics:
 
 | Field | Type | Notes |
 |---|---|---|
-| `readiness.score` | int 0–100 \| null | Composite from `src/engine/readiness.ts`. `null` if insufficient wellness history |
+| `readiness.score` | int 0–100 \| null | Composite from `src/engine/readiness.ts`. **Whole-athlete** (0.2.2): the recency component spans all sports — a recent ride/swim tempers it — so the same number appears here, on the `suggested` block's `readiness_score`, and on the Praescriptor header. `null` if insufficient history |
 | `readiness.tier` | enum: `ready`, `caution`, `recover`, `unknown` | Banded by score thresholds matching `workout-selector.ts` (long gate 60, HRV guard 30, etc.) |
 | `readiness.advisory` | enum: `green`, `amber`, `red`, `grey` | Display colour hint |
-| `readiness.components` | per-component status | Surfaces why the score is what it is. Each: `ok`, `low`, `unknown` |
+| `readiness.components` | per-component status | Surfaces why the score is what it is. Each: `ok`, `low`, `unknown`. For `healthSource: "promus-whoop"` users (ze) the `hrv` + `sleep` badges come from the Promus WHOOP feed, the same source as the score (0.2.2) |
 | `injury_warning` | Vigil summary | From `src/engine/vigil/`. `severity: 0` and `status: inactive` when no alert |
 | `injury_warning.severity` | int 0–3 | 0 = none, 1 = building, 2 = active (Niggle), 3 = active (Poor) |
 | `injury_warning.flags[]` | metric deviations | `metric`, `z_score`, `weight`, `value_7d`, `value_30d` |
@@ -298,6 +299,20 @@ This wraps the existing DSW engine (`src/engine/suggest.ts`). v0.1's claim that 
 **`invocation` (added in API 0.2.1)**: server-rendered liturgical narration. Populated on every `status: "ready"` response. For profiles with `deities: true` (currently ze) the text invokes Diana (Run) or Amphitrite (Swim) as patron, Minerva for the rationale header, and Apollo for the closing — dynamically generated via Anthropic API when `ANTHROPIC_API_KEY` is set, static fallback otherwise. For `deities: false` profiles (Pam), the same shape carries plain English. Cache is shared with Praescriptor (sport + category + date key), so first-of-day calls cost one Anthropic round-trip and subsequent same-day calls are free. Clients may render it verbatim, substitute their own narration, or ignore it.
 
 When the engine is blocked on cross-training RPE (see `WorkoutSuggestion.status === "awaiting_input"` in `src/engine/types.ts`), the response is **HTTP 409** with the error envelope from §4. Clients submit RPE via §5.5 and re-poll.
+
+**Health telemetry unavailable (added in API 0.2.2)**. For `healthSource: "promus-whoop"` users (ze), the Sleep + HRV readiness inputs come from the Promus WHOOP strap feed. When no WHOOP night exists for today's local wake date, or Promus is unreachable, the engine refuses to prescribe from degraded inputs and emits `status: "health_unavailable"`. On `/workouts/suggested` this is **HTTP 503** with the error envelope from §4 plus a `health_unavailable` block:
+
+```json
+{
+  "error": "health telemetry unavailable",
+  "health_unavailable": {
+    "reason": "whoop_today_missing",
+    "message": "WHOOP has not synced last night's sleep yet. Open the WHOOP app to sync, then refresh."
+  }
+}
+```
+
+`reason` is a stable slug (`whoop_today_missing`, `promus_unreachable`, `promus_http_<code>`, `promus_error`, `promus_not_configured`); `message` is a user-safe sentence to render verbatim. This is an expected daily state (fires in the morning before the strap syncs), not a fault — clients should show a sync prompt, not a retry storm. Pam never hits this (no WHOOP source). `/status` and `/dashboard` do not hard-fail; they report readiness from the most recent available night. See `notes/excubitor/api-0.2.2.md`.
 
 **Same-sport already-trained suppression (added in API 0.2.0)**. When an activity matching the requested sport (Run: `Run|VirtualRun|TrailRun|Treadmill`; Swim: `Swim|OpenWaterSwim|VirtualSwim`) is already present for today, the response is **HTTP 200** with `status: "already_trained"` and an additional top-level `rest_message` block:
 
@@ -418,7 +433,7 @@ Body accepts a subset of intervals.icu wellness fields: `soreness`, `fatigue`, `
 |---|---|---|
 | `GET` | `/api/users/:userId/dashboard` | `/status` + `/workouts/today` + `/workouts/suggested` in one call |
 
-Provided so Excubitor's Exercise tab can do one request instead of three. Response keys: `status`, `today`, `suggested`. If `suggested` would be 409, the field is `null` and a top-level `awaiting_input` block is set instead.
+Provided so Excubitor's Exercise tab can do one request instead of three. Response keys: `status`, `today`, `suggested`, `awaiting_input`, `health_unavailable`. If `suggested` would be 409 (cross-training RPE), the field is `null` and a top-level `awaiting_input` block is set. If `suggested` would be 503 (`health_unavailable`, 0.2.2), the field is `null` and a top-level `health_unavailable` block is set instead. The dashboard itself is always HTTP 200.
 
 ---
 

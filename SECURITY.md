@@ -21,6 +21,7 @@
 - **Compliance lookback clamp**: `?days=` on `POST /api/compliance/backfill` and `GET /api/compliance/trending` clamped to `[1, 730]`. Prevents quota exhaustion against the intervals.icu upstream.
 - **Praescriptor security headers**: Every response carries HSTS (`max-age=63072000; includeSubDomains`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`. HTML responses additionally carry CSP allowing inline styles/scripts and Google Fonts only, with `frame-ancestors 'none'`.
 - **Stryd credentials**: Optional `STRYD_*` (and `STRYD_*_PAM`) in `.env`, used server-side only for FIT enrichment, Vigil baselines, and direct CP fetch. Tokens are short-lived, held only in memory during enrichment. Never exposed via HTTP API, MCP, or web UI.
+- **Promus health-telemetry client** (`src/promus/client.ts`): GET-only bearer client reading overnight WHOOP sleep + nightly HRV from the in-house Promus service for `healthSource: "promus-whoop"` users. Auth via `PROMUS_API` (reused from the DSW emitter); base URL `PROMUS_URL` (default tailnet host). Strap serial from `WHOOP_SERIAL`, `encodeURIComponent`-escaped into the path. Responses size-capped at 512 KiB before `JSON.parse`; request timeout 15 s. No secret is logged. Failures hard-fail the suggestion to `health_unavailable` rather than degrade silently (`src/engine/suggest.ts:fetchHealthTelemetry`).
 - **Praescriptor access**: Tailnet-only via `tailscale serve` (no funnel). No app-level auth — Tailscale provides device-level access control.
 - **Shared `tz` resolver**: All HTTP API handlers consume `?tz` via `src/api/tz.ts:resolveTz`, which validates against `Intl.DateTimeFormat` before any downstream use. A future handler that forgets to validate is impossible by construction (the helper is the only sanctioned path).
 - **MCP path-traversal allowlist**: The `submit_cross_training_rpe` tool now applies the same `^[A-Za-z0-9_-]{1,64}$` allowlist to `activityId` as the HTTP API equivalent (via Zod regex). Belt-and-braces with `encodeURIComponent` against SSRF.
@@ -40,6 +41,10 @@
 **Follow-up**: replace the `prompt()` with a DOM picker (`<select>` / clickable list) — tracked in [GitHub issue #35](https://github.com/zestuart/exercitator/issues/35). When that lands, this entry moves to Remediated.
 
 ## Remediated
+
+### 2026-06-03 — Promus WHOOP health-source arc (clean, 3 deploys)
+
+Sleep + HRV readiness telemetry moved from intervals.icu wellness to the in-house Promus WHOOP strap feed for ze (`healthSource: "promus-whoop"`), with a `health_unavailable` hard-fail when today's WHOOP night is missing or Promus is unreachable; followed by two follow-ups (HTTP API readiness DTO + tz consistency, then making readiness whole-athlete on every surface). New external surface is a single GET-only bearer client (`src/promus/client.ts`) reading two WHOOP endpoints — serial `encodeURIComponent`-escaped, 512 KiB JSON cap, 15 s timeout, no secret logged. Three sequential diff-mode SAST scans each returned `NO_FINDINGS`. Tagged `sast-baseline-2026-06-03` (`ef4f038`), `-b` (`6219369`), `-c` (`2613600`). New env `WHOOP_SERIAL` forwarded to both Docker services (auth reuses `PROMUS_API`). See `lessons.md` 2026-06-03 (two entries) and `notes/excubitor/api-0.2.2.md`.
 
 ### 2026-06-02 — Inlined-script XSS hardening (Medium)
 
