@@ -87,8 +87,9 @@ export async function applyStrydRecommendation(
 	}
 
 	if (set === null) {
-		// 204 — empty bucket. For `long` this is the steady state on
-		// non-adaptive-plan accounts (per Phase 0 verification).
+		// 204 — empty bucket. `long` is empty on ze's account; the cause is
+		// unconfirmed but is NOT plan-gating (Stryd support 2026-06-06 — corrects
+		// the earlier RE inference; see retextor spec-recommendations.md §7).
 		return {
 			suggestion: {
 				...suggestion,
