@@ -62,10 +62,38 @@ from real sleep duration even when Vigor scores the slot), and multi-night **sle
 
 ## 2. Sport selection (Run vs Swim)
 
-`selectSport` (`src/engine/sport-selector.ts`), only when the caller doesn't force a sport:
-- **Load deficit** — the sport that is relatively *under*-trained (larger CTL-relative load
-  deficit) is chosen ("Running has a higher load deficit (56 vs −23)").
-- **Anti-monotony override** — if the last 3 sessions were all one sport, switch to the other.
+`selectSport` (`src/engine/sport-selector.ts`) runs **only when no sport is forced** — i.e. the
+MCP `suggest_workout` tool and `GET /api/users/:userId/workouts/suggested` *without* a `?sport=`
+parameter. (`/dashboard` and the Praescriptor cards instead use `profile.sports`; a forced sport
+yields `sport_selection_reason: "Forced: <sport>"`.) The chosen sport and the reason are reported
+in **`sport_selection_reason`**. Rules, in order of precedence:
+
+1. **3-session anti-monotony** — if the **last 3 sport activities** (run/swim only; weights/yoga/etc.
+   break the streak) are all the same sport → pick the other ("Last 3 sessions were all Run —
+   switching to Swim…").
+2. **Low-readiness recovery** — readiness **< 30** and only one sport done in the last 3 days →
+   pick the other ("active recovery via …").
+3. **Load deficit** (the usual path) — for each sport, `deficit = chronic − acute`, where
+   `acute` = sum of session load over the last **7 days** and `chronic` = sum over the last
+   **14 days ÷ 2** (≈ a 7-day baseline). Load is power-aware: `getActivityLoad`
+   (`src/engine/power-source.ts`) uses Stryd `power_load` for runs, `hr_load` for swims. The
+   sport with the **larger deficit** (more *under*-trained vs its own baseline) wins
+   ("Running has a higher load deficit (56 vs −23) — relatively undertrained"). A *negative*
+   deficit means that sport is currently **above** its baseline.
+4. **Tie-break** — when the two deficits are within **10%** of each other: fewer sessions in the
+   last 7 days wins; if still tied, **default to Run**.
+
+**Recency is deliberately NOT a factor.** Whether you trained a sport *yesterday or today* does
+not influence selection — only the 7/14-day load balance and the two override rules above do. A
+run from yesterday counts the same toward the deficit as one from six days ago. (Same-sport
+*intensity* spacing is handled later, in the category ladder's `daysSinceHard` guard — §3 — not
+in sport choice.)
+
+> **Worked example (return-to-run).** Athlete ran yesterday but only **2×/14 d**; swam 3× incl.
+> today. runDeficit ≈ +1 (acute 52 vs chronic 53); swimDeficit ≈ −7 (acute 40 vs chronic 33.5 —
+> swimming is *above* baseline). Run wins (+1 > −7): over the fortnight, **run is the neglected
+> sport**, so it is primary the day after a run — by design, not a bug. (Readiness 49 still
+> shaped it into a gentle *recovery* run.)
 
 ## 3. Category / intensity selection
 
