@@ -1,8 +1,7 @@
 ---
+name: setup
 description: "First-run project interview. Configures CLAUDE.md, .env, test structure, CI/CD, and deployment."
-user_invocable: true
 ---
-
 # /setup — Project Setup Interview
 
 Interview the user to configure their project for AI-assisted development. This skill

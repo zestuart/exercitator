@@ -1,8 +1,7 @@
 ---
+name: sast
 description: "Run a full SAST scan of the codebase using Gemini 2.5 Pro. Reports vulnerabilities and tags the baseline."
-user_invocable: true
 ---
-
 # /sast — Full SAST Scan
 
 Run a comprehensive static application security test against all source code using

@@ -1,8 +1,7 @@
 ---
+name: test
 description: "Run the test suite. Lint, type check, and tests — language-agnostic."
-user_invocable: true
 ---
-
 # /test — Run Test Suite
 
 Run the project's configured test suite. Report results clearly and concisely.

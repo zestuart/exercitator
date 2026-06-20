@@ -1,9 +1,8 @@
 ---
+name: deploy
 description: "Deploy to production. Pre-flight checks, SAST scan, commit, push, and monitor."
 argument-hint: "[commit message (optional)]"
-user_invocable: true
 ---
-
 # /deploy — Deploy to Production
 
 Deploy the current working tree to production. Every step exists to prevent a bad

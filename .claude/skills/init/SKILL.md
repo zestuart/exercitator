@@ -1,8 +1,7 @@
 ---
+name: init
 description: "First-run project interview. Configures CLAUDE.md, .env, test structure, CI/CD, and deployment."
-user_invocable: true
 ---
-
 # /init — Project Initialisation
 
 Interview the user to configure their project for AI-assisted development. This skill
