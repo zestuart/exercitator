@@ -4,6 +4,7 @@
  */
 
 import { persistPrescription } from "../compliance/persist.js";
+import { getPowerSourceOverride } from "../db.js";
 import { localDateStr } from "../engine/date-utils.js";
 import {
 	type TrainingData,
@@ -54,6 +55,9 @@ export interface Prescription {
 	 *  driving readiness. Null for non-WHOOP users or when the VV read failed. */
 	vigorVitae: number | null;
 	vigorVitaeLevel: string | null;
+	/** Active manual run power-source override — `"auto"` when unset (heuristic).
+	 *  Drives the Praescriptor run-card toggle's highlighted state. */
+	powerSourceOverride: "auto" | "stryd" | "garmin";
 	generated_at: string;
 }
 
@@ -118,10 +122,22 @@ export async function generatePrescriptions(
 	// book a fresh CP test when fitness shifts (no rolling-FTP override).
 	const strydCp = profile.stryd ? await fetchStrydCpInput(strydClient ?? null, now) : null;
 
+	// Manual run power-source override (Praescriptor toggle). null = auto.
+	const powerSourceOverride = getPowerSourceOverride(profile.id);
+
 	const hasSport = (s: "Run" | "Swim") => profile.sports.includes(s);
 
 	let run = hasSport("Run")
-		? suggestWorkoutFromData(data, "Run", now, undefined, strydCp, profile.id, tz)
+		? suggestWorkoutFromData(
+				data,
+				"Run",
+				now,
+				undefined,
+				strydCp,
+				profile.id,
+				tz,
+				powerSourceOverride,
+			)
 		: null;
 	let swim = hasSport("Swim")
 		? suggestWorkoutFromData(data, "Swim", now, undefined, undefined, "0", tz)
@@ -197,6 +213,7 @@ export async function generatePrescriptions(
 		dataSource,
 		vigorVitae: data.vigorVitae,
 		vigorVitaeLevel: data.vigorVitaeLevel,
+		powerSourceOverride: powerSourceOverride ?? "auto",
 		generated_at: now.toISOString(),
 	};
 

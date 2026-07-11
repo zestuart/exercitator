@@ -287,6 +287,19 @@ describe("suggestionToApi power_context.source (issue #25)", () => {
 			}
 		}
 	});
+
+	it("defaults power_context.override to auto when unset", () => {
+		const out = suggestionToApi(makeSuggestion("stryd"), true);
+		expect(out.power_context.override).toBe("auto");
+	});
+
+	it("surfaces the active power-source override", () => {
+		const stryd = { ...makeSuggestion("stryd"), powerSourceOverride: "stryd" as const };
+		expect(suggestionToApi(stryd, true).power_context.override).toBe("stryd");
+
+		const garmin = { ...makeSuggestion("garmin"), powerSourceOverride: "garmin" as const };
+		expect(suggestionToApi(garmin, false).power_context.override).toBe("garmin");
+	});
 });
 
 describe("injuryWarningFromVigil", () => {

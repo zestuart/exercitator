@@ -246,6 +246,49 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 }
 
 /**
+ * Apply a manual run power-source override to a detected/anchored PowerContext.
+ *
+ * The athlete can pin the run power source from Praescriptor instead of relying
+ * on the rolling-window heuristic in `detectPowerSource`, which flips as runs
+ * age out of the 5-run window — unstable while transitioning between a Stryd pod
+ * and a native watch. This runs LAST, after any Stryd critical-power anchoring,
+ * so it acts on the final FTP the engine would otherwise use:
+ *   - "stryd"  trusts the (Stryd-scale) FTP as-is, no correction.
+ *   - "garmin" scales the Stryd-scale FTP up to Garmin's native scale — Garmin
+ *     reads higher, so `Stryd = Garmin × factor` ⇒ `Garmin = Stryd ÷ factor`.
+ * `null` leaves the context untouched (auto behaviour).
+ */
+export function applyPowerSourceOverride(
+	ctx: PowerContext,
+	override: "stryd" | "garmin" | null,
+	factor: number = DEFAULT_GARMIN_TO_STRYD_FACTOR,
+): PowerContext {
+	if (!override) return ctx;
+
+	// A conscious choice supersedes auto-detection power warnings (e.g. the
+	// "Garmin native but Stryd connected — forgot to switch" nag). Only power
+	// warnings reach this context, so replacing the array wholesale is safe.
+	if (override === "stryd") {
+		return {
+			...ctx,
+			source: "stryd",
+			correction_factor: 1.0,
+			warnings: ["Power source manually set to Stryd."],
+		};
+	}
+
+	// override === "garmin": express the reference FTP in Garmin's native scale.
+	return {
+		...ctx,
+		source: "garmin",
+		ftp: ctx.ftp > 0 ? Math.round(ctx.ftp / factor) : ctx.ftp,
+		rolling_ftp: ctx.rolling_ftp != null ? Math.round(ctx.rolling_ftp / factor) : null,
+		correction_factor: factor,
+		warnings: ["Power source manually set to Garmin — FTP scaled from Stryd by ÷0.87."],
+	};
+}
+
+/**
  * Get the appropriate load value for an activity given the power context.
  * Falls back to hr_load when the activity lacks the athlete's preferred power source.
  */

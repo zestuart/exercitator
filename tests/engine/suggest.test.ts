@@ -120,6 +120,83 @@ describe("suggestWorkout integration", () => {
 		expect(withCp.power_context.source).toBe("stryd");
 	});
 
+	it("applies a manual power-source override AFTER Stryd-CP anchoring", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+
+		// Force Garmin on a CP-anchored context: CP 279.45 → 279 (Stryd scale)
+		// → ÷0.87 → 321 (Garmin scale). Source flips to garmin.
+		const forcedGarmin = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			new Date(),
+			undefined,
+			{ cp: 279.45, ageDays: 5 },
+			"0",
+			undefined,
+			"garmin",
+		);
+		expect(forcedGarmin.power_context.source).toBe("garmin");
+		expect(forcedGarmin.power_context.ftp).toBe(Math.round(279 / 0.87)); // 321
+		expect(forcedGarmin.power_context.correction_factor).toBe(0.87);
+		expect(forcedGarmin.powerSourceOverride).toBe("garmin");
+
+		// Force Stryd: keeps the CP-anchored FTP as-is, no correction.
+		const forcedStryd = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			new Date(),
+			undefined,
+			{ cp: 279.45, ageDays: 5 },
+			"0",
+			undefined,
+			"stryd",
+		);
+		expect(forcedStryd.power_context.source).toBe("stryd");
+		expect(forcedStryd.power_context.ftp).toBe(279);
+		expect(forcedStryd.power_context.correction_factor).toBe(1.0);
+		expect(forcedStryd.powerSourceOverride).toBe("stryd");
+	});
+
+	it("forces Garmin without a Stryd CP (scales the detected FTP)", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+		// Fixtures detect Stryd FTP 322 → force garmin → ÷0.87 → 370.
+		const forced = suggestWorkoutFromData(
+			data as never,
+			"Run",
+			new Date(),
+			undefined,
+			undefined,
+			"0",
+			undefined,
+			"garmin",
+		);
+		expect(forced.power_context.source).toBe("garmin");
+		expect(forced.power_context.ftp).toBe(Math.round(322 / 0.87)); // 370
+	});
+
+	it("leaves auto detection untouched when no override is passed", () => {
+		const data = {
+			activities: loadFixture("activities-14d.json"),
+			wellness: loadFixture("wellness-7d.json"),
+			runSettings: loadFixture("sport-settings-run.json"),
+			swimSettings: loadFixture("sport-settings-swim.json"),
+		};
+		const auto = suggestWorkoutFromData(data as never, "Run");
+		expect(auto.power_context.source).toBe("stryd");
+		expect(auto.power_context.ftp).toBe(322);
+		expect(auto.powerSourceOverride).toBeUndefined();
+	});
+
 	it("short-circuits to already_trained when a Run already exists today", () => {
 		const now = new Date("2026-05-27T18:00:00-07:00");
 		const todayLocal = "2026-05-27T07:51:34";

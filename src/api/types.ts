@@ -147,6 +147,13 @@ export interface SuggestedWorkoutBody {
 		source: CriticalPowerSource;
 		ftp: number;
 		confidence: "high" | "low";
+		/**
+		 * Active manual power-source override driving this prescription:
+		 *   "auto"   — the rolling-window heuristic chose the source
+		 *   "stryd"  — athlete pinned Stryd (targets at Stryd scale)
+		 *   "garmin" — athlete pinned Garmin (FTP scaled from Stryd by ÷0.87)
+		 */
+		override: "auto" | "stryd" | "garmin";
 	};
 	warnings: string[];
 	injury_warning: InjuryWarningBlock | null;

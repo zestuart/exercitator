@@ -18,7 +18,7 @@ import {
 	isCrossTraining,
 } from "./cross-training-strain.js";
 import { localDateStr } from "./date-utils.js";
-import { detectPowerSource } from "./power-source.js";
+import { applyPowerSourceOverride, detectPowerSource } from "./power-source.js";
 import { computeReadiness } from "./readiness.js";
 import { selectSport } from "./sport-selector.js";
 import { applyStaleness, computeStaleness } from "./staleness.js";
@@ -365,10 +365,11 @@ export function suggestWorkoutFromData(
 	strydCp?: StrydCpInput | null,
 	athleteId = "0",
 	tz?: string,
+	powerSourceOverride?: "stryd" | "garmin" | null,
 ): WorkoutSuggestion {
 	const { activities, wellness, runSettings, swimSettings } = data;
 
-	const powerContext = detectPowerSource(activities);
+	let powerContext = detectPowerSource(activities);
 
 	// Use Stryd critical power as FTP when available — authoritative source
 	// directly from the foot pod, not inferred by intervals.icu. No staleness
@@ -393,6 +394,14 @@ export function suggestWorkoutFromData(
 			);
 		}
 	}
+
+	// Manual power-source override (Praescriptor toggle). Applied LAST, after
+	// Stryd-CP anchoring, so a forced "garmin" scales the CP-anchored FTP up to
+	// Garmin's native scale and "stryd" trusts it as-is. `null`/undefined leaves
+	// auto-detection untouched. Only running uses power targets; swim carries the
+	// context but never reads its FTP.
+	powerContext = applyPowerSourceOverride(powerContext, powerSourceOverride ?? null);
+
 	// Health-telemetry hard-fail: a `promus-whoop` user whose overnight WHOOP
 	// data is missing for today (or Promus is unreachable) gets no prescription.
 	// Readiness here would be computed from degraded sleep/HRV inputs, so we
@@ -588,6 +597,7 @@ export function suggestWorkoutFromData(
 		terrain: terrainSelection.terrain,
 		terrain_rationale: terrainSelection.rationale,
 		power_context: powerContext,
+		...(powerSourceOverride ? { powerSourceOverride } : {}),
 		warnings,
 		vigil,
 	};
@@ -614,6 +624,7 @@ export async function suggestWorkout(
 	tz?: string,
 	strydClient?: StrydClient | null,
 	health?: HealthFetchOptions,
+	powerSourceOverride?: "stryd" | "garmin" | null,
 ): Promise<WorkoutSuggestion> {
 	const data = await fetchTrainingData(client, tz, health);
 	const now = new Date();
@@ -635,6 +646,7 @@ export async function suggestWorkout(
 		strydCp,
 		"0",
 		tz,
+		powerSourceOverride,
 	);
 }
 

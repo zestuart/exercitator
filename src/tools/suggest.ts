@@ -1,10 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { cacheGet } from "../db.js";
+import { cacheGet, getPowerSourceOverride } from "../db.js";
 import type { HealthFetchOptions } from "../engine/suggest.js";
 import { suggestWorkout } from "../engine/suggest.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { StrydClient } from "../stryd/client.js";
+import { DEFAULT_USER } from "../users.js";
 
 /** Resolve the athlete's IANA timezone from the cached profile, or fetch + cache it. */
 async function getAthleteTz(client: IntervalsClient): Promise<string> {
@@ -39,7 +40,16 @@ export function registerSuggestTools(
 		{},
 		async () => {
 			const tz = await getAthleteTz(client);
-			const suggestion = await suggestWorkout(client, tz, strydClient ?? null, health);
+			// This MCP server is bound to the default athlete's intervals key, so
+			// the manual power-source toggle is keyed by DEFAULT_USER.
+			const powerSourceOverride = getPowerSourceOverride(DEFAULT_USER);
+			const suggestion = await suggestWorkout(
+				client,
+				tz,
+				strydClient ?? null,
+				health,
+				powerSourceOverride,
+			);
 			return {
 				content: [{ type: "text", text: JSON.stringify(suggestion, null, 2) }],
 			};

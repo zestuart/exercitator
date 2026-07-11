@@ -11,7 +11,7 @@ src/
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
   users.ts              — shared user profile registry (ze, pam) consumed by Praescriptor + HTTP API
   health-source.ts      — resolves a HealthFetchOptions per profile (`healthFetchOptionsFor`): builds a stateless PromusClient + WHOOP serial from env for `healthSource: "promus-whoop"` users; no-op (intervals source) otherwise. Used by all four fetchTrainingData call sites + the MCP entry.
-  db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines + compliance tables (better-sqlite3, WAL mode)
+  db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines + compliance tables + `user_preferences` (sticky per-user settings; `getPowerSourceOverride`/`setPowerSourceOverride`) (better-sqlite3, WAL mode)
   compliance/
     types.ts            — compliance tracking type definitions
     assess.ts           — segment-to-lap matching, binary compliance scoring
@@ -35,7 +35,7 @@ src/
     types.ts            — shared TypeScript interfaces
     date-utils.ts       — timezone-aware date string utility (localDateStr)
     readiness.ts        — readiness score (0–100) from wellness + activity data. Blend: TSB 0.30 + acute(vigor) 0.20 + HRV 0.20 + Recency 0.15 + Subjective 0.15 (renormalised over present components). The acute slot (`components.vigor`) takes Promus Vigor Vitae (`ReadinessOptions.vigorVitae`, the now/last-night recovery signal) when present, else the sleep-duration band. HRV (vs 7-day baseline) reads Promus WHOOP `NightlyHealth[]` when `ReadinessOptions.health` is non-empty. Sleep-duration warnings + multi-night sleep-debt always use real sleep duration regardless of the acute signal. TSB/Recency/Subjective from intervals/activities.
-    power-source.ts     — Stryd vs Garmin vs HR-only detection, load metric selection
+    power-source.ts     — Stryd vs Garmin vs HR-only detection (rolling 5-run window), load metric selection. `applyPowerSourceOverride` pins the run source from the Praescriptor toggle (Auto/Stryd/Garmin), applied after CP anchoring; Garmin scales the Stryd-scale FTP by ÷0.87.
     sport-selector.ts   — Run vs Swim selection from load deficit + monotony rules
     staleness.ts        — sport-specific threshold staleness detection + category ceiling
     cross-training-strain.ts — cross-training classification, three-tier strain cascade (HRV/session_rpe/unknown)
@@ -56,8 +56,8 @@ src/
       backfill.ts       — 90-day Stryd FIT backfill + incremental per-activity processing
   web/
     server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
-    routes.ts           — route handler (/:userId/, /:userId/api/*, /health)
-    prescriptions.ts    — per-user prescription generator with day-level cache
+    routes.ts           — route handler (/:userId/, /:userId/api/*, /health). Includes `POST /api/power-source` (Auto/Stryd/Garmin toggle → `setPowerSourceOverride` + cache invalidate; enum-validated, write-rate-limited).
+    prescriptions.ts    — per-user prescription generator with day-level cache. Resolves the per-user power-source override and threads it into the run `suggestWorkoutFromData` call; carries it on the returned `Prescription` for the run-card toggle state.
     send.ts             — push workout to intervals.icu calendar with per-user dedup. Both send paths regenerate via generatePrescriptions with the athlete tz + vendor clients (a missing tz computes "today" in container-UTC → wrong-day WHOOP window) and refuse any non-`ready` status with 422 {not_sendable} (never push the awaiting_input/already_trained/health_unavailable placeholder).
     send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup). On Stryd-sourced runs, also fires markStrydRecommendationSelected as a preference signal.
     stryd-format.ts     — WorkoutSegment[] → Stryd blocks (CP% power targets). For Stryd-sourced runs, round-trips suggestion.strydOriginalWorkout verbatim instead of reconstructing from flattened segments (preserves block-repeat structure + exact intensity_percent bands).
@@ -68,7 +68,7 @@ src/
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
     form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text. `inferStroke` checks "drill" before "kick"/"pull" so FORM drills named sixKickSwitch classify as DCH not K.
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
-    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim).
+    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim). Run card carries the Auto/Stryd/Garmin power-source segmented control (`renderPowerSourceToggle`) + its client-JS POST handler.
     security-headers.ts — defence-in-depth headers for every Praescriptor response (HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy) + CSP for HTML responses
   api/
     server.ts           — HTTP API listener (port 8643, co-resident with MCP; started only when EXERCITATOR_API_KEYS set)

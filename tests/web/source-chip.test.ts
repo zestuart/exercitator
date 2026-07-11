@@ -78,4 +78,13 @@ describe("clientJs — user slug is emitted as a JSON literal (XSS hardening)", 
 		// Sanity: the normal path carries no script-closing sequence.
 		expect(js).not.toContain("</script>");
 	});
+
+	it("wires the power-source toggle POST via the client-built prefix", () => {
+		const js = clientJs("ze");
+		expect(js).toContain(".ps-btn");
+		expect(js).toContain("fetch(prefix + '/api/power-source'");
+		expect(js).toContain("dataset.powerSource");
+		// Never server-interpolates the slug into the path.
+		expect(js).not.toContain("fetch('/ze/api/power-source'");
+	});
 });

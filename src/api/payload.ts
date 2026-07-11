@@ -381,6 +381,7 @@ export function suggestionToApi(
 			source: mapWirePowerSource(s.power_context.source, strydCpProvided),
 			ftp: s.power_context.ftp,
 			confidence: s.power_context.confidence,
+			override: s.powerSourceOverride ?? "auto",
 		},
 		warnings: s.warnings,
 		injury_warning: s.vigil

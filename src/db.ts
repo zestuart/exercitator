@@ -232,6 +232,18 @@ export function getDb(): Database.Database {
 		)
 	`);
 
+	// Durable per-user preferences (sticky settings that outlive the TTL
+	// cache and container restarts) — e.g. the manual power-source override.
+	db.exec(`
+			CREATE TABLE IF NOT EXISTS user_preferences (
+				user_id    TEXT NOT NULL,
+				key        TEXT NOT NULL,
+				value      TEXT NOT NULL,
+				updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+				PRIMARY KEY (user_id, key)
+			)
+		`);
+
 	return db;
 }
 
@@ -264,6 +276,54 @@ export function cacheDel(key: string): void {
 export function cachePrune(): number {
 	const result = getDb().prepare("DELETE FROM cache WHERE ts + ttl <= unixepoch()").run();
 	return result.changes;
+}
+
+// ---------------------------------------------------------------------------
+// Durable per-user preferences
+// ---------------------------------------------------------------------------
+
+/** Read a per-user preference value, or null if unset. */
+export function getUserPref(userId: string, key: string): string | null {
+	const row = getDb()
+		.prepare("SELECT value FROM user_preferences WHERE user_id = ? AND key = ?")
+		.get(userId, key) as { value: string } | undefined;
+	return row ? row.value : null;
+}
+
+/** Set (upsert) a per-user preference value. */
+export function setUserPref(userId: string, key: string, value: string): void {
+	getDb()
+		.prepare(
+			`INSERT INTO user_preferences (user_id, key, value, updated_at)
+			 VALUES (?, ?, ?, datetime('now'))
+			 ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		)
+		.run(userId, key, value);
+}
+
+/** Delete a per-user preference (no-op if absent). */
+export function deleteUserPref(userId: string, key: string): void {
+	getDb().prepare("DELETE FROM user_preferences WHERE user_id = ? AND key = ?").run(userId, key);
+}
+
+/** Manual run power-source override values. `null` = auto (no row stored). */
+export type PowerSourceOverride = "stryd" | "garmin";
+
+const POWER_SOURCE_PREF_KEY = "power_source_override";
+
+/** Read the athlete's manual run power-source override, or null when on auto. */
+export function getPowerSourceOverride(userId: string): PowerSourceOverride | null {
+	const value = getUserPref(userId, POWER_SOURCE_PREF_KEY);
+	return value === "stryd" || value === "garmin" ? value : null;
+}
+
+/** Persist the manual run power-source override. `"auto"` clears it. */
+export function setPowerSourceOverride(userId: string, value: PowerSourceOverride | "auto"): void {
+	if (value === "auto") {
+		deleteUserPref(userId, POWER_SOURCE_PREF_KEY);
+	} else {
+		setUserPref(userId, POWER_SOURCE_PREF_KEY, value);
+	}
 }
 
 // ---------------------------------------------------------------------------

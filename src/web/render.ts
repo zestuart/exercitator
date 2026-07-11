@@ -31,6 +31,9 @@ export interface RenderData {
 	/** Yesterday's compliance data for the confirmation/traffic light UI. */
 	runCompliance?: ComplianceView | null;
 	swimCompliance?: ComplianceView | null;
+	/** Active manual run power-source override — drives the run-card toggle's
+	 *  highlighted state. `"auto"` (or absent) = the rolling-window heuristic. */
+	powerSourceOverride?: "auto" | "stryd" | "garmin";
 }
 
 function escapeHtml(s: string): string {
@@ -381,6 +384,29 @@ function renderComplianceSection(
 	return "";
 }
 
+/** Auto / Stryd / Garmin segmented control for the run card. Lets the athlete
+ *  pin the run power source instead of relying on the rolling-window heuristic
+ *  (which flips as runs age out of the 5-run window). Posts to
+ *  `/api/power-source`; the active value is highlighted. Run card only. */
+function renderPowerSourceToggle(active: "auto" | "stryd" | "garmin"): string {
+	const opts: Array<{ v: "auto" | "stryd" | "garmin"; label: string }> = [
+		{ v: "auto", label: "Auto" },
+		{ v: "stryd", label: "Stryd" },
+		{ v: "garmin", label: "Garmin" },
+	];
+	const buttons = opts
+		.map(
+			(o) =>
+				`<button type="button" class="ps-btn${o.v === active ? " active" : ""}" data-power-source="${o.v}" aria-pressed="${o.v === active}">${o.label}</button>`,
+		)
+		.join("");
+	return `
+			<div class="power-source-toggle" role="group" aria-label="Run power source">
+				<span class="ps-toggle-label">Power source</span>
+				<div class="ps-btns">${buttons}</div>
+			</div>`;
+}
+
 function renderCard(
 	suggestion: WorkoutSuggestion,
 	invocations: Invocations,
@@ -391,6 +417,7 @@ function renderCard(
 	filteredWarnings?: string[],
 	compliance?: ComplianceView | null,
 	formText?: string,
+	powerSourceToggleHtml = "",
 ): string {
 	const ftp = suggestion.power_context.ftp;
 	const sport = suggestion.sport;
@@ -422,6 +449,7 @@ function renderCard(
 					<span class="meta-pill">~${suggestion.estimated_load} load</span>
 					${renderSourceChip(suggestion)}
 				</div>
+				${powerSourceToggleHtml}
 			</div>
 
 			<blockquote class="invocation" style="border-left-color: ${accent}">
@@ -635,6 +663,8 @@ export function renderPage(data: RenderData): string {
 							showStryd,
 							runOnlyWarnings,
 							data.runCompliance,
+							undefined,
+							renderPowerSourceToggle(data.powerSourceOverride ?? "auto"),
 						)
 			: "";
 	const swimFormText =
@@ -1010,6 +1040,57 @@ body {
 	color: #8a5a00;
 	background: #fdf4e0;
 	border-color: #e4cf94;
+}
+
+.power-source-toggle {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.ps-toggle-label {
+	font-size: 0.72rem;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.ps-btns {
+	display: inline-flex;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.ps-btn {
+	font: inherit;
+	font-size: 0.74rem;
+	padding: 3px 12px;
+	border: none;
+	border-right: 1px solid var(--border);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.ps-btn:last-child {
+	border-right: none;
+}
+
+.ps-btn:hover:not(.active) {
+	background: rgba(0, 0, 0, 0.04);
+}
+
+.ps-btn.active {
+	background: var(--card-accent, #3a7a4a);
+	color: #fff;
+	font-weight: 600;
+}
+
+.ps-btn:disabled {
+	opacity: 0.5;
+	cursor: default;
 }
 
 /* --- Readiness --- */
@@ -1469,6 +1550,33 @@ document.getElementById('refresh-btn')?.addEventListener('click', async function
 		this.classList.remove('spinning');
 		this.disabled = false;
 	}
+});
+
+// Power-source toggle (Auto / Stryd / Garmin). Posts the chosen source and
+// reloads so the new prescription (and its power targets) render. The server
+// invalidates the day's cache on write.
+document.querySelectorAll('.ps-btn').forEach(btn => {
+	btn.addEventListener('click', async function() {
+		if (this.classList.contains('active')) return;
+		const source = this.dataset.powerSource;
+		const group = this.parentElement;
+		const btns = group ? group.querySelectorAll('.ps-btn') : [this];
+		btns.forEach(b => { b.disabled = true; });
+		try {
+			const res = await fetch(prefix + '/api/power-source', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ source: source }),
+			});
+			if (res.ok) {
+				window.location.reload();
+				return;
+			}
+			btns.forEach(b => { b.disabled = false; });
+		} catch {
+			btns.forEach(b => { b.disabled = false; });
+		}
+	});
 });
 
 // Calendar-send handler — explicitly skips both .stryd-btn (handled

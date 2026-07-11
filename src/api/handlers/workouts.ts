@@ -6,6 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getPrescription } from "../../compliance/persist.js";
+import { getPowerSourceOverride } from "../../db.js";
 import { localDateStr } from "../../engine/date-utils.js";
 import { detectPowerSource } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
@@ -212,6 +213,7 @@ export async function handleWorkoutsSuggested(
 			strydCpInput,
 			user.profile.id,
 			tz,
+			getPowerSourceOverride(user.profile.id),
 		);
 
 		if (suggestion.status === "awaiting_input") {

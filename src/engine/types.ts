@@ -211,6 +211,12 @@ export interface WorkoutSuggestion {
 	terrain: TerrainPreference;
 	terrain_rationale: string;
 	power_context: PowerContext;
+	/**
+	 * Active manual run power-source override applied to `power_context`.
+	 *   "stryd" / "garmin" — athlete pinned the source via Praescriptor.
+	 * Undefined / absent means auto-detection (the rolling-window heuristic).
+	 */
+	powerSourceOverride?: "stryd" | "garmin";
 	warnings: string[];
 	vigil?: VigilSummary;
 	/**

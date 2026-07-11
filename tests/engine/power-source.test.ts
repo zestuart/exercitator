@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { detectPowerSource, getActivityLoad } from "../../src/engine/power-source.js";
-import type { ActivitySummary } from "../../src/engine/types.js";
+import {
+	applyPowerSourceOverride,
+	detectPowerSource,
+	getActivityLoad,
+} from "../../src/engine/power-source.js";
+import type { ActivitySummary, PowerContext } from "../../src/engine/types.js";
 
 function makeRunActivity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
 	return {
@@ -440,5 +444,68 @@ describe("getActivityLoad", () => {
 		};
 		// Not a Stryd recording and no CIQ streams → hr_load fallback
 		expect(getActivityLoad(appleWatchNative, ctx)).toBe(38);
+	});
+});
+
+describe("applyPowerSourceOverride", () => {
+	function ctx(overrides: Partial<PowerContext> = {}): PowerContext {
+		return {
+			source: "garmin",
+			ftp: 286,
+			rolling_ftp: 319,
+			correction_factor: 1.0,
+			confidence: "high",
+			warnings: ["Some auto-detection warning"],
+			...overrides,
+		};
+	}
+
+	it("leaves the context untouched on null (auto)", () => {
+		const input = ctx();
+		const result = applyPowerSourceOverride(input, null);
+		expect(result).toBe(input);
+	});
+
+	it("forces Stryd: source flip, no correction, FTP unchanged, warning replaced", () => {
+		const result = applyPowerSourceOverride(ctx({ source: "garmin" }), "stryd");
+		expect(result.source).toBe("stryd");
+		expect(result.correction_factor).toBe(1.0);
+		expect(result.ftp).toBe(286);
+		expect(result.rolling_ftp).toBe(319);
+		expect(result.warnings).toEqual(["Power source manually set to Stryd."]);
+	});
+
+	it("forces Garmin: scales Stryd-scale FTP up by ÷0.87", () => {
+		const result = applyPowerSourceOverride(ctx({ source: "stryd" }), "garmin");
+		expect(result.source).toBe("garmin");
+		// 286 / 0.87 = 328.7 → 329 ; 319 / 0.87 = 366.7 → 367
+		expect(result.ftp).toBe(329);
+		expect(result.rolling_ftp).toBe(367);
+		expect(result.correction_factor).toBe(0.87);
+		expect(result.warnings[0]).toContain("manually set to Garmin");
+	});
+
+	it("forces Garmin with a null rolling_ftp safely", () => {
+		const result = applyPowerSourceOverride(ctx({ rolling_ftp: null }), "garmin");
+		expect(result.rolling_ftp).toBeNull();
+		expect(result.ftp).toBe(329);
+	});
+
+	it("forces Garmin without scaling a zero FTP (HR-only)", () => {
+		const result = applyPowerSourceOverride(ctx({ ftp: 0, rolling_ftp: null }), "garmin");
+		expect(result.ftp).toBe(0);
+	});
+
+	it("does not mutate the input context", () => {
+		const input = ctx({ source: "stryd" });
+		applyPowerSourceOverride(input, "garmin");
+		expect(input.source).toBe("stryd");
+		expect(input.ftp).toBe(286);
+	});
+
+	it("honours a custom correction factor", () => {
+		const result = applyPowerSourceOverride(ctx({ ftp: 300, rolling_ftp: null }), "garmin", 0.9);
+		expect(result.ftp).toBe(Math.round(300 / 0.9)); // 333
+		expect(result.correction_factor).toBe(0.9);
 	});
 });

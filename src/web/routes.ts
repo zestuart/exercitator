@@ -16,6 +16,7 @@ import {
 	saveComplianceAssessment,
 } from "../compliance/persist.js";
 import type { ComplianceView } from "../compliance/types.js";
+import { setPowerSourceOverride } from "../db.js";
 import { isValidTimezone, localDateStr } from "../engine/date-utils.js";
 import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
@@ -180,6 +181,25 @@ export async function handleRoutes(
 			invalidateCache(profile.id);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify({ success: true }));
+			return;
+		}
+
+		// Manual run power-source override (Auto / Stryd / Garmin toggle).
+		// Sticky per-user in SQLite; invalidates the day's prescription cache so
+		// the next render reflects the new source. Covered by the "write"
+		// rate-limit bucket above.
+		if (req.method === "POST" && subPath === "/api/power-source") {
+			const body = await readJsonBody(req);
+			const source = body?.source;
+			if (source !== "auto" && source !== "stryd" && source !== "garmin") {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "source must be one of: auto, stryd, garmin" }));
+				return;
+			}
+			setPowerSourceOverride(profile.id, source);
+			invalidateCache(profile.id);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ success: true, source }));
 			return;
 		}
 
@@ -568,6 +588,7 @@ async function handleMainPage(
 		dataSource: prescriptions.dataSource,
 		vigorVitae: prescriptions.vigorVitae,
 		vigorVitaeLevel: prescriptions.vigorVitaeLevel,
+		powerSourceOverride: prescriptions.powerSourceOverride,
 		generatedAt: prescriptions.generated_at,
 		tz,
 		runCompliance,

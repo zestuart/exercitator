@@ -129,6 +129,24 @@ The category decides *intensity*; the body (segments, targets) is then built:
   vendor only supplies the body for the chosen category. On any vendor failure it falls back
   to the engine body with a `fallbackReason` chip.
 
+### Power source (run FTP scale)
+
+`src/engine/power-source.ts` decides which reference the run power targets are expressed in.
+`detectPowerSource` auto-detects from the **last 5 runs** (Stryd → Garmin → HR-only); a Stryd
+Critical Power reading, when present, then anchors the FTP. Because the 5-run window
+re-composes on every upload, the auto verdict can **flip** while an athlete transitions between
+a Stryd pod and a native watch (the last Stryd run ages out of the window).
+
+A **manual override** pins the source: the Praescriptor run-card *Auto / Stryd / Garmin* toggle
+(`POST /api/power-source`) is sticky per-user in SQLite (`user_preferences`) and applied
+**after** CP anchoring by `applyPowerSourceOverride`:
+- **Auto** — the heuristic above (default; the only mode for Pam).
+- **Stryd** — trust the Stryd-scale FTP as-is, no correction.
+- **Garmin** — scale the Stryd-scale FTP up to Garmin's native scale: `Garmin = Stryd ÷ 0.87`
+  (Garmin power meters read ~15% higher than Stryd).
+
+Surfaced on the HTTP API as `power_context.override`. Run-only; swim never reads power context.
+
 ## 5. Injury overlay — Vigil
 
 `src/engine/vigil/` — independent of readiness. Z-score deviation of Stryd running
@@ -148,6 +166,7 @@ data sources, specifically when you touch:
 - The readiness→category ladder or any guard (`src/engine/workout-selector.ts`)
 - Sport selection (`src/engine/sport-selector.ts`)
 - Data sourcing / health telemetry (`src/engine/suggest.ts`, `src/promus/client.ts`, `src/health-source.ts`)
+- Power-source detection or the manual override / FTP scaling (`src/engine/power-source.ts`)
 - The vendor swap layers (`src/web/stryd-swap.ts`, `src/web/form-swap.ts`)
 - Pre-emptive statuses (`health_unavailable`, `already_trained`, `awaiting_input`)
 
