@@ -171,8 +171,8 @@ deviating). Severity ≥2 triggers the category downshift above and writes the i
 
 | Source | FIT | Metrics | Backfill |
 |--------|-----|---------|----------|
-| **Stryd** (`fit-parser.ts`) | Stryd PowerCenter FIT (CIQ dev fields) | GCT, LSS, form-power ratio, ILR, bilateral LSS/VO/ILR balance (Duo) — the full set | enrich-and-replace (`stryd/enricher.ts`) + 90-day backfill |
-| **Garmin** (`garmin-fit.ts`) | original Garmin FIT via the bridge | **subset**: GCT, GCT drift, power:HR drift (native power), **GCT asymmetry** (native `stance_time_balance` — a bonus the single-pod Stryd lacked); VO + cadence informational. No LSS/Form Power/ILR. | `garmin-backfill.ts`, same-activity (no replace) + 90-day backfill |
+| **Stryd Duo** (`fit-parser.ts`) | Stryd PowerCenter FIT (CIQ dev fields) | GCT, LSS, form-power ratio, ILR, bilateral GCT/LSS/VO/ILR balance — the full set | enrich-and-replace (`stryd/enricher.ts`) + 90-day backfill |
+| **Garmin** (`garmin-fit.ts`) | original Garmin FIT via the bridge | **subset**: GCT, GCT drift, power:HR drift (native power), **GCT asymmetry** (native `stance_time_balance` — matches the Duo's GCT balance, but Garmin has GCT balance only, no LSS/VO/ILR balance); VO + cadence informational. No LSS/Form Power/ILR. | `garmin-backfill.ts`, same-activity (no replace) + 90-day backfill |
 
 Baselines are **per-source** (`vigil_baselines` PK includes `source`): a wrist-watch GCT
 offset never contaminates the foot-pod baseline. `runVigilPipeline` scores each source

@@ -7,11 +7,11 @@
  * therefore yields a strict SUBSET of Vigil metrics:
  *
  *   available  → avg GCT (stance_time), GCT drift, power:HR drift (native power),
- *                GCT asymmetry (native stance_time_balance — a bonus the
- *                single-pod Stryd never provided), plus informational avg VO
- *                and avg cadence.
+ *                GCT asymmetry (native stance_time_balance — the same left/right
+ *                balance the Stryd Duo gives, but Garmin exposes GCT balance
+ *                ONLY), plus informational avg VO and avg cadence.
  *   absent     → Leg Spring Stiffness, Form Power, Impact Loading Rate, and the
- *                LSS/VO/ILR balance channels (all Stryd-only) → left null.
+ *                LSS/VO/ILR balance channels (all Stryd Duo-only) → left null.
  *
  * Four SCOREABLE metrics survive (avg_gct_ms, gct_drift_pct, power_hr_drift,
  * gct_asymmetry_pct) — comfortably above the scorer's ≥2-metric alert gate.
