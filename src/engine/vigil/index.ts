@@ -130,23 +130,30 @@ function combineVigilResults(results: VigilResult[]): VigilResult {
 }
 
 /**
- * Run the Vigil pipeline for a sport across all recording sources.
+ * Run the Vigil pipeline for a sport.
  *
  * Stryd and Garmin baselines are computed independently (no cross-device
- * contamination) and the worst active result is returned, so a concerning
- * Garmin-run baseline still downshifts even while a stale Stryd baseline is
- * quiet. Signature is source-agnostic — callers are unchanged.
+ * contamination). When `source` names a Vigil source (the athlete's effective
+ * run power source — Stryd/Garmin), Vigil is tied to that selection, so the
+ * indicator follows the run-card power selector and reflects the ecosystem the
+ * athlete is actually on (a stale non-selected baseline never shows). Otherwise
+ * (no power source, or `"none"`) it falls back to the worst active source.
  *
  * @param sport - Sport type (e.g. "Run")
  * @param referenceDate - Date to compute baselines relative to (default: today)
+ * @param source - Effective run power source to tie Vigil to (else combiner fallback)
  */
 export function runVigilPipeline(
 	athleteId: string,
 	sport: string,
 	referenceDate?: Date,
 	tz?: string,
+	source?: VigilSource | "none",
 ): VigilResult {
 	const ref = referenceDate ?? new Date();
+	if (source === "stryd" || source === "garmin") {
+		return runVigilForSource(athleteId, source, sport, ref, tz);
+	}
 	const results = VIGIL_SOURCES.map((s) => runVigilForSource(athleteId, s, sport, ref, tz));
 	return combineVigilResults(results);
 }

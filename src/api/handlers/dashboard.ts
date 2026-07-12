@@ -10,7 +10,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getPowerSourceOverride } from "../../db.js";
 import { localDateStr } from "../../engine/date-utils.js";
-import { detectPowerSource } from "../../engine/power-source.js";
+import { detectPowerSource, resolveRunFtp } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import {
 	fetchStrydCpInput,
@@ -85,7 +85,17 @@ export async function handleDashboard(
 				? new Date(now.getTime() - strydCpInput.ageDays * 86_400_000).toISOString()
 				: null;
 		const isRunSport = user.profile.sports.includes("Run");
-		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now, tz) : null;
+		// Tie Vigil to the effective run power source so every surface (Praescriptor,
+		// this dashboard) shows the same source's baseline.
+		const effectivePower = resolveRunFtp(
+			powerContext,
+			getPowerSourceOverride(user.profile.id),
+			strydCp,
+			data.activities,
+		).source;
+		const vigil = isRunSport
+			? runVigilPipeline(user.profile.id, "Run", now, tz, effectivePower)
+			: null;
 		if (user.profile.stryd) {
 			void runVigilBackfillIfNeeded(user.stryd, user.profile.id);
 		}

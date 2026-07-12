@@ -11,6 +11,7 @@ import {
 	fetchStrydCpInput,
 	fetchTrainingData,
 	suggestWorkoutFromData,
+	vigilResultToSummary,
 } from "../engine/suggest.js";
 import type {
 	PowerContext,
@@ -20,6 +21,7 @@ import type {
 } from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
 import { runGarminVigilBackfillIfNeeded } from "../engine/vigil/garmin-backfill.js";
+import { runVigilPipeline } from "../engine/vigil/index.js";
 import type { FormClient } from "../form/client.js";
 import { healthFetchOptionsFor } from "../health-source.js";
 import type { IntervalsClient } from "../intervals.js";
@@ -220,6 +222,21 @@ export async function generatePrescriptions(
 		);
 	}
 
+	// Vigil footer indicator is always shown, tied to the run's effective power
+	// source, even on an already-trained/rest card (where the run pipeline
+	// short-circuits before Vigil). Reuse the run card's Vigil when present; else
+	// compute it directly for the footer.
+	let footerVigil = run?.vigil ?? null;
+	if (!footerVigil && profile.sports.includes("Run")) {
+		try {
+			footerVigil = vigilResultToSummary(
+				runVigilPipeline(profile.id, "Run", now, tz, run?.power_context?.source),
+			);
+		} catch (err) {
+			console.error("Vigil footer computation failed:", err);
+		}
+	}
+
 	const dataSource = buildDataSource(
 		data,
 		strydEnriched,
@@ -229,7 +246,7 @@ export async function generatePrescriptions(
 		// The run's effective power context drives the FTP chip label (Garmin: FTP
 		// from intervals / Stryd: CP), so it matches where the FTP came from.
 		run?.power_context ?? null,
-		run?.vigil ?? null,
+		footerVigil,
 	);
 	const prescription: Prescription = {
 		run,

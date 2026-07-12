@@ -5,7 +5,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { detectPowerSource } from "../../engine/power-source.js";
+import { getPowerSourceOverride } from "../../db.js";
+import { detectPowerSource, resolveRunFtp } from "../../engine/power-source.js";
 import { computeReadiness } from "../../engine/readiness.js";
 import { fetchStrydCpInput, fetchTrainingData } from "../../engine/suggest.js";
 import { runVigilBackfillIfNeeded } from "../../engine/vigil/backfill.js";
@@ -79,7 +80,16 @@ export async function handleStatus(
 			: { watts: null as number | null, updatedAt: null as string | null };
 
 		const isRunSport = user.profile.sports.includes("Run");
-		const vigil = isRunSport ? runVigilPipeline(user.profile.id, "Run", now, tz) : null;
+		// Tie Vigil to the effective run power source (matches Praescriptor + dashboard).
+		const effectivePower = resolveRunFtp(
+			powerContext,
+			getPowerSourceOverride(user.profile.id),
+			strydCp?.cp ?? null,
+			data.activities,
+		).source;
+		const vigil = isRunSport
+			? runVigilPipeline(user.profile.id, "Run", now, tz, effectivePower)
+			: null;
 
 		// Fire-and-forget Vigil backfill on first call for this athlete.
 		// runVigilBackfillIfNeeded short-circuits when (a) no Stryd creds,

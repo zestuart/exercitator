@@ -107,6 +107,34 @@ describe("runVigilPipeline — per-source combiner", () => {
 		expect(r.alert.flags.some((f) => f.metric === "gct_asymmetry_pct")).toBe(true);
 	});
 
+	it("ties to the selected source (power selector) when one is given", () => {
+		// Both sources have clear data.
+		for (let i = 0; i < 6; i++) {
+			saveVigilMetrics(metric("stryd", `s-${i}`, `2026-07-0${i + 1}`, { avgGctMs: 240 }));
+			saveVigilMetrics(metric("garmin", `g-${i}`, `2026-07-0${i + 1}`, { avgGctMs: 285 }));
+		}
+		expect(runVigilPipeline("42", "Run", REF, undefined, "garmin").source).toBe("garmin");
+		expect(runVigilPipeline("42", "Run", REF, undefined, "stryd").source).toBe("stryd");
+		// "none" / omitted falls back to the combiner across sources.
+		expect(["stryd", "garmin"]).toContain(
+			runVigilPipeline("42", "Run", REF, undefined, "none").source,
+		);
+	});
+
+	it("honours the selected source even when the other has an alert", () => {
+		// Garmin has an alert; Stryd is clear. Selecting Stryd shows the clear Stryd.
+		seedGarminAlert();
+		for (let i = 0; i < 6; i++) {
+			saveVigilMetrics(metric("stryd", `s-${i}`, `2026-07-0${i + 1}`, { avgGctMs: 240 }));
+		}
+		const stryd = runVigilPipeline("42", "Run", REF, undefined, "stryd");
+		expect(stryd.source).toBe("stryd");
+		expect(stryd.alert.severity).toBe(0);
+		const garmin = runVigilPipeline("42", "Run", REF, undefined, "garmin");
+		expect(garmin.source).toBe("garmin");
+		expect(garmin.alert.severity).toBeGreaterThanOrEqual(2);
+	});
+
 	it("prefers an active source over a building one at equal severity", () => {
 		// Stryd: only 3 activities → building. Garmin: 6 → active, no concern.
 		for (let i = 0; i < 3; i++) {

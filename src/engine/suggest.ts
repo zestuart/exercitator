@@ -34,7 +34,7 @@ import type {
 	WellnessRecord,
 	WorkoutSuggestion,
 } from "./types.js";
-import { runVigilPipeline } from "./vigil/index.js";
+import { type VigilResult, runVigilPipeline } from "./vigil/index.js";
 import { buildWorkout } from "./workout-builder.js";
 import { selectWorkoutCategory } from "./workout-selector.js";
 
@@ -473,6 +473,28 @@ function findTodayActivityForSport(
 // Pipeline for a fixed sport
 // ---------------------------------------------------------------------------
 
+/** Map a VigilResult (pipeline output) to the wire/render VigilSummary. Always
+ *  returns a summary — including the "inactive" (no data) state — so the footer
+ *  Vigil indicator can be shown on every card, tied to the run power source. */
+export function vigilResultToSummary(r: VigilResult): VigilSummary {
+	return {
+		severity: r.alert.severity,
+		summary: r.alert.summary,
+		recommendation: r.alert.recommendation,
+		flags: r.alert.flags.map((f) => ({
+			metric: f.metric,
+			zScore: f.zScore,
+			weight: f.weight,
+			weightedZ: f.weightedZ,
+			value7d: f.value7d,
+			value30d: f.value30d,
+		})),
+		baselineWindow: r.baselineWindow,
+		acuteWindow: r.acuteWindow,
+		status: r.status,
+	};
+}
+
 export function suggestWorkoutFromData(
 	data: TrainingData,
 	sport: "Run" | "Swim",
@@ -582,7 +604,11 @@ export function suggestWorkoutFromData(
 	// Stryd stores all activities as sport="Run" regardless of intervals.icu classification,
 	// so always query with "Run" for the Vigil pipeline.
 	const isRunSport = ["Run", "VirtualRun", "TrailRun", "Treadmill"].includes(sport);
-	const vigilResult = isRunSport ? runVigilPipeline(athleteId, "Run", now, tz) : null;
+	// Tie Vigil to the effective run power source, so the injury baseline follows
+	// the same Stryd/Garmin ecosystem the athlete's power targets use.
+	const vigilResult = isRunSport
+		? runVigilPipeline(athleteId, "Run", now, tz, powerContext.source)
+		: null;
 
 	// Stryd RPE as hard-session signal: augment perceived_exertion from Vigil metrics.
 	// Only for running sports where we have Stryd data in the DB.
@@ -669,25 +695,13 @@ export function suggestWorkoutFromData(
 	];
 
 	// Build Vigil summary for output (only when active or building)
-	let vigil: VigilSummary | undefined;
-	if (vigilResult && vigilResult.status !== "inactive") {
-		vigil = {
-			severity: vigilResult.alert.severity,
-			summary: vigilResult.alert.summary,
-			recommendation: vigilResult.alert.recommendation,
-			flags: vigilResult.alert.flags.map((f) => ({
-				metric: f.metric,
-				zScore: f.zScore,
-				weight: f.weight,
-				weightedZ: f.weightedZ,
-				value7d: f.value7d,
-				value30d: f.value30d,
-			})),
-			baselineWindow: vigilResult.baselineWindow,
-			acuteWindow: vigilResult.acuteWindow,
-			status: vigilResult.status,
-		};
-	}
+	// The run card attaches Vigil only when it has data (drops "inactive"), so a
+	// no-data state adds no banner. The footer indicator is populated separately
+	// (always shown) in prescriptions.ts via `vigilResultToSummary`.
+	const vigil =
+		vigilResult && vigilResult.status !== "inactive"
+			? vigilResultToSummary(vigilResult)
+			: undefined;
 
 	return {
 		...workout,

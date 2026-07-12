@@ -179,11 +179,20 @@ deviating). Severity ≥2 triggers the category downshift above and writes the i
 | **Garmin** (`garmin-fit.ts`) | original Garmin FIT via the bridge | **subset**: GCT, GCT drift, power:HR drift (native power), **GCT asymmetry** (native `stance_time_balance` — matches the Duo's GCT balance, but Garmin has GCT balance only, no LSS/VO/ILR balance); VO + cadence informational. No LSS/Form Power/ILR. | `garmin-backfill.ts`, same-activity (no replace) + 90-day backfill |
 
 Baselines are **per-source** (`vigil_baselines` PK includes `source`): a wrist-watch GCT
-offset never contaminates the foot-pod baseline. `runVigilPipeline` scores each source
-independently and returns the **worst active severity** (injury-conservative), so a
-concerning Garmin baseline still downshifts even while a stale Stryd baseline is quiet.
-The Garmin backfill runs on the prescription path whenever a Garmin health source
-(`garmin`/`auto`) is active. Four scoreable Garmin metrics clear the ≥2-metric gate.
+offset never contaminates the foot-pod baseline. `runVigilPipeline` **ties to the effective
+run power source** — it scores the source the athlete has selected on the run-card *Auto /
+Stryd / Garmin* toggle (or auto-detected), so the injury baseline follows the same ecosystem
+as the power targets and a stale non-selected baseline never shows. When there is no run power
+source (`none`), it falls back to the **worst active** source across Stryd + Garmin
+(injury-conservative). The Garmin backfill runs on the prescription path whenever a Garmin
+health source (`garmin`/`auto`) is active. Four scoreable Garmin metrics clear the ≥2-metric
+gate.
+
+The Vigil footer indicator is **always shown** (`prescriptions.ts` computes it via
+`vigilResultToSummary` for the footer even on an `already_trained`/rest card, where the run
+pipeline short-circuits before Vigil) and reads the same source. Every surface — Praescriptor,
+the HTTP API `/status` + `/dashboard` — resolves the effective source the same way
+(`resolveRunFtp(...).source`) so the indicator is consistent.
 
 ---
 
