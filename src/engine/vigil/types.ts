@@ -5,10 +5,19 @@
  * All scoring uses intra-individual z-scores, not population thresholds.
  */
 
-/** Per-activity metric summary computed from Stryd FIT developer fields. */
+/** Telemetry provenance for a metric row. Baselines are computed *per source*
+ *  so a wrist-watch (Garmin) systematic offset never contaminates the foot-pod
+ *  (Stryd) baseline, and vice versa. */
+export type VigilSource = "stryd" | "garmin";
+
+/** Per-activity metric summary computed from a running FIT.
+ *  Stryd rows carry the full CIQ developer-field set; Garmin rows carry a
+ *  native subset (no Leg Spring Stiffness / Form Power / Impact). */
 export interface VigilMetrics {
 	/** intervals.icu athlete ID — isolates metrics per user in multi-user setups. */
 	athleteId: string;
+	/** Recording source — separates Stryd and Garmin baselines. */
+	source: VigilSource;
 	activityId: string;
 	icuActivityId: string | null;
 	activityDate: string;
@@ -71,6 +80,8 @@ export interface VigilAlert {
 export interface VigilBaseline {
 	/** intervals.icu athlete ID — isolates baselines per user. */
 	athleteId: string;
+	/** Recording source — Stryd and Garmin baselines are kept independent. */
+	source: VigilSource;
 	sport: string;
 	metric: string;
 	computedAt: string;

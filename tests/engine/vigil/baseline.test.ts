@@ -5,6 +5,7 @@ import type { VigilMetrics } from "../../../src/engine/vigil/types.js";
 function makeVigilMetrics(overrides: Partial<VigilMetrics> = {}): VigilMetrics {
 	return {
 		athleteId: "0",
+		source: "stryd",
 		activityId: "1",
 		icuActivityId: null,
 		activityDate: "2026-03-20",
@@ -59,7 +60,7 @@ describe("computeBaselinesFromData", () => {
 		const activities30d = makeActivities(8);
 		const activities7d = activities30d.slice(-3);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 
 		// Should have baselines for all unilateral scoreable metrics
 		expect(baselines.length).toBeGreaterThanOrEqual(6);
@@ -76,7 +77,7 @@ describe("computeBaselinesFromData", () => {
 		const activities30d = makeActivities(4);
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		expect(baselines.length).toBe(0);
 	});
 
@@ -84,7 +85,7 @@ describe("computeBaselinesFromData", () => {
 		const activities30d = makeActivities(6);
 		const activities7d = activities30d.slice(-1); // only 1 activity in 7d
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		expect(baselines.length).toBeGreaterThan(0);
 
 		const gctBaseline = baselines.find((b) => b.metric === "avg_gct_ms");
@@ -96,7 +97,7 @@ describe("computeBaselinesFromData", () => {
 		const activities30d = makeActivities(5);
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		expect(baselines.length).toBeGreaterThan(0);
 
 		const gctBaseline = baselines.find((b) => b.metric === "avg_gct_ms");
@@ -110,7 +111,7 @@ describe("computeBaselinesFromData", () => {
 		}));
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		const gctBaseline = baselines.find((b) => b.metric === "avg_gct_ms");
 
 		expect(gctBaseline?.mean30d).toBeCloseTo(234, 0);
@@ -125,7 +126,7 @@ describe("computeBaselinesFromData", () => {
 		}));
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		const ilrBaseline = baselines.find((b) => b.metric === "avg_ilr");
 		expect(ilrBaseline).toBeUndefined();
 
@@ -141,7 +142,7 @@ describe("computeBaselinesFromData", () => {
 		}));
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		const ilrBaseline = baselines.find((b) => b.metric === "avg_ilr");
 		// 4 non-null values < 5 minimum → no baseline
 		expect(ilrBaseline).toBeUndefined();
@@ -156,7 +157,7 @@ describe("computeBaselinesFromData", () => {
 		}));
 		const all = [...chronic, ...acute];
 
-		const baselines = computeBaselinesFromData("0", "Run", all, acute);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", all, acute);
 		const gctBaseline = baselines.find((b) => b.metric === "avg_gct_ms");
 
 		// 30d mean includes all 8 activities: (5×230 + 3×250) / 8 = 237.5
@@ -169,7 +170,7 @@ describe("computeBaselinesFromData", () => {
 		const activities30d = makeActivities(6);
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		const asymmetryBaselines = baselines.filter((b) => b.metric.includes("asymmetry"));
 		expect(asymmetryBaselines.length).toBe(0);
 	});
@@ -181,7 +182,7 @@ describe("computeBaselinesFromData", () => {
 		}));
 		const activities7d = activities30d.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", activities30d, activities7d);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", activities30d, activities7d);
 		const gctAsym = baselines.find((b) => b.metric === "gct_asymmetry_pct");
 		expect(gctAsym).toBeDefined();
 		expect(gctAsym?.mean30d).toBeCloseTo(3.5, 1);
@@ -202,7 +203,7 @@ describe("computeBaselinesFromData", () => {
 		const all = [...singlePod, ...duo];
 		const acute = duo.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", all, acute);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", all, acute);
 
 		// Bilateral baseline should only include 5 Duo activities
 		const gctAsym = baselines.find((b) => b.metric === "gct_asymmetry_pct");
@@ -225,7 +226,7 @@ describe("computeBaselinesFromData", () => {
 		const all = [...singlePod, ...duo];
 		const acute = duo.slice(-2);
 
-		const baselines = computeBaselinesFromData("0", "Run", all, acute);
+		const baselines = computeBaselinesFromData("0", "stryd", "Run", all, acute);
 
 		// 3 Duo activities < 5 minimum → no bilateral baseline
 		const gctAsym = baselines.find((b) => b.metric === "gct_asymmetry_pct");

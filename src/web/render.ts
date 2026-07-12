@@ -601,7 +601,7 @@ function renderVigilDataSource(vigil: VigilSummary | null): string {
 	const cssClass = vigil.severity >= 2 ? "ds-vigil-warn" : "ds-vigil";
 
 	if (vigil.status === "inactive") {
-		return `<span class="${cssClass}">Vigil: no Stryd data</span>`;
+		return `<span class="${cssClass}">Vigil: no run data</span>`;
 	}
 	if (vigil.status === "building") {
 		return `<span class="${cssClass}">${escapeHtml(vigil.summary)}</span>`;

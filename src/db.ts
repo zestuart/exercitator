@@ -56,10 +56,30 @@ export function getDb(): Database.Database {
 		db.exec("DROP TABLE IF EXISTS vigil_baselines");
 	}
 
+	// Source-provenance migration (Garmin recovery Phase 2): Vigil now keeps
+	// Stryd and Garmin baselines independent, so both tables carry a `source`.
+	// vigil_metrics gains the column in place (existing rows default 'stryd');
+	// vigil_baselines needs `source` in its PK, so an older baseline table is
+	// dropped and recomputed on the next prescription (baselines are derived,
+	// never authoritative).
+	const vmSourceCheck = db
+		.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vigil_metrics'")
+		.get() as { sql: string } | undefined;
+	if (vmSourceCheck && !vmSourceCheck.sql.includes("source")) {
+		db.exec("ALTER TABLE vigil_metrics ADD COLUMN source TEXT NOT NULL DEFAULT 'stryd'");
+	}
+	const vbSourceCheck = db
+		.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vigil_baselines'")
+		.get() as { sql: string } | undefined;
+	if (vbSourceCheck && !vbSourceCheck.sql.includes("source")) {
+		db.exec("DROP TABLE IF EXISTS vigil_baselines");
+	}
+
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS vigil_metrics (
 			activity_id       TEXT PRIMARY KEY,
 			athlete_id        TEXT NOT NULL DEFAULT '0',
+			source            TEXT NOT NULL DEFAULT 'stryd',
 			icu_activity_id   TEXT,
 			computed_at       TEXT NOT NULL,
 			activity_date     TEXT NOT NULL,
@@ -94,6 +114,7 @@ export function getDb(): Database.Database {
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS vigil_baselines (
 			athlete_id       TEXT NOT NULL DEFAULT '0',
+			source           TEXT NOT NULL DEFAULT 'stryd',
 			sport            TEXT NOT NULL,
 			metric           TEXT NOT NULL,
 			computed_at      TEXT NOT NULL,
@@ -102,7 +123,7 @@ export function getDb(): Database.Database {
 			mean_7d          REAL,
 			sample_count_30d INTEGER NOT NULL,
 			sample_count_7d  INTEGER,
-			PRIMARY KEY (athlete_id, sport, metric)
+			PRIMARY KEY (athlete_id, source, sport, metric)
 		)
 	`);
 
@@ -373,13 +394,18 @@ export function recordEnrichment(
 // Vigil metric tracking
 // ---------------------------------------------------------------------------
 
-import type { VigilBaseline, VigilMetrics } from "./engine/vigil/types.js";
+import type { VigilBaseline, VigilMetrics, VigilSource } from "./engine/vigil/types.js";
 
-/** Check if any Vigil metrics exist for a given athlete (for triggering initial backfill). */
-export function hasAnyVigilMetrics(athleteId: string): boolean {
-	const row = getDb()
-		.prepare("SELECT 1 FROM vigil_metrics WHERE athlete_id = ? LIMIT 1")
-		.get(athleteId);
+/** Check if any Vigil metrics exist for a given athlete (for triggering initial
+ *  backfill). Pass `source` to scope the check to one recording source — the
+ *  Stryd and Garmin backfills each gate their first-time 90-day pull on their
+ *  own source so one populated source never suppresses the other's backfill. */
+export function hasAnyVigilMetrics(athleteId: string, source?: VigilSource): boolean {
+	const row = source
+		? getDb()
+				.prepare("SELECT 1 FROM vigil_metrics WHERE athlete_id = ? AND source = ? LIMIT 1")
+				.get(athleteId, source)
+		: getDb().prepare("SELECT 1 FROM vigil_metrics WHERE athlete_id = ? LIMIT 1").get(athleteId);
 	return row !== undefined;
 }
 
@@ -394,14 +420,14 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 	getDb()
 		.prepare(
 			`INSERT OR REPLACE INTO vigil_metrics (
-				activity_id, athlete_id, icu_activity_id, computed_at, activity_date, sport, surface_type,
+				activity_id, athlete_id, source, icu_activity_id, computed_at, activity_date, sport, surface_type,
 				avg_gct_ms, avg_lss, avg_form_power, avg_ilr, avg_vo_cm, avg_cadence,
 				form_power_ratio, gct_drift_pct, power_hr_drift, stryd_rpe, stryd_feel,
 				l_avg_gct_ms, r_avg_gct_ms, l_avg_lss, r_avg_lss,
 				l_avg_vo_cm, r_avg_vo_cm, l_avg_ilr, r_avg_ilr,
 				gct_asymmetry_pct, lss_asymmetry_pct, vo_asymmetry_pct, ilr_asymmetry_pct
 			) VALUES (
-				?, ?, ?, datetime('now'), ?, ?, ?,
+				?, ?, ?, ?, datetime('now'), ?, ?, ?,
 				?, ?, ?, ?, ?, ?,
 				?, ?, ?, ?, ?,
 				?, ?, ?, ?,
@@ -412,6 +438,7 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 		.run(
 			m.activityId,
 			m.athleteId,
+			m.source,
 			m.icuActivityId,
 			m.activityDate,
 			m.sport,
@@ -442,43 +469,83 @@ export function saveVigilMetrics(m: VigilMetrics): void {
 		);
 }
 
-/** Fetch Vigil metrics for a date range, ordered by date descending. */
+/** Defence-in-depth cap on a Vigil metric-read date span. Every internal caller
+ *  passes a fixed ≤60-day window, so this only fires on an abusive/buggy range —
+ *  bounding the rows loaded into memory (mirrors the FIT-size and compliance
+ *  lookback caps elsewhere). */
+const MAX_VIGIL_RANGE_DAYS = 800;
+
+function assertVigilRange(oldestDate: string, newestDate: string): void {
+	const start = Date.parse(oldestDate);
+	const end = Date.parse(newestDate);
+	if (Number.isNaN(start) || Number.isNaN(end)) {
+		throw new Error(`Vigil query: invalid date range (${oldestDate}..${newestDate})`);
+	}
+	if ((end - start) / 86_400_000 > MAX_VIGIL_RANGE_DAYS) {
+		throw new Error(`Vigil query: date range exceeds ${MAX_VIGIL_RANGE_DAYS} days`);
+	}
+}
+
+/** Fetch Vigil metrics for a date range, ordered by date descending.
+ *  Pass `source` to restrict to one recording source (Stryd/Garmin) — used by
+ *  per-source baseline computation. Omit it to read every source (e.g. the
+ *  Stryd-RPE augmentation, which is a no-op on null-RPE Garmin rows). */
 export function getVigilMetrics(
 	athleteId: string,
 	sport: string,
 	oldestDate: string,
 	newestDate: string,
+	source?: VigilSource,
 ): VigilMetrics[] {
-	const rows = getDb()
-		.prepare(
-			`SELECT * FROM vigil_metrics
-			 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?
-			 ORDER BY activity_date DESC`,
-		)
-		.all(athleteId, sport, oldestDate, newestDate) as Record<string, unknown>[];
+	assertVigilRange(oldestDate, newestDate);
+	const rows = source
+		? (getDb()
+				.prepare(
+					`SELECT * FROM vigil_metrics
+					 WHERE athlete_id = ? AND source = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?
+					 ORDER BY activity_date DESC`,
+				)
+				.all(athleteId, source, sport, oldestDate, newestDate) as Record<string, unknown>[])
+		: (getDb()
+				.prepare(
+					`SELECT * FROM vigil_metrics
+					 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?
+					 ORDER BY activity_date DESC`,
+				)
+				.all(athleteId, sport, oldestDate, newestDate) as Record<string, unknown>[]);
 
 	return rows.map(rowToVigilMetrics);
 }
 
-/** Count Vigil metrics for a sport in a date range. */
+/** Count Vigil metrics for a sport in a date range, optionally scoped to a source. */
 export function countVigilMetrics(
 	athleteId: string,
 	sport: string,
 	oldestDate: string,
 	newestDate: string,
+	source?: VigilSource,
 ): number {
-	const row = getDb()
-		.prepare(
-			`SELECT COUNT(*) as cnt FROM vigil_metrics
-			 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?`,
-		)
-		.get(athleteId, sport, oldestDate, newestDate) as { cnt: number };
+	assertVigilRange(oldestDate, newestDate);
+	const row = source
+		? (getDb()
+				.prepare(
+					`SELECT COUNT(*) as cnt FROM vigil_metrics
+					 WHERE athlete_id = ? AND source = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?`,
+				)
+				.get(athleteId, source, sport, oldestDate, newestDate) as { cnt: number })
+		: (getDb()
+				.prepare(
+					`SELECT COUNT(*) as cnt FROM vigil_metrics
+					 WHERE athlete_id = ? AND sport = ? AND activity_date >= ? AND activity_date <= ?`,
+				)
+				.get(athleteId, sport, oldestDate, newestDate) as { cnt: number });
 	return row.cnt;
 }
 
 function rowToVigilMetrics(r: Record<string, unknown>): VigilMetrics {
 	return {
 		athleteId: r.athlete_id as string,
+		source: (r.source as VigilSource | undefined) ?? "stryd",
 		activityId: r.activity_id as string,
 		icuActivityId: r.icu_activity_id as string | null,
 		activityDate: r.activity_date as string,
@@ -519,12 +586,13 @@ export function saveVigilBaseline(b: VigilBaseline): void {
 	getDb()
 		.prepare(
 			`INSERT OR REPLACE INTO vigil_baselines (
-				athlete_id, sport, metric, computed_at, mean_30d, stddev_30d,
+				athlete_id, source, sport, metric, computed_at, mean_30d, stddev_30d,
 				mean_7d, sample_count_30d, sample_count_7d
-			) VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
 		)
 		.run(
 			b.athleteId,
+			b.source,
 			b.sport,
 			b.metric,
 			b.mean30d,
@@ -535,14 +603,23 @@ export function saveVigilBaseline(b: VigilBaseline): void {
 		);
 }
 
-/** Fetch all baselines for a sport, scoped to an athlete. */
-export function getVigilBaselines(athleteId: string, sport: string): VigilBaseline[] {
-	const rows = getDb()
-		.prepare("SELECT * FROM vigil_baselines WHERE athlete_id = ? AND sport = ?")
-		.all(athleteId, sport) as Record<string, unknown>[];
+/** Fetch all baselines for a sport, scoped to an athlete and optionally a source. */
+export function getVigilBaselines(
+	athleteId: string,
+	sport: string,
+	source?: VigilSource,
+): VigilBaseline[] {
+	const rows = source
+		? (getDb()
+				.prepare("SELECT * FROM vigil_baselines WHERE athlete_id = ? AND source = ? AND sport = ?")
+				.all(athleteId, source, sport) as Record<string, unknown>[])
+		: (getDb()
+				.prepare("SELECT * FROM vigil_baselines WHERE athlete_id = ? AND sport = ?")
+				.all(athleteId, sport) as Record<string, unknown>[]);
 
 	return rows.map((r) => ({
 		athleteId: r.athlete_id as string,
+		source: (r.source as VigilSource | undefined) ?? "stryd",
 		sport: r.sport as string,
 		metric: r.metric as string,
 		computedAt: r.computed_at as string,

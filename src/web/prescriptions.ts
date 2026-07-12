@@ -14,6 +14,7 @@ import {
 } from "../engine/suggest.js";
 import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
+import { runGarminVigilBackfillIfNeeded } from "../engine/vigil/garmin-backfill.js";
 import type { FormClient } from "../form/client.js";
 import { healthFetchOptionsFor } from "../health-source.js";
 import type { IntervalsClient } from "../intervals.js";
@@ -117,6 +118,13 @@ export async function generatePrescriptions(
 	// Praescriptor awaits so the day's prescription includes the new alert state.
 	if (profile.stryd) {
 		await runVigilBackfillIfNeeded(strydClient ?? null, profile.id);
+	}
+
+	// Vigil (Garmin): backfill run biomechanics from Garmin FITs when a Garmin
+	// health source is active (garmin/auto). No-ops without a GarminClient.
+	// Kept independent of the Stryd path — its own source-scoped baseline.
+	if (profile.sports.includes("Run")) {
+		await runGarminVigilBackfillIfNeeded(healthOpts.garminClient ?? null, profile.id, tz);
 	}
 
 	const now = new Date();

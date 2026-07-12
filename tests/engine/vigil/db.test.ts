@@ -4,6 +4,7 @@ import {
 	countVigilMetrics,
 	getVigilBaselines,
 	getVigilMetrics,
+	hasAnyVigilMetrics,
 	hasVigilMetrics,
 	saveVigilBaseline,
 	saveVigilMetrics,
@@ -16,6 +17,7 @@ const TEST_DB_PATH = ":memory:";
 function makeMetrics(overrides: Partial<VigilMetrics> = {}): VigilMetrics {
 	return {
 		athleteId: "0",
+		source: "stryd",
 		activityId: "stryd-100",
 		icuActivityId: "icu-200",
 		activityDate: "2026-03-20",
@@ -104,6 +106,7 @@ describe("Vigil DB helpers", () => {
 	it("saves and retrieves baselines", () => {
 		const baseline: VigilBaseline = {
 			athleteId: "0",
+			source: "stryd",
 			sport: "Run",
 			metric: "avg_gct_ms",
 			computedAt: new Date().toISOString(),
@@ -126,9 +129,70 @@ describe("Vigil DB helpers", () => {
 		expect(baselines[0].sampleCount7d).toBe(3);
 	});
 
+	it("rejects an abusive or invalid Vigil query date range", () => {
+		// > 800-day span → DoS guard throws (no caller ever passes this).
+		expect(() => getVigilMetrics("0", "Run", "2020-01-01", "2026-12-31")).toThrow(/date range/);
+		expect(() => countVigilMetrics("0", "Run", "2020-01-01", "2026-12-31")).toThrow(/date range/);
+		expect(() => getVigilMetrics("0", "Run", "not-a-date", "2026-03-31")).toThrow(/invalid/);
+		// A normal window is unaffected.
+		expect(() => getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31")).not.toThrow();
+	});
+
+	it("scopes metrics and first-time checks by source", () => {
+		saveVigilMetrics(makeMetrics({ activityId: "stryd-1", source: "stryd", avgGctMs: 235 }));
+		saveVigilMetrics(makeMetrics({ activityId: "garmin-1", source: "garmin", avgGctMs: 288 }));
+
+		// Source-agnostic reads see both (e.g. Stryd-RPE augmentation).
+		expect(getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31").length).toBe(2);
+		expect(countVigilMetrics("0", "Run", "2026-03-01", "2026-03-31")).toBe(2);
+
+		// Source-scoped reads isolate each recording source.
+		const stryd = getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31", "stryd");
+		expect(stryd.length).toBe(1);
+		expect(stryd[0].source).toBe("stryd");
+		expect(stryd[0].avgGctMs).toBeCloseTo(235, 0);
+
+		const garmin = getVigilMetrics("0", "Run", "2026-03-01", "2026-03-31", "garmin");
+		expect(garmin.length).toBe(1);
+		expect(garmin[0].source).toBe("garmin");
+		expect(garmin[0].avgGctMs).toBeCloseTo(288, 0);
+
+		expect(countVigilMetrics("0", "Run", "2026-03-01", "2026-03-31", "garmin")).toBe(1);
+
+		// First-time gate is per-source: only Garmin present for a fresh athlete.
+		saveVigilMetrics(makeMetrics({ athleteId: "9", activityId: "g-9", source: "garmin" }));
+		expect(hasAnyVigilMetrics("9", "garmin")).toBe(true);
+		expect(hasAnyVigilMetrics("9", "stryd")).toBe(false);
+		expect(hasAnyVigilMetrics("9")).toBe(true);
+	});
+
+	it("keeps baselines independent per source", () => {
+		const base: Omit<VigilBaseline, "source"> = {
+			athleteId: "0",
+			sport: "Run",
+			metric: "avg_gct_ms",
+			computedAt: new Date().toISOString(),
+			mean30d: 235,
+			stddev30d: 8.5,
+			mean7d: 242,
+			sampleCount30d: 12,
+			sampleCount7d: 3,
+		};
+		saveVigilBaseline({ ...base, source: "stryd" });
+		saveVigilBaseline({ ...base, source: "garmin", mean30d: 288 });
+
+		// Same (athlete, sport, metric) but different source → two independent rows.
+		expect(getVigilBaselines("0", "Run").length).toBe(2);
+		const garmin = getVigilBaselines("0", "Run", "garmin");
+		expect(garmin.length).toBe(1);
+		expect(garmin[0].source).toBe("garmin");
+		expect(garmin[0].mean30d).toBeCloseTo(288, 0);
+	});
+
 	it("upserts baselines on conflict", () => {
 		const b1: VigilBaseline = {
 			athleteId: "0",
+			source: "stryd",
 			sport: "Run",
 			metric: "avg_gct_ms",
 			computedAt: new Date().toISOString(),

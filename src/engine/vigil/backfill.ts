@@ -151,7 +151,7 @@ export async function runVigilBackfillIfNeeded(
 	if (!strydClient) return;
 	if (backfillsInFlight.has(athleteId)) return;
 
-	const isFirstTime = !hasAnyVigilMetrics(athleteId);
+	const isFirstTime = !hasAnyVigilMetrics(athleteId, "stryd");
 	const today = new Date().toISOString().slice(0, 10);
 	if (!isFirstTime && lastSyncByAthlete.get(athleteId) === today) return;
 

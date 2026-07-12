@@ -12,8 +12,16 @@
 import FitParser from "fit-file-parser";
 import { STRYD_FIT_FIELDS, type VigilMetrics } from "./types.js";
 
-/** Minimum records required for meaningful metrics (≈ 3 minutes at 1 Hz). */
-const MIN_RECORDS = 180;
+/** Minimum records required for meaningful metrics (≈ 3 minutes at 1 Hz).
+ *  Shared with the Garmin extractor (`garmin-fit.ts`). */
+export const MIN_RECORDS = 180;
+
+/** Upper bound on records processed (≈ 55 h at 1 Hz). Defence-in-depth against a
+ *  malformed/hostile FIT that expands to a huge record array — the per-metric
+ *  `.map` allocations would otherwise scale unbounded. Raw FIT bytes are already
+ *  capped upstream (Stryd 10 MB / Garmin 16 MB), so this never rejects a real
+ *  activity. Shared with the Garmin extractor. */
+export const MAX_RECORDS = 200_000;
 
 /** Minimum records per quartile for drift calculation. */
 const MIN_QUARTILE_SIZE = 30;
@@ -71,8 +79,11 @@ export function hasBilateralFields(records: FitRecord[]): boolean {
  * Convert a balance percentage to asymmetry percentage.
  * Balance is the left foot's share: 50% = symmetric.
  * Asymmetry = |balance - 50| × 2 (so 55% balance = 10% asymmetry).
+ *
+ * Exported for reuse by the Garmin extractor (`garmin-fit.ts`), which derives
+ * GCT asymmetry from Garmin's native `stance_time_balance`.
  */
-function balanceToAsymmetry(balanceValues: (number | null | undefined)[]): number | null {
+export function balanceToAsymmetry(balanceValues: (number | null | undefined)[]): number | null {
 	const valid = balanceValues.filter(
 		(v): v is number => v != null && !Number.isNaN(v) && v > 0 && v < 100,
 	);
@@ -107,15 +118,17 @@ function splitByBalance(
 	return { left: lSum / count, right: rSum / count };
 }
 
-/** Compute the mean of a numeric array, ignoring nulls/NaN/zero. */
-function validMean(values: (number | null | undefined)[]): number | null {
+/** Compute the mean of a numeric array, ignoring nulls/NaN/zero.
+ *  Exported for reuse by the Garmin extractor (`garmin-fit.ts`). */
+export function validMean(values: (number | null | undefined)[]): number | null {
 	const valid = values.filter((v): v is number => v != null && !Number.isNaN(v) && v > 0);
 	if (valid.length === 0) return null;
 	return valid.reduce((sum, v) => sum + v, 0) / valid.length;
 }
 
-/** Compute GCT drift: % change from first quartile mean to last quartile mean. */
-function computeGctDrift(gctValues: (number | null | undefined)[]): number | null {
+/** Compute GCT drift: % change from first quartile mean to last quartile mean.
+ *  Exported for reuse by the Garmin extractor (`garmin-fit.ts`). */
+export function computeGctDrift(gctValues: (number | null | undefined)[]): number | null {
 	const valid = gctValues.filter((v): v is number => v != null && !Number.isNaN(v) && v > 0);
 	if (valid.length < MIN_QUARTILE_SIZE * 4) return null;
 
@@ -127,8 +140,11 @@ function computeGctDrift(gctValues: (number | null | undefined)[]): number | nul
 	return ((q4Mean - q1Mean) / q1Mean) * 100;
 }
 
-/** Compute power:HR drift using windowed ratio comparison. */
-function computePowerHrDrift(records: FitRecord[]): number | null {
+/** Compute power:HR drift using windowed ratio comparison.
+ *  Vendor-neutral: reads native lowercase `power` when the Stryd "Power"
+ *  developer field is absent (so Garmin records work unchanged). Exported for
+ *  reuse by the Garmin extractor (`garmin-fit.ts`). */
+export function computePowerHrDrift(records: FitRecord[]): number | null {
 	// Build 5-minute windows of power:HR ratio
 	const windowSize = POWER_HR_WINDOW_SECS;
 	const powerField = STRYD_FIT_FIELDS.power;
@@ -190,7 +206,7 @@ export function extractMetrics(
 	athleteId = "0",
 ): VigilMetrics | null {
 	if (!hasStrydDeveloperFields(records)) return null;
-	if (records.length < MIN_RECORDS) return null;
+	if (records.length < MIN_RECORDS || records.length > MAX_RECORDS) return null;
 
 	// Standard and developer field extraction
 	const gctValues = records.map((r) => r[STRYD_FIT_FIELDS.stanceTime] as number | null);
@@ -257,6 +273,7 @@ export function extractMetrics(
 
 	return {
 		athleteId,
+		source: "stryd",
 		activityId,
 		icuActivityId,
 		activityDate,

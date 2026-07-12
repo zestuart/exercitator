@@ -12,7 +12,7 @@
 import { getVigilMetrics, saveVigilBaseline } from "../../db.js";
 import { localDateStr } from "../date-utils.js";
 import { SCOREABLE_METRICS, getMetricValue } from "./metrics.js";
-import type { VigilBaseline, VigilMetrics } from "./types.js";
+import type { VigilBaseline, VigilMetrics, VigilSource } from "./types.js";
 
 /** Minimum activities for a valid 30-day baseline. */
 const MIN_BASELINE_ACTIVITIES = 5;
@@ -41,6 +41,7 @@ function computeMetricBaseline(
 	activities30d: VigilMetrics[],
 	activities7d: VigilMetrics[],
 	athleteId: string,
+	source: VigilSource,
 	sport: string,
 ): VigilBaseline | null {
 	// Extract non-null values for this metric
@@ -66,6 +67,7 @@ function computeMetricBaseline(
 
 	return {
 		athleteId,
+		source,
 		sport,
 		metric,
 		computedAt: new Date().toISOString(),
@@ -83,11 +85,13 @@ function computeMetricBaseline(
  * Reads vigil_metrics from the DB, computes 30-day + 7-day windows,
  * and saves each metric's baseline. Returns the computed baselines.
  *
+ * @param source - Recording source (Stryd/Garmin) — baselines are per-source.
  * @param sport - Sport type (e.g. "Run", "TrailRun")
  * @param referenceDate - Date to compute baselines relative to (default: today)
  */
 export function computeBaselines(
 	athleteId: string,
+	source: VigilSource,
 	sport: string,
 	referenceDate?: Date,
 	tz?: string,
@@ -97,13 +101,20 @@ export function computeBaselines(
 	const oldest7d = daysAgoStr(7, ref, tz);
 	const newest = localDateStr(ref, tz);
 
-	const activities30d = getVigilMetrics(athleteId, sport, oldest30d, newest);
+	const activities30d = getVigilMetrics(athleteId, sport, oldest30d, newest, source);
 	const activities7d = activities30d.filter((a) => a.activityDate >= oldest7d);
 
 	const baselines: VigilBaseline[] = [];
 
 	for (const metric of SCOREABLE_METRICS) {
-		const baseline = computeMetricBaseline(metric, activities30d, activities7d, athleteId, sport);
+		const baseline = computeMetricBaseline(
+			metric,
+			activities30d,
+			activities7d,
+			athleteId,
+			source,
+			sport,
+		);
 		if (baseline) {
 			saveVigilBaseline(baseline);
 			baselines.push(baseline);
@@ -120,6 +131,7 @@ export function computeBaselines(
  */
 export function computeBaselinesFromData(
 	athleteId: string,
+	source: VigilSource,
 	sport: string,
 	activities30d: VigilMetrics[],
 	activities7d: VigilMetrics[],
@@ -127,7 +139,14 @@ export function computeBaselinesFromData(
 	const baselines: VigilBaseline[] = [];
 
 	for (const metric of SCOREABLE_METRICS) {
-		const baseline = computeMetricBaseline(metric, activities30d, activities7d, athleteId, sport);
+		const baseline = computeMetricBaseline(
+			metric,
+			activities30d,
+			activities7d,
+			athleteId,
+			source,
+			sport,
+		);
 		if (baseline) {
 			baselines.push(baseline);
 		}

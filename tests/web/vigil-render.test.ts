@@ -255,7 +255,7 @@ describe("Vigil in data source bar", () => {
 		expect(html).toContain("baseline building (3/5 activities)");
 	});
 
-	it("shows no Stryd data when inactive", () => {
+	it("shows no run data when inactive", () => {
 		const data = makeRenderData({
 			dataSource: {
 				...makeRenderData().dataSource,
@@ -263,7 +263,7 @@ describe("Vigil in data source bar", () => {
 			},
 		});
 		const html = renderPage(data);
-		expect(html).toContain("Vigil: no Stryd data");
+		expect(html).toContain("Vigil: no run data");
 	});
 
 	it("no Vigil in data source bar when null", () => {

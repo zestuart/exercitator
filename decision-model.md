@@ -29,7 +29,7 @@ Pre-emptive short-circuits can replace the whole result before the body is built
 |---|---|---|
 | **intervals.icu** | `/activities` (14 d), `/wellness` (7 d), `/sport-settings/{Run,Swim}` | Activities (load, zones, RPE), TSB (CTL/ATL), Subjective (soreness/fatigue), HR/pace/power zones, FTP fallback. Also the **write** target for planned workouts + the Vigil `injury` field. |
 | **Promus WHOOP** *(the WHOOP path of the recovery source below)* | `/api/whoop/{serial}/sleep`, `/hrv_nightly`, `/vigor_vitae/current` | Sleep duration, nightly RMSSD (HRV), **Vigor Vitae** (acute recovery). Bearer `PROMUS_API`, serial `WHOOP_SERIAL`. |
-| **Garmin Connect** *(the Garmin path)* via the `garmin-bridge` sidecar | `/body_battery/current`, `/hrv_nightly`, `/sleep_nightly` (+ `/activity/{id}/fit`) | **Body Battery** (acute, ↔ Vigor Vitae), overnight HRV, sleep duration — normalised to the same DTOs as WHOOP. Bearer `GARMIN_BRIDGE_API_KEY`. |
+| **Garmin Connect** *(the Garmin path)* via the `garmin-bridge` sidecar | `/body_battery/current`, `/hrv_nightly`, `/sleep_nightly`, `/activities`, `/activity/{id}/fit` | **Body Battery** (acute, ↔ Vigor Vitae), overnight HRV, sleep duration — normalised to the same DTOs as WHOOP; plus **Vigil biomechanics** from the original run FIT (§5). Bearer `GARMIN_BRIDGE_API_KEY`. |
 | **Stryd** | `cp/history`, FIT downloads, `/workouts/recommendations` | Run FTP (Critical Power), Vigil biomechanics + low-fidelity activity enrichment, Stryd workout bodies for the swap. |
 | **FORM** | swim recommendations | FORM swim workout bodies for the swap. |
 
@@ -162,11 +162,24 @@ Surfaced on the HTTP API as `power_context.override`. Run-only; swim never reads
 
 ## 5. Injury overlay — Vigil
 
-`src/engine/vigil/` — independent of readiness. Z-score deviation of Stryd running
-biomechanics (GCT, LSS, form-power ratio, ILR, bilateral balance) vs a personal 30-day
-baseline. Composite severity 0–3 (needs ≥2 metrics deviating). Severity ≥2 triggers the
-category downshift above and writes the intervals `injury` field. Run-only. Full spec:
-`phase2/injury-warning-spec.md`.
+`src/engine/vigil/` — independent of readiness. Z-score deviation of running
+biomechanics vs a personal 30-day baseline. Composite severity 0–3 (needs ≥2 metrics
+deviating). Severity ≥2 triggers the category downshift above and writes the intervals
+`injury` field. Run-only. Full spec: `phase2/injury-warning-spec.md`.
+
+**Two recording sources, separate baselines.** Each run FIT is tagged `source`:
+
+| Source | FIT | Metrics | Backfill |
+|--------|-----|---------|----------|
+| **Stryd** (`fit-parser.ts`) | Stryd PowerCenter FIT (CIQ dev fields) | GCT, LSS, form-power ratio, ILR, bilateral LSS/VO/ILR balance (Duo) — the full set | enrich-and-replace (`stryd/enricher.ts`) + 90-day backfill |
+| **Garmin** (`garmin-fit.ts`) | original Garmin FIT via the bridge | **subset**: GCT, GCT drift, power:HR drift (native power), **GCT asymmetry** (native `stance_time_balance` — a bonus the single-pod Stryd lacked); VO + cadence informational. No LSS/Form Power/ILR. | `garmin-backfill.ts`, same-activity (no replace) + 90-day backfill |
+
+Baselines are **per-source** (`vigil_baselines` PK includes `source`): a wrist-watch GCT
+offset never contaminates the foot-pod baseline. `runVigilPipeline` scores each source
+independently and returns the **worst active severity** (injury-conservative), so a
+concerning Garmin baseline still downshifts even while a stale Stryd baseline is quiet.
+The Garmin backfill runs on the prescription path whenever a Garmin health source
+(`garmin`/`auto`) is active. Four scoreable Garmin metrics clear the ≥2-metric gate.
 
 ---
 
@@ -181,6 +194,7 @@ data sources, specifically when you touch:
 - Data sourcing / health telemetry / the recovery-source selection + fallback (`src/engine/suggest.ts`, `src/promus/client.ts`, `src/garmin/client.ts`, `src/health-source.ts`, `garmin-bridge/`)
 - Power-source detection or the manual override / FTP scaling (`src/engine/power-source.ts`)
 - The vendor swap layers (`src/web/stryd-swap.ts`, `src/web/form-swap.ts`)
+- Vigil sources, the metric set, per-source baselines, or the pipeline combiner (`src/engine/vigil/{fit-parser,garmin-fit,backfill,garmin-backfill,baseline,index}.ts`)
 - Pre-emptive statuses (`health_unavailable`, `already_trained`, `awaiting_input`)
 
 A stale decision model is a bug (per the CLAUDE.md "documentation is code" principle).
