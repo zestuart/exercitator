@@ -264,7 +264,8 @@ This wraps the existing DSW engine (`src/engine/suggest.ts`). v0.1's claim that 
     "power_context": {
       "source": "stryd_direct",
       "ftp": 312,
-      "confidence": "high"
+      "confidence": "high",
+      "override": "auto"
     },
     "warnings": [],
     "injury_warning": null,

@@ -150,8 +150,8 @@ export interface SuggestedWorkoutBody {
 		/**
 		 * Active manual power-source override driving this prescription:
 		 *   "auto"   — the rolling-window heuristic chose the source
-		 *   "stryd"  — athlete pinned Stryd (targets at Stryd scale)
-		 *   "garmin" — athlete pinned Garmin (FTP scaled from Stryd by ÷0.87)
+		 *   "stryd"  — athlete pinned Stryd (FTP = Stryd critical power)
+		 *   "garmin" — athlete pinned Garmin (FTP = intervals.icu's Garmin-derived FTP)
 		 */
 		override: "auto" | "stryd" | "garmin";
 	};
