@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-	applyPowerSourceOverride,
 	detectPowerSource,
 	getActivityLoad,
+	intervalsRunFtp,
+	resolveRunFtp,
 } from "../../src/engine/power-source.js";
 import type { ActivitySummary, PowerContext } from "../../src/engine/types.js";
 
@@ -447,7 +448,37 @@ describe("getActivityLoad", () => {
 	});
 });
 
-describe("applyPowerSourceOverride", () => {
+describe("intervalsRunFtp", () => {
+	it("reads the most recent run's rolling FTP (falling back to set FTP)", () => {
+		// makeRunActivity: icu_rolling_ftp 322, icu_ftp 292.
+		expect(intervalsRunFtp([makeRunActivity()])).toEqual({ ftp: 322, rolling_ftp: 322 });
+	});
+
+	it("falls back to icu_ftp when rolling FTP is absent", () => {
+		expect(intervalsRunFtp([makeRunActivity({ icu_rolling_ftp: null })])).toEqual({
+			ftp: 292,
+			rolling_ftp: null,
+		});
+	});
+
+	it("returns zero FTP when there are no run activities", () => {
+		expect(intervalsRunFtp([])).toEqual({ ftp: 0, rolling_ftp: null });
+	});
+
+	it("picks the newest run by start date", () => {
+		const older = makeRunActivity({
+			start_date_local: "2026-03-20T08:00:00",
+			icu_rolling_ftp: 300,
+		});
+		const newer = makeRunActivity({
+			start_date_local: "2026-03-25T08:00:00",
+			icu_rolling_ftp: 330,
+		});
+		expect(intervalsRunFtp([older, newer]).ftp).toBe(330);
+	});
+});
+
+describe("resolveRunFtp", () => {
 	function ctx(overrides: Partial<PowerContext> = {}): PowerContext {
 		return {
 			source: "garmin",
@@ -459,53 +490,66 @@ describe("applyPowerSourceOverride", () => {
 			...overrides,
 		};
 	}
+	const runs = [makeRunActivity()]; // intervals FTP 322
 
-	it("leaves the context untouched on null (auto)", () => {
-		const input = ctx();
-		const result = applyPowerSourceOverride(input, null);
-		expect(result).toBe(input);
+	it("Garmin mode pulls FTP from intervals.icu, NOT the Stryd CP", () => {
+		// auto, detected garmin, Stryd CP present → intervals FTP wins (no clobber).
+		const r = resolveRunFtp(ctx({ source: "garmin" }), null, 292, runs);
+		expect(r.source).toBe("garmin");
+		expect(r.ftp).toBe(322);
+		expect(r.correction_factor).toBe(1.0);
 	});
 
-	it("forces Stryd: source flip, no correction, FTP unchanged, warning replaced", () => {
-		const result = applyPowerSourceOverride(ctx({ source: "garmin" }), "stryd");
-		expect(result.source).toBe("stryd");
-		expect(result.correction_factor).toBe(1.0);
-		expect(result.ftp).toBe(286);
-		expect(result.rolling_ftp).toBe(319);
-		expect(result.warnings).toEqual(["Power source manually set to Stryd."]);
+	it("manual Garmin uses intervals FTP even when detection said Stryd", () => {
+		const r = resolveRunFtp(ctx({ source: "stryd" }), "garmin", 292, runs);
+		expect(r.source).toBe("garmin");
+		expect(r.ftp).toBe(322);
+		expect(r.warnings[0]).toContain("manually set to Garmin");
+		expect(r.warnings[0]).toContain("intervals.icu");
 	});
 
-	it("forces Garmin: scales Stryd-scale FTP up by ÷0.87", () => {
-		const result = applyPowerSourceOverride(ctx({ source: "stryd" }), "garmin");
-		expect(result.source).toBe("garmin");
-		// 286 / 0.87 = 328.7 → 329 ; 319 / 0.87 = 366.7 → 367
-		expect(result.ftp).toBe(329);
-		expect(result.rolling_ftp).toBe(367);
-		expect(result.correction_factor).toBe(0.87);
-		expect(result.warnings[0]).toContain("manually set to Garmin");
+	it("Stryd mode uses the Stryd critical power", () => {
+		const r = resolveRunFtp(ctx({ source: "stryd" }), null, 292, runs);
+		expect(r.source).toBe("stryd");
+		expect(r.ftp).toBe(292);
+		expect(r.rolling_ftp).toBe(292);
 	});
 
-	it("forces Garmin with a null rolling_ftp safely", () => {
-		const result = applyPowerSourceOverride(ctx({ rolling_ftp: null }), "garmin");
-		expect(result.rolling_ftp).toBeNull();
-		expect(result.ftp).toBe(329);
+	it("manual Stryd anchors to the Stryd CP with a manual warning", () => {
+		const r = resolveRunFtp(ctx({ source: "garmin" }), "stryd", 292, runs);
+		expect(r.source).toBe("stryd");
+		expect(r.ftp).toBe(292);
+		expect(r.warnings).toEqual([
+			"Power source manually set to Stryd — FTP from Stryd critical power.",
+		]);
 	});
 
-	it("forces Garmin without scaling a zero FTP (HR-only)", () => {
-		const result = applyPowerSourceOverride(ctx({ ftp: 0, rolling_ftp: null }), "garmin");
-		expect(result.ftp).toBe(0);
+	it("manual Stryd without a CP relabels but keeps the detected FTP", () => {
+		const r = resolveRunFtp(ctx({ source: "garmin", ftp: 286 }), "stryd", null, runs);
+		expect(r.source).toBe("stryd");
+		expect(r.ftp).toBe(286);
+		expect(r.warnings[0]).toContain("no Stryd critical power available");
 	});
 
-	it("does not mutate the input context", () => {
-		const input = ctx({ source: "stryd" });
-		applyPowerSourceOverride(input, "garmin");
-		expect(input.source).toBe("stryd");
-		expect(input.ftp).toBe(286);
+	it("upgrades a 'none' detection to Stryd when a CP exists", () => {
+		const r = resolveRunFtp(ctx({ source: "none", ftp: 0 }), null, 292, runs);
+		expect(r.source).toBe("stryd");
+		expect(r.ftp).toBe(292);
+		expect(r.warnings.some((w) => w.includes("no recent Stryd run data"))).toBe(true);
 	});
 
-	it("honours a custom correction factor", () => {
-		const result = applyPowerSourceOverride(ctx({ ftp: 300, rolling_ftp: null }), "garmin", 0.9);
-		expect(result.ftp).toBe(Math.round(300 / 0.9)); // 333
-		expect(result.correction_factor).toBe(0.9);
+	it("Garmin mode with no intervals FTP falls back to HR-only", () => {
+		const r = resolveRunFtp(ctx({ source: "garmin" }), "garmin", null, [
+			makeRunActivity({ icu_rolling_ftp: null, icu_ftp: null }),
+		]);
+		expect(r.source).toBe("garmin");
+		expect(r.ftp).toBe(0);
+		expect(r.confidence).toBe("low");
+		expect(r.warnings.some((w) => w.includes("HR-only"))).toBe(true);
+	});
+
+	it("leaves a 'none' source untouched when there is no CP", () => {
+		const detected = ctx({ source: "none", ftp: 0, rolling_ftp: null });
+		expect(resolveRunFtp(detected, null, null, runs)).toBe(detected);
 	});
 });

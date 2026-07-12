@@ -120,7 +120,7 @@ describe("suggestWorkout integration", () => {
 		expect(withCp.power_context.source).toBe("stryd");
 	});
 
-	it("applies a manual power-source override AFTER Stryd-CP anchoring", () => {
+	it("resolves FTP by the effective power source (Garmin → intervals, Stryd → CP)", () => {
 		const data = {
 			activities: loadFixture("activities-14d.json"),
 			wellness: loadFixture("wellness-7d.json"),
@@ -128,8 +128,8 @@ describe("suggestWorkout integration", () => {
 			swimSettings: loadFixture("sport-settings-swim.json"),
 		};
 
-		// Force Garmin on a CP-anchored context: CP 279.45 → 279 (Stryd scale)
-		// → ÷0.87 → 321 (Garmin scale). Source flips to garmin.
+		// Force Garmin: FTP comes from intervals.icu (322 in the fixtures), NOT the
+		// Stryd CP — no cross-scale factor.
 		const forcedGarmin = suggestWorkoutFromData(
 			data as never,
 			"Run",
@@ -141,11 +141,11 @@ describe("suggestWorkout integration", () => {
 			"garmin",
 		);
 		expect(forcedGarmin.power_context.source).toBe("garmin");
-		expect(forcedGarmin.power_context.ftp).toBe(Math.round(279 / 0.87)); // 321
-		expect(forcedGarmin.power_context.correction_factor).toBe(0.87);
+		expect(forcedGarmin.power_context.ftp).toBe(322); // intervals FTP, not ÷0.87 of CP
+		expect(forcedGarmin.power_context.correction_factor).toBe(1.0);
 		expect(forcedGarmin.powerSourceOverride).toBe("garmin");
 
-		// Force Stryd: keeps the CP-anchored FTP as-is, no correction.
+		// Force Stryd: FTP from the Stryd critical power (279.45 → 279).
 		const forcedStryd = suggestWorkoutFromData(
 			data as never,
 			"Run",
@@ -162,14 +162,14 @@ describe("suggestWorkout integration", () => {
 		expect(forcedStryd.powerSourceOverride).toBe("stryd");
 	});
 
-	it("forces Garmin without a Stryd CP (scales the detected FTP)", () => {
+	it("forces Garmin: FTP from intervals.icu even without a Stryd CP", () => {
 		const data = {
 			activities: loadFixture("activities-14d.json"),
 			wellness: loadFixture("wellness-7d.json"),
 			runSettings: loadFixture("sport-settings-run.json"),
 			swimSettings: loadFixture("sport-settings-swim.json"),
 		};
-		// Fixtures detect Stryd FTP 322 → force garmin → ÷0.87 → 370.
+		// Fixtures carry intervals FTP 322 → Garmin mode uses it directly.
 		const forced = suggestWorkoutFromData(
 			data as never,
 			"Run",
@@ -181,7 +181,7 @@ describe("suggestWorkout integration", () => {
 			"garmin",
 		);
 		expect(forced.power_context.source).toBe("garmin");
-		expect(forced.power_context.ftp).toBe(Math.round(322 / 0.87)); // 370
+		expect(forced.power_context.ftp).toBe(322); // intervals FTP
 	});
 
 	it("leaves auto detection untouched when no override is passed", () => {

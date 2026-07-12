@@ -246,46 +246,105 @@ export function detectPowerSource(activities: ActivitySummary[]): PowerContext {
 }
 
 /**
- * Apply a manual run power-source override to a detected/anchored PowerContext.
- *
- * The athlete can pin the run power source from Praescriptor instead of relying
- * on the rolling-window heuristic in `detectPowerSource`, which flips as runs
- * age out of the 5-run window — unstable while transitioning between a Stryd pod
- * and a native watch. This runs LAST, after any Stryd critical-power anchoring,
- * so it acts on the final FTP the engine would otherwise use:
- *   - "stryd"  trusts the (Stryd-scale) FTP as-is, no correction.
- *   - "garmin" scales the Stryd-scale FTP up to Garmin's native scale — Garmin
- *     reads higher, so `Stryd = Garmin × factor` ⇒ `Garmin = Stryd ÷ factor`.
- * `null` leaves the context untouched (auto behaviour).
+ * The athlete's intervals.icu run FTP — the most recent run's rolling FTP
+ * (falling back to the set FTP). intervals.icu derives this from whatever power
+ * the run recorded, so for a Garmin-powered run it is a genuine Garmin-scale
+ * FTP — used directly as the reference in Garmin power mode (no scaling).
  */
-export function applyPowerSourceOverride(
-	ctx: PowerContext,
-	override: "stryd" | "garmin" | null,
-	factor: number = DEFAULT_GARMIN_TO_STRYD_FACTOR,
-): PowerContext {
-	if (!override) return ctx;
+export function intervalsRunFtp(activities: ActivitySummary[]): {
+	ftp: number;
+	rolling_ftp: number | null;
+} {
+	const recentRun = activities
+		.filter((a) => isRun(a.type))
+		.sort((a, b) => b.start_date_local.localeCompare(a.start_date_local))[0];
+	if (!recentRun) return { ftp: 0, rolling_ftp: null };
+	return {
+		ftp: recentRun.icu_rolling_ftp ?? recentRun.icu_ftp ?? 0,
+		rolling_ftp: recentRun.icu_rolling_ftp ?? null,
+	};
+}
 
-	// A conscious choice supersedes auto-detection power warnings (e.g. the
-	// "Garmin native but Stryd connected — forgot to switch" nag). Only power
-	// warnings reach this context, so replacing the array wholesale is safe.
-	if (override === "stryd") {
+/**
+ * Resolve the run FTP reference from the *effective* power source (a manual
+ * Praescriptor override wins over the rolling-window auto-detection, which flips
+ * as runs age out of the 5-run window). Each source draws FTP from where that
+ * ecosystem's value actually lives — no cross-scale approximation:
+ *   - "garmin" → intervals.icu FTP (intervals derives it from Garmin power).
+ *   - "stryd"  → the Stryd critical-power API (foot-pod authoritative).
+ *   - "none"   → HR-only (unchanged detection result).
+ *
+ * `strydCp` is the Stryd critical power in watts (or null when unavailable).
+ * `override` is the manual pin ("stryd"/"garmin"), or null for auto.
+ */
+export function resolveRunFtp(
+	detected: PowerContext,
+	override: "stryd" | "garmin" | null,
+	strydCp: number | null,
+	activities: ActivitySummary[],
+): PowerContext {
+	const effective = override ?? detected.source;
+	const manual = override != null;
+
+	if (effective === "garmin") {
+		const { ftp, rolling_ftp } = intervalsRunFtp(activities);
+		const warnings =
+			ftp > 0
+				? manual
+					? [
+							"Power source manually set to Garmin — FTP from intervals.icu (derived from Garmin power).",
+						]
+					: detected.warnings
+				: manual
+					? [
+							"Power source manually set to Garmin, but no intervals.icu FTP available — HR-only run targets.",
+						]
+					: [...detected.warnings, "No intervals.icu FTP for Garmin — HR-only run targets."];
 		return {
-			...ctx,
-			source: "stryd",
+			source: "garmin",
+			ftp,
+			rolling_ftp,
 			correction_factor: 1.0,
-			warnings: ["Power source manually set to Stryd."],
+			confidence: ftp > 0 ? (manual ? "high" : detected.confidence) : "low",
+			warnings,
 		};
 	}
 
-	// override === "garmin": express the reference FTP in Garmin's native scale.
-	return {
-		...ctx,
-		source: "garmin",
-		ftp: ctx.ftp > 0 ? Math.round(ctx.ftp / factor) : ctx.ftp,
-		rolling_ftp: ctx.rolling_ftp != null ? Math.round(ctx.rolling_ftp / factor) : null,
-		correction_factor: factor,
-		warnings: ["Power source manually set to Garmin — FTP scaled from Stryd by ÷0.87."],
-	};
+	// Stryd (explicit, auto-detected non-Garmin, or an undetected source for an
+	// athlete who nonetheless has a Stryd CP): anchor to the Stryd critical power.
+	if (strydCp != null && strydCp > 0) {
+		const cp = Math.round(strydCp);
+		const wasNone = detected.source === "none";
+		return {
+			source: "stryd",
+			ftp: cp,
+			rolling_ftp: cp,
+			correction_factor: 1.0,
+			confidence: manual ? "high" : wasNone ? "low" : detected.confidence,
+			warnings: manual
+				? ["Power source manually set to Stryd — FTP from Stryd critical power."]
+				: wasNone
+					? [
+							...detected.warnings,
+							"FTP set from Stryd critical power API — no recent Stryd run data.",
+						]
+					: detected.warnings,
+		};
+	}
+
+	// Forced Stryd but the CP API returned nothing — relabel, keep detected FTP.
+	if (override === "stryd") {
+		return {
+			...detected,
+			source: "stryd",
+			correction_factor: 1.0,
+			warnings: [
+				"Power source manually set to Stryd, but no Stryd critical power available — using detected FTP.",
+			],
+		};
+	}
+
+	return detected;
 }
 
 /**

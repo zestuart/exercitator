@@ -19,7 +19,7 @@ import {
 	isCrossTraining,
 } from "./cross-training-strain.js";
 import { localDateStr } from "./date-utils.js";
-import { applyPowerSourceOverride, detectPowerSource } from "./power-source.js";
+import { detectPowerSource, resolveRunFtp } from "./power-source.js";
 import { computeReadiness } from "./readiness.js";
 import { selectSport } from "./sport-selector.js";
 import { applyStaleness, computeStaleness } from "./staleness.js";
@@ -485,38 +485,21 @@ export function suggestWorkoutFromData(
 ): WorkoutSuggestion {
 	const { activities, wellness, runSettings, swimSettings } = data;
 
-	let powerContext = detectPowerSource(activities);
-
-	// Use Stryd critical power as FTP when available — authoritative source
-	// directly from the foot pod, not inferred by intervals.icu. No staleness
-	// override against rolling FTP: Stryd's CP estimate may stall after a
-	// layoff (it's anchored on recent hard efforts), but second-guessing it
-	// from intervals.icu's NP-derived FTP produced its own failure modes
-	// (engine and Praescriptor disagreed; HTTP API `watts` and `source` could
-	// disagree on which engine produced the headline number — issue #31).
-	// Athlete is on the hook to book a fresh CP test when fitness shifts.
-	// If the athlete has a valid CP but no recent Stryd run data (e.g. ran
-	// with just Apple Watch), upgrade the source to "stryd" — the CP API
-	// only returns a value if the athlete IS a Stryd user.
-	if (strydCp != null) {
-		const chosenFtp = Math.round(strydCp.cp);
-		powerContext.ftp = chosenFtp;
-		powerContext.rolling_ftp = chosenFtp;
-		if (powerContext.source === "none") {
-			powerContext.source = "stryd";
-			powerContext.confidence = "low";
-			powerContext.warnings.push(
-				"FTP set from Stryd critical power API \u2014 no recent Stryd run data",
-			);
-		}
-	}
-
-	// Manual power-source override (Praescriptor toggle). Applied LAST, after
-	// Stryd-CP anchoring, so a forced "garmin" scales the CP-anchored FTP up to
-	// Garmin's native scale and "stryd" trusts it as-is. `null`/undefined leaves
-	// auto-detection untouched. Only running uses power targets; swim carries the
-	// context but never reads its FTP.
-	powerContext = applyPowerSourceOverride(powerContext, powerSourceOverride ?? null);
+	// Resolve the run FTP from the effective power source. A manual Praescriptor
+	// override (Auto/Stryd/Garmin) wins over the rolling-window auto-detection;
+	// each source draws its FTP from where that value actually lives:
+	//   - Garmin -> intervals.icu FTP (intervals derives it from Garmin power).
+	//   - Stryd  -> the Stryd critical-power API (foot-pod authoritative, not
+	//     intervals' NP-derived FTP, which caused engine/Praescriptor disagreement
+	//     and issue #31; the athlete books a fresh CP test when fitness shifts).
+	// No cross-scale approximation (the old / 0.87 Stryd->Garmin factor is gone).
+	// Only running reads the FTP; swim carries the context but never uses it.
+	const powerContext = resolveRunFtp(
+		detectPowerSource(activities),
+		powerSourceOverride ?? null,
+		strydCp?.cp ?? null,
+		activities,
+	);
 
 	// Health-telemetry hard-fail: a `promus-whoop` user whose overnight WHOOP
 	// data is missing for today (or Promus is unreachable) gets no prescription.

@@ -142,23 +142,27 @@ The category decides *intensity*; the body (segments, targets) is then built:
   vendor only supplies the body for the chosen category. On any vendor failure it falls back
   to the engine body with a `fallbackReason` chip.
 
-### Power source (run FTP scale)
+### Power source (run FTP)
 
 `src/engine/power-source.ts` decides which reference the run power targets are expressed in.
-`detectPowerSource` auto-detects from the **last 5 runs** (Stryd → Garmin → HR-only); a Stryd
-Critical Power reading, when present, then anchors the FTP. Because the 5-run window
-re-composes on every upload, the auto verdict can **flip** while an athlete transitions between
-a Stryd pod and a native watch (the last Stryd run ages out of the window).
+`detectPowerSource` auto-detects from the **last 5 runs** (Stryd → Garmin → HR-only). Because
+the 5-run window re-composes on every upload, the auto verdict can **flip** while an athlete
+transitions between a Stryd pod and a native watch (the last Stryd run ages out of the window).
 
 A **manual override** pins the source: the Praescriptor run-card *Auto / Stryd / Garmin* toggle
-(`POST /api/power-source`) is sticky per-user in SQLite (`user_preferences`) and applied
-**after** CP anchoring by `applyPowerSourceOverride`:
+(`POST /api/power-source`) is sticky per-user in SQLite (`user_preferences`). The effective
+source (override, else the detected one) then decides **where the FTP comes from** —
+`resolveRunFtp` draws each ecosystem's value from its own home, no cross-scale approximation:
 - **Auto** — the heuristic above (default; the only mode for Pam).
-- **Stryd** — trust the Stryd-scale FTP as-is, no correction.
-- **Garmin** — scale the Stryd-scale FTP up to Garmin's native scale: `Garmin = Stryd ÷ 0.87`
-  (Garmin power meters read ~15% higher than Stryd).
+- **Stryd** — FTP = the **Stryd critical-power API** (foot-pod authoritative; a `none`
+  detection with a valid CP upgrades to Stryd).
+- **Garmin** — FTP = **intervals.icu's FTP** (`icu_rolling_ftp ?? icu_ftp`), which intervals
+  derives directly from the run's Garmin power. No FTP configured → HR-only.
 
-Surfaced on the HTTP API as `power_context.override`. Run-only; swim never reads power context.
+This replaced the earlier `Garmin = Stryd ÷ 0.87` scaling (a Stryd-CP approximation) with the
+real Garmin-scale FTP intervals already computes. Surfaced on the HTTP API as
+`power_context.override`; the Praescriptor footer labels the chip *Stryd: CP {n}W* or
+*Garmin: FTP {n}W* to match the source. Run-only; swim never reads power context.
 
 ## 5. Injury overlay — Vigil
 

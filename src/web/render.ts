@@ -627,11 +627,18 @@ function renderDataSource(ds: DataSource, generatedAt: string, tz?: string): str
 		? `${ds.wellnessRange[0]} \u2013 ${ds.wellnessRange[1]}`
 		: "none";
 
-	const strydParts: string[] = [];
-	if (ds.strydCp) strydParts.push(`CP ${Math.round(ds.strydCp)}W`);
-	if (ds.strydEnriched > 0) strydParts.push(`${ds.strydEnriched} enriched`);
-	const strydNote =
-		strydParts.length > 0 ? `<span class="ds-enriched">Stryd: ${strydParts.join(", ")}</span>` : "";
+	// FTP chip labelled by the effective run power source: Garmin FTP comes from
+	// intervals.icu (derived from Garmin power); Stryd FTP is the Stryd CP.
+	let strydNote = "";
+	if (ds.runPowerSource === "garmin" && ds.runFtp) {
+		strydNote = `<span class="ds-enriched">Garmin: FTP ${Math.round(ds.runFtp)}W</span>`;
+	} else if (ds.runPowerSource === "stryd" && ds.runFtp) {
+		const parts = [`CP ${Math.round(ds.runFtp)}W`];
+		if (ds.strydEnriched > 0) parts.push(`${ds.strydEnriched} enriched`);
+		strydNote = `<span class="ds-enriched">Stryd: ${parts.join(", ")}</span>`;
+	} else if (ds.strydEnriched > 0) {
+		strydNote = `<span class="ds-enriched">Stryd: ${ds.strydEnriched} enriched</span>`;
+	}
 
 	const vigilNote = renderVigilDataSource(ds.vigil);
 

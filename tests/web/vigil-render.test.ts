@@ -72,6 +72,8 @@ function makeRenderData(overrides: Partial<RenderData> = {}): RenderData {
 			wellnessRange: ["2026-03-21", "2026-03-27"],
 			strydEnriched: 1,
 			strydCp: 292,
+			runPowerSource: "stryd",
+			runFtp: 292,
 			vigil: null,
 		},
 		generatedAt: "2026-03-28T10:30:00Z",
@@ -270,5 +272,33 @@ describe("Vigil in data source bar", () => {
 		const body = htmlBody(renderPage(makeRenderData()));
 		// When vigil is null, the data source bar should not contain "Vigil:"
 		expect(body).not.toContain("Vigil:");
+	});
+
+	it("labels the FTP chip by the effective run power source", () => {
+		// Stryd mode → measured Stryd CP.
+		const stryd = renderPage(
+			makeRenderData({
+				dataSource: {
+					...makeRenderData().dataSource,
+					runPowerSource: "stryd",
+					runFtp: 292,
+				},
+			}),
+		);
+		expect(stryd).toContain("Stryd: CP 292W");
+		expect(stryd).not.toContain("Garmin: FTP");
+
+		// Garmin mode → intervals.icu FTP, labelled Garmin.
+		const garmin = renderPage(
+			makeRenderData({
+				dataSource: {
+					...makeRenderData().dataSource,
+					runPowerSource: "garmin",
+					runFtp: 335,
+				},
+			}),
+		);
+		expect(garmin).toContain("Garmin: FTP 335W");
+		expect(garmin).not.toContain("Stryd: CP");
 	});
 });

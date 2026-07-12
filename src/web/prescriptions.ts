@@ -12,7 +12,12 @@ import {
 	fetchTrainingData,
 	suggestWorkoutFromData,
 } from "../engine/suggest.js";
-import type { VigilSummary, WorkoutSuggestion } from "../engine/types.js";
+import type {
+	PowerContext,
+	PowerSource,
+	VigilSummary,
+	WorkoutSuggestion,
+} from "../engine/types.js";
 import { runVigilBackfillIfNeeded } from "../engine/vigil/backfill.js";
 import { runGarminVigilBackfillIfNeeded } from "../engine/vigil/garmin-backfill.js";
 import type { FormClient } from "../form/client.js";
@@ -40,6 +45,12 @@ export interface DataSource {
 	strydEnriched: number;
 	/** Stryd critical power in watts, if used as FTP source. */
 	strydCp: number | null;
+	/** Effective run power source ("stryd"/"garmin"/"none") — drives the FTP chip
+	 *  label so it matches where the FTP actually came from. Null for swim-only. */
+	runPowerSource: PowerSource | null;
+	/** Effective run FTP in watts (Stryd CP in Stryd mode; intervals FTP in Garmin
+	 *  mode). Null for swim-only or HR-only. */
+	runFtp: number | null;
 	/** Vigil status from the run prescription (null for swim-only or no Vigil data). */
 	vigil: VigilSummary | null;
 }
@@ -215,6 +226,9 @@ export async function generatePrescriptions(
 		// dataSource exposes the raw Stryd CP (independent of any staleness override)
 		// so the UI/data-source pill keeps showing where the value originated.
 		strydCp?.cp ?? null,
+		// The run's effective power context drives the FTP chip label (Garmin: FTP
+		// from intervals / Stryd: CP), so it matches where the FTP came from.
+		run?.power_context ?? null,
 		run?.vigil ?? null,
 	);
 	const prescription: Prescription = {
@@ -268,6 +282,7 @@ function buildDataSource(
 	data: TrainingData,
 	strydEnriched: number,
 	strydCp: number | null,
+	runPower: PowerContext | null,
 	vigil: VigilSummary | null,
 ): DataSource {
 	const { activities, wellness } = data;
@@ -289,6 +304,8 @@ function buildDataSource(
 		wellnessRange: wellDates.length > 0 ? [wellDates[0], wellDates[wellDates.length - 1]] : null,
 		strydEnriched,
 		strydCp,
+		runPowerSource: runPower ? runPower.source : null,
+		runFtp: runPower && runPower.ftp > 0 ? runPower.ftp : null,
 		vigil,
 	};
 }
