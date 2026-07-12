@@ -28,14 +28,27 @@ Pre-emptive short-circuits can replace the whole result before the body is built
 | Source | Endpoint(s) | Feeds |
 |---|---|---|
 | **intervals.icu** | `/activities` (14 d), `/wellness` (7 d), `/sport-settings/{Run,Swim}` | Activities (load, zones, RPE), TSB (CTL/ATL), Subjective (soreness/fatigue), HR/pace/power zones, FTP fallback. Also the **write** target for planned workouts + the Vigil `injury` field. |
-| **Promus WHOOP** *(users flagged `healthSource: "promus-whoop"` — ze; Pam stays on intervals)* | `/api/whoop/{serial}/sleep`, `/hrv_nightly`, `/vigor_vitae/current` | Sleep duration, nightly RMSSD (HRV), **Vigor Vitae** (acute recovery). Bearer `PROMUS_API`, serial `WHOOP_SERIAL`. |
+| **Promus WHOOP** *(the WHOOP path of the recovery source below)* | `/api/whoop/{serial}/sleep`, `/hrv_nightly`, `/vigor_vitae/current` | Sleep duration, nightly RMSSD (HRV), **Vigor Vitae** (acute recovery). Bearer `PROMUS_API`, serial `WHOOP_SERIAL`. |
+| **Garmin Connect** *(the Garmin path)* via the `garmin-bridge` sidecar | `/body_battery/current`, `/hrv_nightly`, `/sleep_nightly` (+ `/activity/{id}/fit`) | **Body Battery** (acute, ↔ Vigor Vitae), overnight HRV, sleep duration — normalised to the same DTOs as WHOOP. Bearer `GARMIN_BRIDGE_API_KEY`. |
 | **Stryd** | `cp/history`, FIT downloads, `/workouts/recommendations` | Run FTP (Critical Power), Vigil biomechanics + low-fidelity activity enrichment, Stryd workout bodies for the swap. |
 | **FORM** | swim recommendations | FORM swim workout bodies for the swap. |
 
-Provenance note: the WHOOP-sourced values are computed by **Promus's own algorithms**, not
-WHOOP's — we do not have WHOOP's recovery/sleep-performance scores. Vigor Vitae is our
-in-house Body-Battery equivalent. Sleep + HRV moved off intervals.icu (Oura-sync) onto
-Promus after an unreliable-sync incident (`lessons.md` 2026-06-03).
+**Recovery source** (`src/health-source.ts`, `fetchHealthTelemetry`): per-user `healthSource`
+selects where Sleep + HRV + acute recovery come from — resolved as the runtime selector
+(Praescriptor WHOOP/Garmin/Auto, stored in `user_preferences`) over the profile default:
+- `"promus-whoop"` — WHOOP via Promus; hard-fails to `health_unavailable` on a missing today-night.
+- `"garmin"` — Garmin via the bridge; hard-fails only when Garmin has no data (Body Battery is
+  the acute signal + liveness gate).
+- `"auto"` (ze's default) — WHOOP primary; on a missing WHOOP night / Promus outage, **fall back
+  to Garmin** instead of blocking, and only fail when both are down. This is what lets a WHOOP
+  strap hiatus degrade to Garmin. Both sources normalise to the same `NightlyHealth[]` + acute
+  value, so the readiness blend is source-agnostic.
+- unset → intervals.icu wellness (Pam).
+
+Provenance note: WHOOP-sourced values are computed by **Promus's own algorithms**, not WHOOP's;
+Vigor Vitae is our in-house Body-Battery equivalent, and Garmin Body Battery is the real-world
+original of exactly that signal. Sleep + HRV moved off intervals.icu (Oura-sync) onto Promus
+after an unreliable-sync incident (`lessons.md` 2026-06-03).
 
 ## 1. Readiness score (0–100)
 
@@ -165,7 +178,7 @@ data sources, specifically when you touch:
 - Readiness weights/components/formulas or the renormalisation (`src/engine/readiness.ts`)
 - The readiness→category ladder or any guard (`src/engine/workout-selector.ts`)
 - Sport selection (`src/engine/sport-selector.ts`)
-- Data sourcing / health telemetry (`src/engine/suggest.ts`, `src/promus/client.ts`, `src/health-source.ts`)
+- Data sourcing / health telemetry / the recovery-source selection + fallback (`src/engine/suggest.ts`, `src/promus/client.ts`, `src/garmin/client.ts`, `src/health-source.ts`, `garmin-bridge/`)
 - Power-source detection or the manual override / FTP scaling (`src/engine/power-source.ts`)
 - The vendor swap layers (`src/web/stryd-swap.ts`, `src/web/form-swap.ts`)
 - Pre-emptive statuses (`health_unavailable`, `already_trained`, `awaiting_input`)

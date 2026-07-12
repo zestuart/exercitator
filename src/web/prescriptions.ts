@@ -58,6 +58,9 @@ export interface Prescription {
 	/** Active manual run power-source override — `"auto"` when unset (heuristic).
 	 *  Drives the Praescriptor run-card toggle's highlighted state. */
 	powerSourceOverride: "auto" | "stryd" | "garmin";
+	/** Effective health-telemetry source (override-resolved) — drives the
+	 *  WHOOP/Garmin/Auto selector. `"intervals"` = wellness (no selector). */
+	healthSource: "promus-whoop" | "garmin" | "auto" | "intervals";
 	generated_at: string;
 }
 
@@ -94,7 +97,8 @@ export async function generatePrescriptions(
 		return cached.prescription;
 	}
 
-	const data = await fetchTrainingData(client, tz, healthFetchOptionsFor(profile));
+	const healthOpts = healthFetchOptionsFor(profile);
+	const data = await fetchTrainingData(client, tz, healthOpts);
 	const preEnrichIds = new Set(data.activities.map((a) => a.id));
 
 	// Stryd enrichment only for users with stryd: true
@@ -214,6 +218,7 @@ export async function generatePrescriptions(
 		vigorVitae: data.vigorVitae,
 		vigorVitaeLevel: data.vigorVitaeLevel,
 		powerSourceOverride: powerSourceOverride ?? "auto",
+		healthSource: healthOpts.healthSource ?? "intervals",
 		generated_at: now.toISOString(),
 	};
 

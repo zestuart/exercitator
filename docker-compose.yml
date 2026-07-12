@@ -29,6 +29,8 @@ services:
       - PROMUS_URL=${PROMUS_URL:-}
       - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
       - WHOOP_SERIAL=${WHOOP_SERIAL:-}
+      - GARMIN_URL=${GARMIN_URL:-http://garmin-bridge:8655}
+      - GARMIN_BRIDGE_API_KEY=${GARMIN_BRIDGE_API_KEY:-}
     deploy:
       resources:
         limits:
@@ -79,6 +81,8 @@ services:
       - PROMUS_URL=${PROMUS_URL:-}
       - PROMUS_FORM_DSW_ENABLED=${PROMUS_FORM_DSW_ENABLED:-}
       - WHOOP_SERIAL=${WHOOP_SERIAL:-}
+      - GARMIN_URL=${GARMIN_URL:-http://garmin-bridge:8655}
+      - GARMIN_BRIDGE_API_KEY=${GARMIN_BRIDGE_API_KEY:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const s=require('net').createConnection(3847,'localhost');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
       interval: 60s
@@ -123,6 +127,53 @@ services:
       - TS_USERSPACE=true
       - TS_SERVE_CONFIG=/config/serve.json
 
+  # Garmin Connect bridge — Python/garth recovery-telemetry + FIT source, read
+  # internally by exercitator/praescriptor over the compose network
+  # (GARMIN_URL=http://garmin-bridge:8655). Garmin's unstable API is isolated here.
+  garmin-bridge:
+    build: ./garmin-bridge
+    container_name: garmin-bridge
+    restart: unless-stopped
+    expose:
+      - "8655"
+    volumes:
+      # garth OAuth token, minted out-of-band (garmin_login.py) and copied in.
+      - garmin-token-state:/tokens
+    environment:
+      - GARMIN_BRIDGE_API_KEY=${GARMIN_BRIDGE_API_KEY:-}
+      - GARMIN_TOKENSTORE=/tokens
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8655/health',timeout=3); sys.exit(0)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Out-of-band tailnet access to the bridge (garmin.tail7ab379.ts.net) for
+  # verification/debugging. The exercitator↔bridge data path does NOT use this.
+  tailscale-garmin:
+    container_name: garmin-bridge-ts
+    image: tailscale/tailscale:latest
+    hostname: garmin
+    restart: unless-stopped
+    volumes:
+      - garmin-tailscale-state:/var/lib/tailscale
+      - ./tailscale-config-garmin:/config:ro
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+      - TS_SERVE_CONFIG=/config/serve.json
+
 volumes:
   exercitator-data:
     name: exercitator-data
@@ -135,4 +186,10 @@ volumes:
     external: true
   exercitator-api-tailscale-state:
     name: exercitator-api-tailscale-state
+    external: true
+  garmin-token-state:
+    name: garmin-token-state
+    external: true
+  garmin-tailscale-state:
+    name: garmin-tailscale-state
     external: true

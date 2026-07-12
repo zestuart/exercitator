@@ -6,6 +6,7 @@ import {
 	suggestWorkoutFromData,
 } from "../../src/engine/suggest.js";
 import type { SportSettings } from "../../src/engine/types.js";
+import type { GarminClient } from "../../src/garmin/client.js";
 import type { PromusClient } from "../../src/promus/client.js";
 
 const DEFAULT_SETTINGS: SportSettings = {
@@ -59,6 +60,30 @@ function stubClient(opts: {
 				: { ts: 0, value: 0, level: "drained", trend_60min_pt: null, method: "t6" };
 		},
 	} as unknown as PromusClient;
+}
+
+/** Minimal GarminClient stub. Body Battery is the acute signal + liveness gate. */
+function stubGarmin(opts: {
+	bb?: { value: number | null; level: string };
+	sleep?: { wake_date: string; duration_s: number | null }[];
+	hrv?: { wake_day_utc: string; rmssd_median_ms: number | null }[];
+	throwOn?: "bb" | "sleep" | "hrv";
+	bbError?: string;
+}): GarminClient {
+	return {
+		async getBodyBatteryCurrent() {
+			if (opts.throwOn === "bb") throw new Error(opts.bbError ?? "network timeout");
+			return opts.bb ?? { value: 60, level: "medium" };
+		},
+		async getSleepNightly() {
+			if (opts.throwOn === "sleep") throw new Error("boom");
+			return opts.sleep ?? [];
+		},
+		async getHrvNightly() {
+			if (opts.throwOn === "hrv") throw new Error("boom");
+			return opts.hrv ?? [];
+		},
+	} as unknown as GarminClient;
 }
 
 describe("mergeWhoopHealth", () => {
@@ -179,6 +204,131 @@ describe("fetchHealthTelemetry", () => {
 		// UTC path (the bug): today = 2026-06-04 → night absent → hard-fail.
 		const bad = await fetchHealthTelemetry(now, "UTC", opts(client));
 		expect(bad.error?.reason).toBe("whoop_today_missing");
+	});
+});
+
+describe("fetchHealthTelemetry — Garmin source", () => {
+	const NOW = new Date("2026-06-03T09:00:00Z");
+	const garminOpts = (client: GarminClient) =>
+		({
+			promusClient: null,
+			whoopSerial: null,
+			garminClient: client,
+			healthSource: "garmin",
+		}) as const;
+
+	it("maps Body Battery → vigor, sleep → sleepSecs, HRV → hrvRmssd", async () => {
+		const g = stubGarmin({
+			bb: { value: 55, level: "medium" },
+			sleep: [{ wake_date: "2026-06-03", duration_s: 26000 }],
+			hrv: [{ wake_day_utc: "2026-06-03", rmssd_median_ms: 42 }],
+		});
+		const res = await fetchHealthTelemetry(NOW, "UTC", garminOpts(g));
+		expect(res.error).toBeUndefined();
+		expect(res.vigorVitae).toBe(55);
+		expect(res.vigorVitaeLevel).toBe("medium");
+		const night = res.health.find((h) => h.date === "2026-06-03");
+		expect(night?.sleepSecs).toBe(26000);
+		expect(night?.hrvRmssd).toBe(42);
+	});
+
+	it("does NOT hard-fail when last night's sleep is missing (BB carries the acute reading)", async () => {
+		const g = stubGarmin({ bb: { value: 70, level: "high" }, sleep: [], hrv: [] });
+		const res = await fetchHealthTelemetry(NOW, "UTC", garminOpts(g));
+		expect(res.error).toBeUndefined();
+		expect(res.vigorVitae).toBe(70);
+	});
+
+	it("errors garmin_no_data when Body Battery is null", async () => {
+		const g = stubGarmin({ bb: { value: null, level: "unknown" } });
+		const res = await fetchHealthTelemetry(NOW, "UTC", garminOpts(g));
+		expect(res.error?.reason).toBe("garmin_no_data");
+	});
+
+	it("maps a bridge reauth 503 to garmin_reauth_required", async () => {
+		const g = stubGarmin({
+			throwOn: "bb",
+			bbError:
+				'Garmin getBodyBatteryCurrent failed (HTTP 503): {"reason":"garmin_reauth_required"}',
+		});
+		const res = await fetchHealthTelemetry(NOW, "UTC", garminOpts(g));
+		expect(res.error?.reason).toBe("garmin_reauth_required");
+	});
+
+	it("maps a transport failure to garmin_unreachable", async () => {
+		const g = stubGarmin({ throwOn: "bb", bbError: "network timeout" });
+		const res = await fetchHealthTelemetry(NOW, "UTC", garminOpts(g));
+		expect(res.error?.reason).toBe("garmin_unreachable");
+	});
+
+	it("errors garmin_not_configured when no Garmin client is present", async () => {
+		const res = await fetchHealthTelemetry(NOW, "UTC", {
+			promusClient: null,
+			whoopSerial: null,
+			healthSource: "garmin",
+		});
+		expect(res.error?.reason).toBe("garmin_not_configured");
+	});
+});
+
+describe("fetchHealthTelemetry — auto (WHOOP → Garmin fallback)", () => {
+	const NOW = new Date("2026-06-03T09:00:00Z");
+
+	it("uses WHOOP when its night is present (Garmin untouched)", async () => {
+		const whoop = stubClient({
+			sleep: [{ wake_date: "2026-06-03", duration_s: 27000 }],
+			hrv: [{ wake_day_utc: "2026-06-03", rmssd_median_ms: 60 }],
+			vigor: { value: 88, level: "high" },
+		});
+		const garmin = stubGarmin({ bb: { value: 40, level: "medium" } });
+		const res = await fetchHealthTelemetry(NOW, "UTC", {
+			promusClient: whoop,
+			whoopSerial: "S",
+			garminClient: garmin,
+			healthSource: "auto",
+		});
+		expect(res.error).toBeUndefined();
+		expect(res.vigorVitae).toBe(88); // WHOOP VV, not Garmin BB
+	});
+
+	it("falls back to Garmin when the WHOOP night is missing", async () => {
+		const whoop = stubClient({ sleep: [{ wake_date: "2026-06-02", duration_s: 27000 }], hrv: [] });
+		const garmin = stubGarmin({
+			bb: { value: 44, level: "medium" },
+			sleep: [{ wake_date: "2026-06-03", duration_s: 25000 }],
+		});
+		const res = await fetchHealthTelemetry(NOW, "UTC", {
+			promusClient: whoop,
+			whoopSerial: "S",
+			garminClient: garmin,
+			healthSource: "auto",
+		});
+		expect(res.error).toBeUndefined();
+		expect(res.vigorVitae).toBe(44); // Garmin BB via fallback
+	});
+
+	it("reports the primary WHOOP error (annotated) when BOTH sources are down", async () => {
+		const whoop = stubClient({ sleep: [{ wake_date: "2026-06-02", duration_s: 27000 }] });
+		const garmin = stubGarmin({ bb: { value: null, level: "unknown" } });
+		const res = await fetchHealthTelemetry(NOW, "UTC", {
+			promusClient: whoop,
+			whoopSerial: "S",
+			garminClient: garmin,
+			healthSource: "auto",
+		});
+		expect(res.error?.reason).toBe("whoop_today_missing");
+		expect(res.error?.message).toContain("Garmin fallback also unavailable");
+	});
+
+	it("returns the WHOOP error unchanged when no Garmin client is configured", async () => {
+		const whoop = stubClient({ sleep: [{ wake_date: "2026-06-02", duration_s: 27000 }] });
+		const res = await fetchHealthTelemetry(NOW, "UTC", {
+			promusClient: whoop,
+			whoopSerial: "S",
+			healthSource: "auto",
+		});
+		expect(res.error?.reason).toBe("whoop_today_missing");
+		expect(res.error?.message).not.toContain("Garmin fallback");
 	});
 });
 

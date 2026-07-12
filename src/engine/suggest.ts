@@ -8,6 +8,7 @@
  */
 
 import { getVigilMetrics } from "../db.js";
+import type { GarminClient } from "../garmin/client.js";
 import type { IntervalsClient } from "../intervals.js";
 import type { PromusClient } from "../promus/client.js";
 import type { StrydClient } from "../stryd/client.js";
@@ -99,7 +100,13 @@ export interface TrainingData {
 export interface HealthFetchOptions {
 	promusClient: PromusClient | null;
 	whoopSerial: string | null;
-	healthSource?: "promus-whoop";
+	/**
+	 * Effective (override-resolved) telemetry source — see `UserProfile.healthSource`.
+	 * "auto" tries WHOOP then falls back to Garmin. Undefined keeps intervals wellness.
+	 */
+	healthSource?: "promus-whoop" | "garmin" | "auto";
+	/** Garmin bridge client — built when the effective source is "garmin" or "auto". */
+	garminClient?: GarminClient | null;
 }
 
 export async function fetchTrainingData(
@@ -142,30 +149,67 @@ export async function fetchTrainingData(
 	};
 }
 
+/** Overnight health telemetry feeding the readiness engine. `error` present =
+ *  the source could not supply usable data (the engine then hard-fails or, in
+ *  `auto` mode, falls back). `health: []` with no error = intervals wellness. */
+export interface HealthTelemetry {
+	health: NightlyHealth[];
+	vigorVitae: number | null;
+	vigorVitaeLevel: string | null;
+	error?: { reason: string; message: string };
+}
+
 /**
- * Fetch and merge overnight WHOOP telemetry from Promus for a `promus-whoop`
- * user. Returns `{ health: [] }` (no error) for users on the default
- * intervals.icu source so the readiness engine keeps reading wellness.
- *
- * Hard-fail policy (per design 2026-06-03): a `promus-whoop` user MUST have a
- * WHOOP night for today's local wake date. Any transport/non-2xx error, or a
- * missing today-row, yields a `healthError` — the engine then refuses to
- * prescribe rather than degrade silently. We never fall back to intervals.icu
- * sleep/HRV for these users, because that is the unreliable source we removed.
+ * Resolve overnight health telemetry for the effective `healthSource`:
+ *   - undefined → intervals.icu wellness (no-op, `health: []`).
+ *   - "promus-whoop" → WHOOP via Promus, hard-fail on a missing today-night.
+ *   - "garmin" → Garmin Connect via the bridge, hard-fail when Garmin has no data.
+ *   - "auto" → WHOOP primary; on any WHOOP error fall back to Garmin, and only
+ *     surface an error when BOTH are unavailable. This is what lets a WHOOP
+ *     strap hiatus degrade to Garmin instead of blocking every prescription.
  */
 export async function fetchHealthTelemetry(
 	now: Date,
 	tz: string | undefined,
 	opts: HealthFetchOptions | undefined,
-): Promise<{
-	health: NightlyHealth[];
-	vigorVitae: number | null;
-	vigorVitaeLevel: string | null;
-	error?: { reason: string; message: string };
-}> {
-	if (!opts || opts.healthSource !== "promus-whoop") {
+): Promise<HealthTelemetry> {
+	const source = opts?.healthSource;
+	if (!opts || !source) {
 		return { health: [], vigorVitae: null, vigorVitaeLevel: null };
 	}
+	if (source === "garmin") {
+		return fetchGarminTelemetry(now, tz, opts);
+	}
+	if (source === "auto") {
+		const whoop = await fetchWhoopTelemetry(now, tz, opts);
+		if (!whoop.error) return whoop;
+		if (!opts.garminClient) return whoop;
+		const garmin = await fetchGarminTelemetry(now, tz, opts);
+		if (!garmin.error) return garmin;
+		// Both sources down — report the primary (WHOOP) error, noting the fallback.
+		return {
+			...whoop,
+			error: {
+				reason: whoop.error.reason,
+				message: `${whoop.error.message} Garmin fallback also unavailable (${garmin.error.reason}).`,
+			},
+		};
+	}
+	return fetchWhoopTelemetry(now, tz, opts);
+}
+
+/**
+ * WHOOP telemetry via Promus. Hard-fail policy (2026-06-03): a WHOOP night for
+ * today's local wake date MUST be present; any transport/non-2xx error, or a
+ * missing today-row, yields an `error`. We never fall back to intervals wellness
+ * (the unreliable source we removed) — but the `auto` dispatcher above may fall
+ * back to Garmin.
+ */
+async function fetchWhoopTelemetry(
+	now: Date,
+	tz: string | undefined,
+	opts: HealthFetchOptions,
+): Promise<HealthTelemetry> {
 	const { promusClient, whoopSerial } = opts;
 	if (!promusClient || !whoopSerial) {
 		return {
@@ -203,7 +247,7 @@ export async function fetchHealthTelemetry(
 				.then(() => promusClient.getVigorVitaeCurrent(whoopSerial))
 				.catch((err) => {
 					const m = err instanceof Error ? err.message : String(err);
-					console.warn(`fetchHealthTelemetry: Vigor Vitae unavailable (non-fatal): ${m}`);
+					console.warn(`fetchWhoopTelemetry: Vigor Vitae unavailable (non-fatal): ${m}`);
 					return null;
 				}),
 		]);
@@ -242,12 +286,84 @@ export async function fetchHealthTelemetry(
 			error: {
 				reason: "whoop_today_missing",
 				message:
-					"WHOOP has not synced last night's sleep yet. Open the WHOOP app to sync, then refresh.",
+					"No WHOOP sleep for last night (strap data syncs via Nunc, not the WHOOP app). Wear the strap and let it sync, or switch the health source to Garmin.",
 			},
 		};
 	}
 
 	return { health, vigorVitae, vigorVitaeLevel };
+}
+
+/**
+ * Garmin Connect telemetry via the garmin-bridge sidecar. Body Battery is the
+ * acute signal AND the liveness gate (a live BB means the Garmin device is being
+ * worn); a transport failure fetching it means Garmin is unavailable, and a null
+ * value means no data. Sleep + overnight HRV are best-effort — a single missing
+ * night must not block, because the readiness blend renormalises over present
+ * components. Unlike WHOOP there is no "today's sleep must exist" hard-fail:
+ * Garmin is the graceful fallback, and BB carries the acute reading regardless.
+ */
+async function fetchGarminTelemetry(
+	now: Date,
+	tz: string | undefined,
+	opts: HealthFetchOptions,
+): Promise<HealthTelemetry> {
+	const garminClient = opts.garminClient;
+	if (!garminClient) {
+		return {
+			health: [],
+			vigorVitae: null,
+			vigorVitaeLevel: null,
+			error: {
+				reason: "garmin_not_configured",
+				message: "Health source is set to Garmin but the Garmin bridge client is not configured.",
+			},
+		};
+	}
+
+	const today = localDateStr(now, tz);
+	const start = localDateStr(new Date(now.getTime() - 7 * 86_400_000), tz);
+
+	let bb: Awaited<ReturnType<GarminClient["getBodyBatteryCurrent"]>>;
+	try {
+		bb = await garminClient.getBodyBatteryCurrent();
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		const reason = /reauth/i.test(msg)
+			? "garmin_reauth_required"
+			: /\bHTTP (\d{3})\b/.test(msg)
+				? `garmin_http_${msg.match(/\bHTTP (\d{3})\b/)?.[1]}`
+				: /timeout|abort|fetch|network/i.test(msg)
+					? "garmin_unreachable"
+					: "garmin_error";
+		return {
+			health: [],
+			vigorVitae: null,
+			vigorVitaeLevel: null,
+			error: { reason, message: "Could not reach the Garmin bridge for recovery telemetry." },
+		};
+	}
+
+	const [sleepRows, hrvRows] = await Promise.all([
+		garminClient.getSleepNightly(start, today).catch(() => []),
+		garminClient.getHrvNightly(7).catch(() => []),
+	]);
+	const health = mergeWhoopHealth(sleepRows, hrvRows);
+
+	if (bb.value == null) {
+		return {
+			health,
+			vigorVitae: null,
+			vigorVitaeLevel: null,
+			error: {
+				reason: "garmin_no_data",
+				message:
+					"Garmin has no current Body Battery reading — wear the Garmin device and let it sync.",
+			},
+		};
+	}
+
+	return { health, vigorVitae: bb.value, vigorVitaeLevel: bb.level };
 }
 
 /**

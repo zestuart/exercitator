@@ -16,7 +16,7 @@ import {
 	saveComplianceAssessment,
 } from "../compliance/persist.js";
 import type { ComplianceView } from "../compliance/types.js";
-import { setPowerSourceOverride } from "../db.js";
+import { setHealthSourceOverride, setPowerSourceOverride } from "../db.js";
 import { isValidTimezone, localDateStr } from "../engine/date-utils.js";
 import type { FormClient } from "../form/client.js";
 import type { IntervalsClient } from "../intervals.js";
@@ -197,6 +197,24 @@ export async function handleRoutes(
 				return;
 			}
 			setPowerSourceOverride(profile.id, source);
+			invalidateCache(profile.id);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ success: true, source }));
+			return;
+		}
+
+		// Manual health-telemetry source override (WHOOP / Garmin / Auto selector).
+		// Sticky per-user in SQLite; invalidates the day's prescription cache. "auto"
+		// = WHOOP primary + Garmin fallback. Covered by the "write" rate-limit bucket.
+		if (req.method === "POST" && subPath === "/api/health-source") {
+			const body = await readJsonBody(req);
+			const source = body?.source;
+			if (source !== "auto" && source !== "promus-whoop" && source !== "garmin") {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "source must be one of: auto, promus-whoop, garmin" }));
+				return;
+			}
+			setHealthSourceOverride(profile.id, source);
 			invalidateCache(profile.id);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify({ success: true, source }));
@@ -589,6 +607,7 @@ async function handleMainPage(
 		vigorVitae: prescriptions.vigorVitae,
 		vigorVitaeLevel: prescriptions.vigorVitaeLevel,
 		powerSourceOverride: prescriptions.powerSourceOverride,
+		healthSource: prescriptions.healthSource,
 		generatedAt: prescriptions.generated_at,
 		tz,
 		runCompliance,

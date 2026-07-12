@@ -34,6 +34,9 @@ export interface RenderData {
 	/** Active manual run power-source override — drives the run-card toggle's
 	 *  highlighted state. `"auto"` (or absent) = the rolling-window heuristic. */
 	powerSourceOverride?: "auto" | "stryd" | "garmin";
+	/** Effective health-telemetry source — drives the WHOOP/Garmin/Auto selector's
+	 *  highlighted state. `"intervals"` (or absent) hides the selector. */
+	healthSource?: "promus-whoop" | "garmin" | "auto" | "intervals";
 }
 
 function escapeHtml(s: string): string {
@@ -407,6 +410,29 @@ function renderPowerSourceToggle(active: "auto" | "stryd" | "garmin"): string {
 			</div>`;
 }
 
+/** Auto / WHOOP / Garmin health-telemetry selector, shown under the readiness
+ *  score. Lets the athlete pin the recovery source (or "auto" = WHOOP with a
+ *  Garmin fallback for strap hiatuses). Posts to `/api/health-source`. Rendered
+ *  only for users with a real health source (hidden for intervals-wellness users). */
+function renderHealthSourceToggle(active: "promus-whoop" | "garmin" | "auto"): string {
+	const opts: Array<{ v: "auto" | "promus-whoop" | "garmin"; label: string }> = [
+		{ v: "auto", label: "Auto" },
+		{ v: "promus-whoop", label: "WHOOP" },
+		{ v: "garmin", label: "Garmin" },
+	];
+	const buttons = opts
+		.map(
+			(o) =>
+				`<button type="button" class="hs-btn${o.v === active ? " active" : ""}" data-health-source="${o.v}" aria-pressed="${o.v === active}">${o.label}</button>`,
+		)
+		.join("");
+	return `
+			<div class="health-source-toggle" role="group" aria-label="Recovery source">
+				<span class="hs-toggle-label">Recovery</span>
+				<div class="hs-btns">${buttons}</div>
+			</div>`;
+}
+
 function renderCard(
 	suggestion: WorkoutSuggestion,
 	invocations: Invocations,
@@ -562,8 +588,8 @@ function renderHealthUnavailableCard(
 			</blockquote>
 
 			<div class="rationale-section">
-				<h3 class="rationale-header">Health source</h3>
-				<p class="rationale-text">Sleep and HRV come from your WHOOP strap via Promus. Open the WHOOP app to sync last night, then refresh this page.</p>
+								<h3 class="rationale-header">Recovery source</h3>
+					<p class="rationale-text">Sleep, HRV and acute recovery come from your WHOOP strap (synced via Nunc, not the WHOOP app) or from Garmin. Wear a device and let it sync, or switch the recovery source above &mdash; then refresh this page.</p>
 			</div>
 		</div>
 	</div>`;
@@ -703,13 +729,22 @@ export function renderPage(data: RenderData): string {
 	// sport-specific) — render it once in the page header. Prefer run, fall
 	// back to swim when an athlete only has one sport configured.
 	const headerReadiness = data.run?.readiness_score ?? data.swim?.readiness_score ?? null;
-	// Vigor Vitae (acute recovery term). Shown under the score so its trial
-	// contribution is visible. Server-rendered + escaped.
+	// Acute recovery term shown under the score. Labelled by source: Promus
+	// "VV" (Vigor Vitae) for WHOOP; Garmin "BB" (Body Battery) — both are the
+	// 0–100 body-battery value feeding the acute slot. Server-rendered + escaped.
+	const acuteLabel = data.healthSource === "garmin" ? "BB" : "VV";
 	const vvNote =
 		data.vigorVitae != null
-			? `<div class="page-readiness-vv">VV ${Math.round(data.vigorVitae)}${
+			? `<div class="page-readiness-vv">${acuteLabel} ${Math.round(data.vigorVitae)}${
 					data.vigorVitaeLevel ? ` &middot; ${escapeHtml(data.vigorVitaeLevel)}` : ""
 				}</div>`
+			: "";
+	// Health-source selector — only for users with a real recovery source.
+	const hsToggle =
+		data.healthSource === "promus-whoop" ||
+		data.healthSource === "garmin" ||
+		data.healthSource === "auto"
+			? renderHealthSourceToggle(data.healthSource)
 			: "";
 	const readinessBlock =
 		headerReadiness != null
@@ -717,6 +752,7 @@ export function renderPage(data: RenderData): string {
 					<div class="page-readiness-score">${headerReadiness}</div>
 					<div class="page-readiness-label">readiness</div>
 					${vvNote}
+					${hsToggle}
 				</div>`
 			: "";
 
@@ -1042,28 +1078,32 @@ body {
 	border-color: #e4cf94;
 }
 
-.power-source-toggle {
+.power-source-toggle,
+.health-source-toggle {
 	display: flex;
 	align-items: center;
 	gap: 10px;
 	margin-top: 10px;
 }
 
-.ps-toggle-label {
+.ps-toggle-label,
+.hs-toggle-label {
 	font-size: 0.72rem;
 	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 }
 
-.ps-btns {
+.ps-btns,
+.hs-btns {
 	display: inline-flex;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	overflow: hidden;
 }
 
-.ps-btn {
+.ps-btn,
+.hs-btn {
 	font: inherit;
 	font-size: 0.74rem;
 	padding: 3px 12px;
@@ -1074,11 +1114,13 @@ body {
 	cursor: pointer;
 }
 
-.ps-btn:last-child {
+.ps-btn:last-child,
+.hs-btn:last-child {
 	border-right: none;
 }
 
-.ps-btn:hover:not(.active) {
+.ps-btn:hover:not(.active),
+.hs-btn:hover:not(.active) {
 	background: rgba(0, 0, 0, 0.04);
 }
 
@@ -1088,7 +1130,16 @@ body {
 	font-weight: 600;
 }
 
-.ps-btn:disabled {
+/* Health-source selector lives in the page header (no --card-accent context),
+   so pin a fixed recovery-blue accent for its active state. */
+.hs-btn.active {
+	background: #1e5a7e;
+	color: #fff;
+	font-weight: 600;
+}
+
+.ps-btn:disabled,
+.hs-btn:disabled {
 	opacity: 0.5;
 	cursor: default;
 }
@@ -1564,6 +1615,32 @@ document.querySelectorAll('.ps-btn').forEach(btn => {
 		btns.forEach(b => { b.disabled = true; });
 		try {
 			const res = await fetch(prefix + '/api/power-source', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ source: source }),
+			});
+			if (res.ok) {
+				window.location.reload();
+				return;
+			}
+			btns.forEach(b => { b.disabled = false; });
+		} catch {
+			btns.forEach(b => { b.disabled = false; });
+		}
+	});
+});
+
+// Health-source selector (Auto / WHOOP / Garmin). Posts the chosen recovery
+// source and reloads so readiness recomputes from it. Server invalidates cache.
+document.querySelectorAll('.hs-btn').forEach(btn => {
+	btn.addEventListener('click', async function() {
+		if (this.classList.contains('active')) return;
+		const source = this.dataset.healthSource;
+		const group = this.parentElement;
+		const btns = group ? group.querySelectorAll('.hs-btn') : [this];
+		btns.forEach(b => { b.disabled = true; });
+		try {
+			const res = await fetch(prefix + '/api/health-source', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ source: source }),

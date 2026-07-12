@@ -2,6 +2,13 @@
 
 Subsidiary to `CLAUDE.md`. File map and module-level patterns for Exercitator + Praescriptor.
 
+A third co-located service, **`garmin-bridge/`** (Python/FastAPI over `garth`/`garminconnect`),
+provides Garmin Connect recovery telemetry + activity FITs. It runs as its own container on
+Cogitator, read internally by exercitator/praescriptor over the compose network via `GarminClient`
+(the same relationship Exercitator has with Promus). Garmin's unstable API is isolated there; the
+garth OAuth token is a mounted volume (`garmin-token-state`), minted out-of-band. See
+`garmin-bridge/README.md`.
+
 ## File map
 
 ```
@@ -10,7 +17,7 @@ src/
   intervals.ts          — intervals.icu REST client (Basic auth over HTTPS)
   auth.ts               — OAuth middleware (PKCE + passphrase + signed tokens)
   users.ts              — shared user profile registry (ze, pam) consumed by Praescriptor + HTTP API
-  health-source.ts      — resolves a HealthFetchOptions per profile (`healthFetchOptionsFor`): builds a stateless PromusClient + WHOOP serial from env for `healthSource: "promus-whoop"` users; no-op (intervals source) otherwise. Used by all four fetchTrainingData call sites + the MCP entry.
+  health-source.ts      — resolves a HealthFetchOptions per profile (`healthFetchOptionsFor`): the effective recovery source = runtime override (`getHealthSourceOverride`, the Praescriptor WHOOP/Garmin/Auto selector) over the profile default. Builds a stateless PromusClient (+WHOOP serial) and/or GarminClient from env; no-op (intervals) otherwise. Used by all four fetchTrainingData call sites + the MCP entry.
   db.ts                 — SQLite cache + enrichment tracking + Vigil metrics/baselines + compliance tables + `user_preferences` (sticky per-user settings; `getPowerSourceOverride`/`setPowerSourceOverride`) (better-sqlite3, WAL mode)
   compliance/
     types.ts            — compliance tracking type definitions
@@ -22,6 +29,8 @@ src/
     enricher.ts         — detect low-fidelity activities, match to Stryd, upload full FIT
   promus/
     client.ts           — Promus health-telemetry client (stateless bearer `PROMUS_API`, no login). `getWhoopSleep(serial,start,end)` + `getWhoopHrvNightly(serial,days)` read overnight WHOOP strap data; native fetch, AbortSignal timeout, 512 KB JSON cap, non-2xx throws. Source of the Sleep + HRV readiness components for `promus-whoop` users (replaces intervals.icu wellness; see lessons.md 2026-06-03).
+  garmin/
+    client.ts           — Garmin bridge client (stateless bearer `GARMIN_BRIDGE_API_KEY`). Mirror of PromusClient: `getBodyBatteryCurrent` / `getHrvNightly` / `getSleepNightly` return the SAME DTOs as the WHOOP methods (so `mergeWhoopHealth` is reused), plus `getActivities` / `getActivityFit` (Buffer) for the Phase 2 FIT pull. Reads the `garmin-bridge` sidecar over the compose network.
   form/
     client.ts           — FORM Athletica API client (OAuth2 with three-tier cache → refresh → login cascade, filesystem cache at FORM_CACHE_PATH mode 0600, 1 MB JSON cap, 401 retry-once with cache invalidation, UUID-validated workout fetches). `getPersonalizedWithBodies()` is the two-call composition: `/users/me/workouts/smart_coach/personalized` for the 3-item list, then parallel `/workouts/{id}` for each body's setGroups.
   tools/
@@ -56,7 +65,7 @@ src/
       backfill.ts       — 90-day Stryd FIT backfill + incremental per-activity processing
   web/
     server.ts           — Praescriptor HTTP entrypoint (port 3847), per-user IntervalsClient map
-    routes.ts           — route handler (/:userId/, /:userId/api/*, /health). Includes `POST /api/power-source` (Auto/Stryd/Garmin toggle → `setPowerSourceOverride` + cache invalidate; enum-validated, write-rate-limited).
+    routes.ts           — route handler (/:userId/, /:userId/api/*, /health). Includes `POST /api/power-source` (Auto/Stryd/Garmin run-power toggle) and `POST /api/health-source` (WHOOP/Garmin/Auto recovery selector → `setHealthSourceOverride`); both enum-validated, write-rate-limited, cache-invalidating.
     prescriptions.ts    — per-user prescription generator with day-level cache. Resolves the per-user power-source override and threads it into the run `suggestWorkoutFromData` call; carries it on the returned `Prescription` for the run-card toggle state.
     send.ts             — push workout to intervals.icu calendar with per-user dedup. Both send paths regenerate via generatePrescriptions with the athlete tz + vendor clients (a missing tz computes "today" in container-UTC → wrong-day WHOOP window) and refuse any non-`ready` status with 422 {not_sendable} (never push the awaiting_input/already_trained/health_unavailable placeholder).
     send-stryd.ts       — push running workout to Stryd calendar (create + schedule + dedup). On Stryd-sourced runs, also fires markStrydRecommendationSelected as a preference signal.
@@ -68,7 +77,7 @@ src/
     intervals-format.ts — WorkoutSegment[] → intervals.icu workout text
     form-format.ts      — WorkoutSuggestion → FORM swim goggles Script text. `inferStroke` checks "drill" before "kick"/"pull" so FORM drills named sixKickSwitch classify as DCH not K.
     invocations.ts      — deity invocations via Anthropic API with static/plain fallbacks
-    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim). Run card carries the Auto/Stryd/Garmin power-source segmented control (`renderPowerSourceToggle`) + its client-JS POST handler.
+    render.ts           — SSR HTML renderer (inlined CSS + JS, no framework). Zone-guide pill on each segment derives watt bands from segment.stryd_zone (fallback target_hr_zone for Swim). Run card carries the Auto/Stryd/Garmin power-source segmented control (`renderPowerSourceToggle`); the page-header readiness block carries the WHOOP/Garmin/Auto recovery selector (`renderHealthSourceToggle`) + their client-JS POST handlers.
     security-headers.ts — defence-in-depth headers for every Praescriptor response (HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy) + CSP for HTML responses
   api/
     server.ts           — HTTP API listener (port 8643, co-resident with MCP; started only when EXERCITATOR_API_KEYS set)

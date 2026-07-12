@@ -1,36 +1,63 @@
 /**
- * Promus health-telemetry wiring.
+ * Health-telemetry wiring.
  *
  * Resolves a `HealthFetchOptions` for a user profile so the `fetchTrainingData`
  * call sites (Praescriptor, the three HTTP API handlers, the MCP entry) all
- * construct their Promus inputs the same way. Users without
- * `healthSource: "promus-whoop"` get a no-op options object and keep the
- * intervals.icu wellness source.
+ * construct their telemetry inputs the same way. The effective source is the
+ * runtime override (the Praescriptor WHOOP/Garmin/Auto selector, stored in
+ * `user_preferences`) falling back to the profile's static `healthSource`:
  *
- * Unlike the Stryd/FORM clients (which hold login tokens and are pooled in the
- * servers), `PromusClient` is stateless — just a bearer key + base URL — so it
- * is cheap to construct per request and needs no server-held client map.
+ *   - "promus-whoop" → WHOOP strap via Promus (stateless `PromusClient`).
+ *   - "garmin"       → Garmin Connect via the garmin-bridge (`GarminClient`).
+ *   - "auto"         → WHOOP primary, Garmin fallback (both clients built).
+ *   - anything else / unset → intervals.icu wellness (no-op options).
+ *
+ * Both clients are stateless (bearer key + base URL), so they are cheap to
+ * construct per request — no server-held client pool.
  */
 
+import { getHealthSourceOverride } from "./db.js";
 import type { HealthFetchOptions } from "./engine/suggest.js";
+import { GarminClient } from "./garmin/client.js";
 import { PromusClient } from "./promus/client.js";
 import type { UserProfile } from "./users.js";
 
-/**
- * Resolve the `HealthFetchOptions` for a user from their profile + environment.
- * The Promus bearer key and WHOOP strap serial are read from the env vars the
- * profile names (`promusApiKeyEnv` / `whoopSerialEnv`). Returns a no-op
- * (intervals-source) options object for users not flagged `promus-whoop`.
- */
+/** Read the runtime health-source override, tolerating an unavailable DB (tests). */
+function overrideFor(userId: string): ReturnType<typeof getHealthSourceOverride> {
+	try {
+		return getHealthSourceOverride(userId);
+	} catch {
+		return null;
+	}
+}
+
 export function healthFetchOptionsFor(profile: UserProfile): HealthFetchOptions {
-	if (profile.healthSource !== "promus-whoop") {
+	// Runtime selector wins over the profile default; undefined/none = intervals.
+	const effective = overrideFor(profile.id) ?? profile.healthSource;
+	if (effective !== "promus-whoop" && effective !== "garmin" && effective !== "auto") {
 		return { promusClient: null, whoopSerial: null };
 	}
-	const apiKey = profile.promusApiKeyEnv ? process.env[profile.promusApiKeyEnv] : undefined;
+
+	// Promus/WHOOP client — used by "promus-whoop" and as the primary for "auto".
+	const promusApiKey = profile.promusApiKeyEnv ? process.env[profile.promusApiKeyEnv] : undefined;
 	const whoopSerial = profile.whoopSerialEnv ? (process.env[profile.whoopSerialEnv] ?? null) : null;
-	const baseUrl = process.env.PROMUS_URL || undefined;
-	const promusClient = apiKey
-		? new PromusClient({ apiKey, ...(baseUrl ? { baseUrl } : {}) })
+	const promusBaseUrl = process.env.PROMUS_URL || undefined;
+	const promusClient = promusApiKey
+		? new PromusClient({
+				apiKey: promusApiKey,
+				...(promusBaseUrl ? { baseUrl: promusBaseUrl } : {}),
+			})
 		: null;
-	return { promusClient, whoopSerial, healthSource: "promus-whoop" };
+
+	// Garmin bridge client — used by "garmin" and as the "auto" fallback.
+	const garminApiKey = profile.garminApiKeyEnv ? process.env[profile.garminApiKeyEnv] : undefined;
+	const garminBaseUrl = profile.garminUrlEnv ? process.env[profile.garminUrlEnv] : undefined;
+	const garminClient = garminApiKey
+		? new GarminClient({
+				apiKey: garminApiKey,
+				...(garminBaseUrl ? { baseUrl: garminBaseUrl } : {}),
+			})
+		: null;
+
+	return { promusClient, whoopSerial, garminClient, healthSource: effective };
 }

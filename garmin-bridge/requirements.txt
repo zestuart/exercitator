@@ -1,0 +1,11 @@
+# Garmin bridge — pinned deps. Garmin has no stable public API; garth/garminconnect
+# break when Garmin rotates endpoints/secrets, so pin and bump deliberately.
+#
+# These MUST match the versions that wrote the garth token being cloned in
+# (../blueToothDisco's body_battery venv: garth 0.8.0 / garminconnect 0.3.3).
+# garth 0.8.0 writes a single `garmin_tokens.json`; older 0.4.x uses a two-file
+# format and cannot read it — a version mismatch silently breaks token load.
+garminconnect==0.3.3
+garth==0.8.0
+fastapi==0.115.6
+uvicorn[standard]==0.34.0

@@ -326,6 +326,24 @@ export function setPowerSourceOverride(userId: string, value: PowerSourceOverrid
 	}
 }
 
+/** Manual health-telemetry source override. All three are real sources (unlike
+ *  the power-source override's "auto"=clear): "auto" = WHOOP primary + Garmin
+ *  fallback, so it is stored explicitly. */
+export type HealthSourceOverride = "promus-whoop" | "garmin" | "auto";
+
+const HEALTH_SOURCE_PREF_KEY = "health_source_override";
+
+/** Read the manual health-source override, or null when following the profile default. */
+export function getHealthSourceOverride(userId: string): HealthSourceOverride | null {
+	const value = getUserPref(userId, HEALTH_SOURCE_PREF_KEY);
+	return value === "promus-whoop" || value === "garmin" || value === "auto" ? value : null;
+}
+
+/** Persist the manual health-source override (overrides the profile default). */
+export function setHealthSourceOverride(userId: string, value: HealthSourceOverride): void {
+	setUserPref(userId, HEALTH_SOURCE_PREF_KEY, value);
+}
+
 // ---------------------------------------------------------------------------
 // Stryd enrichment tracking
 // ---------------------------------------------------------------------------

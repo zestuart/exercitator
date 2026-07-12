@@ -87,4 +87,12 @@ describe("clientJs — user slug is emitted as a JSON literal (XSS hardening)", 
 		// Never server-interpolates the slug into the path.
 		expect(js).not.toContain("fetch('/ze/api/power-source'");
 	});
+
+	it("wires the health-source selector POST via the client-built prefix", () => {
+		const js = clientJs("ze");
+		expect(js).toContain(".hs-btn");
+		expect(js).toContain("fetch(prefix + '/api/health-source'");
+		expect(js).toContain("dataset.healthSource");
+		expect(js).not.toContain("fetch('/ze/api/health-source'");
+	});
 });

@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	_resetDb,
 	deleteUserPref,
+	getHealthSourceOverride,
 	getPowerSourceOverride,
 	getUserPref,
+	setHealthSourceOverride,
 	setPowerSourceOverride,
 	setUserPref,
 } from "../src/db.js";
@@ -79,5 +81,42 @@ describe("power-source override helpers", () => {
 	it("ignores a corrupt stored value", () => {
 		setUserPref("ze", "power_source_override", "bogus");
 		expect(getPowerSourceOverride("ze")).toBeNull();
+	});
+});
+
+describe("health-source override helpers", () => {
+	beforeEach(() => {
+		_resetDb();
+		process.env.EXERCITATOR_DB_PATH = ":memory:";
+	});
+
+	afterEach(() => {
+		_resetDb();
+		process.env.EXERCITATOR_DB_PATH = undefined;
+	});
+
+	it("defaults to null (profile default) when unset", () => {
+		expect(getHealthSourceOverride("ze")).toBeNull();
+	});
+
+	it("persists and reads back all three sources (auto is explicit, not a clear)", () => {
+		setHealthSourceOverride("ze", "promus-whoop");
+		expect(getHealthSourceOverride("ze")).toBe("promus-whoop");
+		setHealthSourceOverride("ze", "garmin");
+		expect(getHealthSourceOverride("ze")).toBe("garmin");
+		setHealthSourceOverride("ze", "auto");
+		expect(getHealthSourceOverride("ze")).toBe("auto");
+	});
+
+	it("is independent of the power-source override key", () => {
+		setPowerSourceOverride("ze", "garmin");
+		setHealthSourceOverride("ze", "auto");
+		expect(getPowerSourceOverride("ze")).toBe("garmin");
+		expect(getHealthSourceOverride("ze")).toBe("auto");
+	});
+
+	it("ignores a corrupt stored value", () => {
+		setUserPref("ze", "health_source_override", "bogus");
+		expect(getHealthSourceOverride("ze")).toBeNull();
 	});
 });

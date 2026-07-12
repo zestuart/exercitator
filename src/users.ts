@@ -49,20 +49,31 @@ export interface UserProfile {
 	/** Environment variable name for FORM password (null if no FORM access). */
 	formPasswordEnv: string | null;
 	/**
-	 * Optional override for the Sleep + HRV readiness telemetry source. When
-	 * `"promus-whoop"`, those two components are read from the in-house Promus
-	 * WHOOP strap feed instead of intervals.icu wellness (whose Oura-sync sleep
-	 * field proved unreliable — see lessons.md 2026-06-03). TSB, Recency, and
-	 * Subjective components still come from intervals/activities. If today's
-	 * WHOOP night is missing or Promus is unreachable, the suggestion hard-fails
-	 * with status `"health_unavailable"` rather than silently degrading.
+	 * Optional override for the Sleep + HRV + acute readiness telemetry source.
+	 *   "promus-whoop" — read from the in-house Promus WHOOP strap feed (whose
+	 *      Oura-sync-free sleep/HRV replaced intervals.icu wellness; lessons.md
+	 *      2026-06-03). Hard-fails to `health_unavailable` when today's WHOOP
+	 *      night is missing.
+	 *   "garmin" — read from Garmin Connect via the garmin-bridge sidecar (Body
+	 *      Battery → acute, overnight HRV, sleep). Hard-fails when Garmin is
+	 *      unavailable.
+	 *   "auto" — WHOOP primary; on a missing WHOOP night / Promus outage, fall
+	 *      back to Garmin instead of hard-failing (for strap hiatuses). Only
+	 *      hard-fails when BOTH are unavailable.
+	 * TSB, Recency, and Subjective always come from intervals/activities.
 	 * Undefined keeps the intervals.icu wellness sleep/HRV (default for Pam).
+	 * The static value here is the default; a per-user runtime override
+	 * (`getHealthSourceOverride`, the Praescriptor selector) takes precedence.
 	 */
-	healthSource?: "promus-whoop";
+	healthSource?: "promus-whoop" | "garmin" | "auto";
 	/** Environment variable name for the Promus bearer token (null if unused). */
 	promusApiKeyEnv: string | null;
 	/** Environment variable name for this user's WHOOP strap serial (null if unused). */
 	whoopSerialEnv: string | null;
+	/** Environment variable name for the garmin-bridge bearer key (null if unused). */
+	garminApiKeyEnv: string | null;
+	/** Environment variable name for the garmin-bridge base URL (null if unused). */
+	garminUrlEnv: string | null;
 }
 
 const PROFILES: UserProfile[] = [
@@ -79,9 +90,13 @@ const PROFILES: UserProfile[] = [
 		formPasswordEnv: "FORM_PASSWORD",
 		runRecommendationSource: "stryd",
 		swimRecommendationSource: "form",
-		healthSource: "promus-whoop",
+		// "auto": WHOOP primary, Garmin fallback when the strap is off (data
+		// arrives via Nunc, not the WHOOP app). Runtime selector can pin either.
+		healthSource: "auto",
 		promusApiKeyEnv: "PROMUS_API",
 		whoopSerialEnv: "WHOOP_SERIAL",
+		garminApiKeyEnv: "GARMIN_BRIDGE_API_KEY",
+		garminUrlEnv: "GARMIN_URL",
 	},
 	{
 		id: "pam",
@@ -96,6 +111,8 @@ const PROFILES: UserProfile[] = [
 		formPasswordEnv: null,
 		promusApiKeyEnv: null,
 		whoopSerialEnv: null,
+		garminApiKeyEnv: null,
+		garminUrlEnv: null,
 	},
 ];
 

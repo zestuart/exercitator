@@ -1,0 +1,16 @@
+{
+	"TCP": {
+		"443": {
+			"HTTPS": true
+		}
+	},
+	"Web": {
+		"garmin.tail7ab379.ts.net:443": {
+			"Handlers": {
+				"/": {
+					"Proxy": "http://garmin-bridge:8655"
+				}
+			}
+		}
+	}
+}
