@@ -121,7 +121,8 @@ The **HTTP API** uses bearer tokens scoped `<client>:<userId>:<token>` instead �
 | `MCP_OAUTH_CLIENT_SECRET` | Prod | OAuth signing secret — `openssl rand -hex 32` |
 | `MCP_OAUTH_AUTHORIZE_PASSPHRASE` | Prod | Human-memorable passphrase for auth gate |
 | `MCP_TOKEN_VERSION` | No | Increment to revoke all tokens (default `1`) |
-| `TAILSCALE_AUTH_KEY` | Prod | Tailscale auth key (reusable, preauthorised) — works for all three sidecars |
+| `TAILSCALE_AUTH_KEY` | Prod | Tailscale **OAuth client** secret (non-expiring, scoped `tag:mcp`) — all four sidecars |
+| `TS_EXTRA_ARGS` | Prod | `--advertise-tags=tag:mcp --accept-dns=false` — mandatory alongside the OAuth key |
 | `cogitatorPass` | Deploy | Cogitator login password (also unlocks login keychain for `docker compose build` over non-interactive SSH); key auth is preferred |
 | `GEMINI_API_KEY` | Deploy | Gemini API key for SAST scanner |
 
