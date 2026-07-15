@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+	distanceToMetres,
 	mapCategoryToStrydType,
 	pickStrydWorkout,
 	strydWorkoutToSegments,
 } from "../../src/engine/stryd-mapper.js";
 import type { WorkoutCategory } from "../../src/engine/types.js";
-import type { StrydRecommendationSet } from "../../src/stryd/client.js";
+import type { StrydRecommendationSet, StrydWorkout } from "../../src/stryd/client.js";
 
 const FIXTURE_DIR = join(__dirname, "..", "fixtures", "stryd-recommendations");
 
@@ -212,5 +213,112 @@ describe("strydWorkoutToSegments", () => {
 		expect(cooldown.duration_secs).toBe(540);
 		expect(cooldown.target_power_low).toBe(Math.round(0.7 * FTP)); // 200
 		expect(cooldown.target_power_high).toBe(Math.round(0.8 * FTP)); // 229
+	});
+});
+
+// ---------------------------------------------------------------------------
+// distanceToMetres
+// ---------------------------------------------------------------------------
+
+describe("distanceToMetres", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	it("converts miles, km, metres, yards to metres", () => {
+		expect(distanceToMetres(1, "mile")).toBeCloseTo(1609.344, 3);
+		expect(distanceToMetres(2, "miles")).toBeCloseTo(3218.688, 3);
+		expect(distanceToMetres(1, "kilometer")).toBe(1000);
+		expect(distanceToMetres(5, "km")).toBe(5000);
+		expect(distanceToMetres(400, "meter")).toBe(400);
+		expect(distanceToMetres(100, "yard")).toBeCloseTo(91.44, 2);
+	});
+
+	it("is case- and whitespace-insensitive on the unit", () => {
+		expect(distanceToMetres(1, " Mile ")).toBeCloseTo(1609.344, 3);
+		expect(distanceToMetres(1, "KM")).toBe(1000);
+	});
+
+	it("falls back to metres with a warning on an unknown unit", () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		expect(distanceToMetres(123, "furlong")).toBe(123);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(warn.mock.calls[0][0]).toContain("furlong");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// strydWorkoutToSegments — distance-based segments ("The Tom Workout")
+// ---------------------------------------------------------------------------
+
+const DISTANCE_FIXTURE: StrydRecommendationSet = loadFixture("recommendations-distance-miles.json");
+
+describe("strydWorkoutToSegments (distance)", () => {
+	const FTP = 286;
+	const tom: StrydWorkout = DISTANCE_FIXTURE.workouts[0].estimated_workout.workout;
+
+	it("fixture is the captured 1-mile distance workout", () => {
+		expect(tom.title).toBe("The Tom Workout (Distance)");
+		expect(tom.blocks[1].segments[0].duration_type).toBe("distance");
+		expect(tom.blocks[1].segments[0].distance_unit_selected).toBe("mile");
+	});
+
+	it("maps distance reps to metric distance_m with duration_secs=0", () => {
+		const segments = strydWorkoutToSegments(tom, FTP);
+		// WU + (work,rest)×2 + CD = 6 flattened segments.
+		expect(segments.map((s) => s.name)).toEqual([
+			"Warm-up",
+			"Work",
+			"Recovery",
+			"Work",
+			"Recovery",
+			"Cool-down",
+		]);
+
+		// The four interval reps: distance-based, 1 mile each, no seconds.
+		for (const idx of [1, 2, 3, 4]) {
+			const seg = segments[idx];
+			expect(seg.duration_type).toBe("distance");
+			expect(seg.duration_secs).toBe(0);
+			expect(seg.distance_m).toBeCloseTo(1609.344, 3);
+		}
+
+		// Warm-up / cool-down stay time-based (11 min) with no distance.
+		for (const idx of [0, 5]) {
+			expect(segments[idx].duration_type).toBeUndefined();
+			expect(segments[idx].duration_secs).toBe(660);
+			expect(segments[idx].distance_m).toBeUndefined();
+		}
+	});
+
+	it("keeps the CP power band as the target (rest reps are a real float, not easy-jog)", () => {
+		const segments = strydWorkoutToSegments(tom, FTP);
+		// Rest rep is 81–85% CP — a genuine effort, banded in watts.
+		const rest = segments[2];
+		expect(rest.name).toBe("Recovery");
+		expect(rest.target_power_low).toBe(Math.round(0.81 * FTP));
+		expect(rest.target_power_high).toBe(Math.round(0.85 * FTP));
+		expect(rest.target_description).toContain("81");
+		expect(rest.target_description).toContain("85");
+	});
+
+	it("converts a km-unit distance segment through the mapper", () => {
+		const kmBody: StrydWorkout = {
+			...tom,
+			blocks: [
+				{
+					repeat: 1,
+					segments: [
+						{
+							...tom.blocks[1].segments[0],
+							duration_distance: 2,
+							distance_unit_selected: "kilometer",
+						},
+					],
+				} as StrydWorkout["blocks"][number],
+			],
+		};
+		const segments = strydWorkoutToSegments(kmBody, FTP);
+		expect(segments).toHaveLength(1);
+		expect(segments[0].duration_type).toBe("distance");
+		expect(segments[0].distance_m).toBe(2000);
 	});
 });

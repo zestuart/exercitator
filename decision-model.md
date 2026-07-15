@@ -141,6 +141,17 @@ The category decides *intensity*; the body (segments, targets) is then built:
   **FORM** for swims (`src/web/form-swap.ts`). The engine never re-decides intensity; the
   vendor only supplies the body for the chosen category. On any vendor failure it falls back
   to the engine body with a `fallbackReason` chip.
+  - **Distance-based Stryd segments** — a Stryd library template can prescribe reps by
+    **distance** rather than time (`duration_type: "distance"`; observed 2026-07-14 when the
+    `long` bucket served "The Tom Workout (Distance)" — 1-mile reps). The unit is a
+    per-segment property of the authored template (`distance_unit_selected`, e.g. `"mile"`),
+    not an account setting, so `strydWorkoutToSegments` reads it per segment and converts to
+    metres (`distanceToMetres`); Exercitator renders and serialises metric only (km on the
+    dashboard, `mtr` to intervals.icu). A distance segment carries `distance_m` and
+    `duration_secs = 0` — so `total_duration_secs`/`estimated_load` **understate** a
+    distance workout (the reps contribute no seconds; a distance meta-pill shows the metric
+    total instead). Accurate duration would require threading Stryd's per-segment
+    `estimated_workout` estimate — deferred (see `lessons.md` 2026-07-14).
 
 ### Power source (run FTP)
 

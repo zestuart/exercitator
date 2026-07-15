@@ -191,7 +191,14 @@ export function buildIntervalsDescription(suggestion: WorkoutSuggestion): string
 				}
 				lines.push("");
 			} else {
-				lines.push(`- ${formatDuration(seg.duration_secs)} ${target}`.trimEnd());
+				// Distance-based segment (Stryd library workout, e.g. 1-mile reps):
+				// emit metres via `mtr` (NOT `m`, which means minutes). `duration_secs`
+				// is 0 for these, so formatDuration would wrongly emit "0s".
+				const measure =
+					seg.duration_type === "distance" && seg.distance_m != null
+						? `${Math.round(seg.distance_m)}mtr`
+						: formatDuration(seg.duration_secs);
+				lines.push(`- ${measure} ${target}`.trimEnd());
 			}
 		}
 	}

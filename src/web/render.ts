@@ -60,6 +60,24 @@ function formatDuration(secs: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Metric distance for distance-based segments (Stryd library workouts). */
+function formatDistance(metres: number): string {
+	if (metres >= 1000) return `${(metres / 1000).toFixed(2)} km`;
+	return `${Math.round(metres)} m`;
+}
+
+/**
+ * The measure shown in a segment's duration slot: metric distance for a
+ * distance-based segment (which carries no seconds), otherwise time. Distance
+ * segments would otherwise render as "0min" (`duration_secs = 0`).
+ */
+function segmentMeasure(seg: WorkoutSegment): string {
+	if (seg.duration_type === "distance" && seg.distance_m != null) {
+		return formatDistance(seg.distance_m);
+	}
+	return formatDuration(seg.duration_secs);
+}
+
 function dayName(dateStr: string, tz?: string): string {
 	const d = new Date(dateStr);
 	return d.toLocaleDateString("en-GB", { weekday: "long", timeZone: tz });
@@ -200,7 +218,7 @@ function renderSegment(
 	segIndex?: number,
 	complianceSegments?: SegmentCompliance[],
 ): string {
-	const dur = formatDuration(seg.duration_secs);
+	const dur = segmentMeasure(seg);
 	const repeatInfo =
 		seg.repeats && seg.repeats > 1
 			? `<span class="segment-repeats">${seg.repeats}&times;</span>`
@@ -472,6 +490,14 @@ function renderCard(
 				<div class="card-meta">
 					<span class="meta-pill">${escapeHtml(suggestion.category)}</span>
 					<span class="meta-pill">${formatDuration(suggestion.total_duration_secs)}</span>
+					${(() => {
+						// Distance-based workouts (Stryd library templates) carry metres
+						// on their segments but no seconds, so the time pill alone
+						// understates them; add a metric distance pill for a coherent
+						// summary.
+						const dist = suggestion.segments.reduce((a, s) => a + (s.distance_m ?? 0), 0);
+						return dist > 0 ? `<span class="meta-pill">${formatDistance(dist)}</span>` : "";
+					})()}
 					<span class="meta-pill">~${suggestion.estimated_load} load</span>
 					${renderSourceChip(suggestion)}
 				</div>

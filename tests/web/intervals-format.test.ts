@@ -282,4 +282,24 @@ describe("buildIntervalsDescription", () => {
 		const repeatIdx = text.indexOf("8x");
 		expect(text[repeatIdx - 1]).toBe("\n");
 	});
+
+	it("emits metric mtr for a distance-based run segment (never 0s)", () => {
+		const suggestion = makeSuggestion({
+			segments: [
+				{
+					name: "Work",
+					duration_secs: 0,
+					duration_type: "distance",
+					distance_m: 1609.344, // 1 mile
+					target_description: "Stryd 91–95% CP (292–305W)",
+					target_power_low: 292,
+					target_power_high: 305,
+				},
+			],
+		});
+		const text = buildIntervalsDescription(suggestion);
+		// Distance emitted as rounded metres via `mtr` (not `m` = minutes, not "0s").
+		expect(text).toContain("- 1609mtr 292-305W");
+		expect(text).not.toContain("0s");
+	});
 });

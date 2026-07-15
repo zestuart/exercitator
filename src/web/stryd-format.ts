@@ -107,6 +107,28 @@ function segmentToBlock(seg: WorkoutSegment): StrydWorkoutBlock {
 		};
 	}
 
+	// Distance-based segment. Defensive: Stryd-sourced distance workouts
+	// round-trip verbatim via `strydOriginalWorkout` in `toStrydWorkout` and
+	// never reach this flattened path, but if a distance segment ever arrives
+	// here don't silently drop its distance (which `makeSegment` would, being
+	// time-only). Emit metres — Exercitator is metric end-to-end.
+	if (seg.duration_type === "distance" && seg.distance_m != null) {
+		const base = makeSegment(0, intensityClass(seg), zone, seg.target_description);
+		return {
+			repeat: 1,
+			segments: [
+				{
+					...base,
+					duration_type: "distance",
+					duration_time: toHms(0),
+					distance_unit_selected: "meter",
+					duration_distance: Math.round(seg.distance_m),
+				},
+			],
+			uuid: crypto.randomUUID(),
+		};
+	}
+
 	// Simple block
 	return {
 		repeat: 1,

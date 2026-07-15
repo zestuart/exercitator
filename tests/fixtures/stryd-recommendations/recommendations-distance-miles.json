@@ -1,0 +1,178 @@
+{
+	"user_id": "test-user",
+	"created": 0,
+	"created_time": "2026-07-14T00:00:00Z",
+	"updated": 0,
+	"updated_time": "2026-07-14T00:00:00Z",
+	"id": "test-distance-set",
+	"workouts": [
+		{
+			"estimated_workout": {
+				"workout": {
+					"created": 0,
+					"created_time": "0001-01-01T00:00:00Z",
+					"updated": 1762552052,
+					"updated_time": "2025-11-07T21:47:32.513639Z",
+					"id": 6645791531663360,
+					"title": "The Tom Workout (Distance)",
+					"objective": "",
+					"desc": "This alternating threshold workout targets aerobic stamina and fatigue resistance by shifting between marathon and half marathon intensities. It strengthens your ability to sustain controlled discomfort and manage pace transitions efficiently. Expect to feel smooth but purposeful\u2014working just hard enough to stay engaged while maintaining form and composure throughout each repeat.",
+					"surface": "",
+					"type": "long",
+					"tags": null,
+					"goal_types": [
+						"marathon",
+						"ironman",
+						"half marathon",
+						"half ironman"
+					],
+					"blocks": [
+						{
+							"repeat": 1,
+							"segments": [
+								{
+									"desc": "",
+									"desc_no_cp": "",
+									"flexible": false,
+									"duration_type": "time",
+									"duration_time": {
+										"hour": 0,
+										"minute": 11,
+										"second": 0
+									},
+									"duration_distance": 0,
+									"distance_unit_selected": "meter",
+									"intensity_class": "warmup",
+									"intensity_type": "percentage",
+									"intensity_percent": {
+										"value": 75,
+										"min": 70,
+										"max": 80
+									},
+									"zone_selected": 0,
+									"rpe_selected": 0,
+									"pdc_target": 0,
+									"grade": 0,
+									"incline": 0,
+									"power_type": ""
+								}
+							]
+						},
+						{
+							"repeat": 2,
+							"segments": [
+								{
+									"desc": "",
+									"desc_no_cp": "",
+									"flexible": false,
+									"duration_type": "distance",
+									"duration_time": {
+										"hour": 0,
+										"minute": 0,
+										"second": 0
+									},
+									"duration_distance": 1,
+									"distance_unit_selected": "mile",
+									"intensity_class": "work",
+									"intensity_type": "percentage",
+									"intensity_percent": {
+										"value": 93,
+										"min": 91,
+										"max": 95
+									},
+									"zone_selected": 0,
+									"rpe_selected": 0,
+									"pdc_target": 0,
+									"grade": 0,
+									"incline": 0,
+									"power_type": ""
+								},
+								{
+									"desc": "",
+									"desc_no_cp": "",
+									"flexible": false,
+									"duration_type": "distance",
+									"duration_time": {
+										"hour": 0,
+										"minute": 0,
+										"second": 0
+									},
+									"duration_distance": 1,
+									"distance_unit_selected": "mile",
+									"intensity_class": "rest",
+									"intensity_type": "percentage",
+									"intensity_percent": {
+										"value": 83,
+										"min": 81,
+										"max": 85
+									},
+									"zone_selected": 0,
+									"rpe_selected": 0,
+									"pdc_target": 0,
+									"grade": 0,
+									"incline": 0,
+									"power_type": ""
+								}
+							]
+						},
+						{
+							"repeat": 1,
+							"segments": [
+								{
+									"desc": "",
+									"desc_no_cp": "",
+									"flexible": false,
+									"duration_type": "time",
+									"duration_time": {
+										"hour": 0,
+										"minute": 11,
+										"second": 0
+									},
+									"duration_distance": 0,
+									"distance_unit_selected": "meter",
+									"intensity_class": "cooldown",
+									"intensity_type": "percentage",
+									"intensity_percent": {
+										"value": 75,
+										"min": 70,
+										"max": 80
+									},
+									"zone_selected": 0,
+									"rpe_selected": 0,
+									"pdc_target": 0,
+									"grade": 0,
+									"incline": 0,
+									"power_type": ""
+								}
+							]
+						}
+					],
+					"notification_text": ""
+				},
+				"average": {
+					"power": 250.0,
+					"intensity": 0.83
+				},
+				"intensity_zones": [
+					1320,
+					1800,
+					1200,
+					0,
+					0
+				],
+				"estimates": []
+			},
+			"collection_id": "",
+			"labels": [
+				"Best match"
+			]
+		}
+	],
+	"non_workouts": null,
+	"selected_id": 0,
+	"type": "workout",
+	"reason": "None",
+	"reason_key": "reason_none",
+	"target_date": "2026-07-14T00:00:00Z",
+	"source": "user_on_demand"
+}

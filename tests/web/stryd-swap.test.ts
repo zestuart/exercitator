@@ -113,6 +113,35 @@ describe("applyStrydRecommendation", () => {
 		expect(out.estimated_load).toBe(45);
 	});
 
+	it("long + distance fixture: maps 1-mile reps to metric distance segments (no 0min rows)", async () => {
+		const client = await loggedInClient();
+		mockFetch.mockResolvedValueOnce(
+			jsonResponse(loadFixture("recommendations-distance-miles.json")),
+		);
+
+		const { suggestion: out } = await applyStrydRecommendation(
+			baseSuggestion({ category: "long" }),
+			client,
+		);
+
+		expect(out.prescriptionSource).toBe("stryd");
+		expect(out.title).toBe("The Tom Workout (Distance)");
+
+		// The four interval reps are distance-based — the bug was these
+		// rendering as 0-minute rows. Each carries metric distance, not seconds.
+		const distSegs = out.segments.filter((s) => s.duration_type === "distance");
+		expect(distSegs).toHaveLength(4);
+		for (const s of distSegs) {
+			expect(s.duration_secs).toBe(0);
+			expect(s.distance_m).toBeCloseTo(1609.344, 3);
+		}
+
+		// total_duration_secs sums segment seconds: WU 660 + CD 660 only (distance
+		// reps contribute 0). Understated total is a documented limitation — the
+		// distance reps carry metres, not seconds, and no estimate is threaded.
+		expect(out.total_duration_secs).toBe(1320);
+	});
+
 	it("Stryd swap replaces engine narrative (rationale/terrain) with Stryd's", async () => {
 		const client = await loggedInClient();
 		mockFetch.mockResolvedValueOnce(

@@ -154,6 +154,22 @@ export interface WorkoutSegment {
 	 * with the Stryd map for working segments.
 	 */
 	stryd_zone?: number;
+	/**
+	 * Segment duration basis. Absent (or "time") means the segment runs for
+	 * `duration_secs`. "distance" means it runs for `distance_m` metres and
+	 * `duration_secs` is not meaningful (left at 0) — the render/serialisation
+	 * layers key off this to show distance instead of "0min". Populated by the
+	 * Stryd swap when a served library workout uses distance-based segments
+	 * (e.g. "The Tom Workout (Distance)" — 1-mile reps).
+	 */
+	duration_type?: "time" | "distance";
+	/**
+	 * Canonical segment distance in metres, set when `duration_type` is
+	 * "distance". The Stryd source carries the distance in the authored
+	 * template's own unit (`distance_unit_selected`, e.g. "mile"); the mapper
+	 * converts to metres here so every downstream surface is metric.
+	 */
+	distance_m?: number;
 }
 
 /** Vigil alert summary for inclusion in workout suggestion output. */

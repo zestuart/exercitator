@@ -217,6 +217,42 @@ function classToSegmentName(cls: "warmup" | "work" | "rest" | "cooldown"): strin
 }
 
 /**
+ * Convert a Stryd distance value to metres, keyed off the segment's own
+ * `distance_unit_selected`. The unit is a per-segment property baked into the
+ * authored library workout (a US-authored template ships miles; another may
+ * ship km) — never an account/locale setting — so the value must be read per
+ * segment, not assumed. Exercitator is metric end-to-end, so we normalise here
+ * at the boundary.
+ *
+ * Unknown units fall back to metres with a console warning (mirrors the
+ * `MAX_BLOCK_REPEAT` defensive style) rather than silently zeroing or scaling —
+ * an audit trail exists and the distance is at worst mislabelled, never lost.
+ */
+const DISTANCE_UNIT_TO_METRES: Record<string, number> = {
+	mile: 1609.344,
+	miles: 1609.344,
+	kilometer: 1000,
+	kilometre: 1000,
+	km: 1000,
+	meter: 1,
+	metre: 1,
+	m: 1,
+	yard: 0.9144,
+	yards: 0.9144,
+	foot: 0.3048,
+	feet: 0.3048,
+};
+
+export function distanceToMetres(value: number, unit: string): number {
+	const factor = DISTANCE_UNIT_TO_METRES[unit.trim().toLowerCase()];
+	if (factor === undefined) {
+		console.warn(`distanceToMetres: unknown distance unit "${unit}"; treating value as metres`);
+		return value;
+	}
+	return value * factor;
+}
+
+/**
  * Convert a Stryd workout into Exercitator's `WorkoutSegment[]` shape.
  *
  * Repeat strategy: **flatten**. `WorkoutSegment` does not model a structural
@@ -228,9 +264,13 @@ function classToSegmentName(cls: "warmup" | "work" | "rest" | "cooldown"): strin
  * role intact. Block[2] of *Easy + Strides* (`repeat=3`, segments = work@105%
  * 20 s + rest@75% 60 s) produces 6 emitted segments here.
  *
- * Distance-based segments (`duration_type === "distance"`) are not observed
- * in any captured payload; we set `duration_secs = 0` and emit a TODO
- * comment in the source — the field is plumbed but not yet exercised.
+ * Distance-based segments (`duration_type === "distance"`) DO occur — the
+ * `long` bucket served "The Tom Workout (Distance)" on 2026-07-14 with 1-mile
+ * reps (first observed after an earlier note here wrongly assumed time-only).
+ * For those we set `duration_secs = 0` (a distance segment has no intrinsic
+ * seconds) and populate `distance_m` (converted from the authored template's
+ * own `distance_unit_selected`) plus `duration_type: "distance"`, so the render
+ * and intervals.icu layers show metric distance instead of a "0min" row.
  *
  * `target_hr_zone` is intentionally unset. Stryd recommendations are
  * power-prescribed; HR is not in the response. Layering an HR cap belongs
@@ -262,36 +302,40 @@ export function strydWorkoutToSegments(workout: StrydWorkout, ftp: number): Work
 				const powerLow = Math.round((seg.intensity_percent.min * ftp) / 100);
 				const powerHigh = Math.round((seg.intensity_percent.max * ftp) / 100);
 
-				let durationSecs: number;
-				if (seg.duration_type === "distance") {
-					// Stryd ships only time-based segments on our account (confirmed
-					// 2026-05-25 against the workout + easy buckets across two days
-					// of captures + production payloads — Dash & Dine and Hill Hustle
-					// fartleks/intervals are all `duration_type: "time"`). If a
-					// distance-based segment ever appears, we render 0 s so the
-					// render layer surfaces a 0min row that's obviously wrong rather
-					// than silently making up a duration. Implementation deferred
-					// until the case is observed.
-					durationSecs = 0;
-				} else {
-					durationSecs =
-						seg.duration_time.hour * 3600 +
-						seg.duration_time.minute * 60 +
-						seg.duration_time.second;
-				}
-
 				const name = classToSegmentName(seg.intensity_class);
 				const targetDescription =
 					`Stryd ${seg.intensity_percent.min}–${seg.intensity_percent.max}% CP ` +
 					`(${powerLow}–${powerHigh}W)`;
 
-				segments.push({
-					name,
-					duration_secs: durationSecs,
-					target_description: targetDescription,
-					target_power_low: powerLow,
-					target_power_high: powerHigh,
-				});
+				if (seg.duration_type === "distance") {
+					// Distance-based rep (e.g. "The Tom Workout (Distance)" — 1-mile
+					// reps). A distance segment has no intrinsic seconds, so
+					// `duration_secs` stays 0; `distance_m` carries the metric
+					// distance (converted from the authored template's own unit) and
+					// `duration_type` flags the render/serialisation layers to show
+					// distance instead of a "0min" row.
+					segments.push({
+						name,
+						duration_secs: 0,
+						duration_type: "distance",
+						distance_m: distanceToMetres(seg.duration_distance, seg.distance_unit_selected),
+						target_description: targetDescription,
+						target_power_low: powerLow,
+						target_power_high: powerHigh,
+					});
+				} else {
+					const durationSecs =
+						seg.duration_time.hour * 3600 +
+						seg.duration_time.minute * 60 +
+						seg.duration_time.second;
+					segments.push({
+						name,
+						duration_secs: durationSecs,
+						target_description: targetDescription,
+						target_power_low: powerLow,
+						target_power_high: powerHigh,
+					});
+				}
 			}
 		}
 	}
