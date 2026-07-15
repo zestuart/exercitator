@@ -442,11 +442,12 @@ Stryd's default power zones as percentages of CP:
 | Z4   | 100–115% | Threshold / VO2max |
 | Z5   | 115%+   | Anaerobic |
 
-**Note**: Stryd's zones differ from our Praescriptor zone model (which uses
-Z1=0–55%, Z2=55–75%, Z3=75–90%, Z4=90–105%, Z5=105–120%). When pushing
-workouts to Stryd, we use our zone percentages directly in `intensity_percent`
-rather than mapping to Stryd zone numbers — the watch displays the raw
-watt range regardless.
+**Note**: Praescriptor uses **Stryd's own 5-zone model** (the table above), not a
+separate scheme. Segments carry a `stryd_zone` (1–5) mapped to `ZONE_CP_PCT`
+(`src/web/stryd-format.ts`): Z1 65–80, Z2 80–90, Z3 90–100, Z4 100–115, Z5
+115–130 % CP. Push-to-Stryd writes those bands directly into `intensity_percent`
+— the watch displays the raw watt range. (An earlier 0–55/55–75/… model was
+retired in the 2026-04-29 zone realignment — see `lessons.md`.)
 
 ### Interval example
 

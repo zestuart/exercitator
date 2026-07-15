@@ -322,7 +322,10 @@ Cool-down
 
 For each `WorkoutSegment`:
 1. If `repeats` is set, emit `{repeats}x` then the work and rest steps
-2. Otherwise emit a single step with duration and target
+2. Otherwise emit a single step with duration and target. When the segment is
+   distance-based (`duration_type: "distance"`, from a Stryd distance workout),
+   emit the measure as `{round(distance_m)}mtr` — metres, not a time step (`m`
+   would mean minutes) and not a `0s` duration
 3. Use power targets (as % of FTP or W) for running when power context is available
 4. Use pace targets (as % of threshold) for swimming
 5. Fall back to HR zone targets when neither power nor pace is available

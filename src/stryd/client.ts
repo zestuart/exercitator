@@ -458,9 +458,10 @@ export class StrydClient {
 	 * Fetch the current recommendation set for a given workout-type bucket.
 	 *
 	 * - 200 → returns the parsed `StrydRecommendationSet`.
-	 * - 204 → returns `null` (empty bucket, e.g. `long` on ze's account — the
-	 *   normal empty state, not an error; cause unconfirmed but NOT plan-gating
-	 *   per Stryd support 2026-06-06, see retextor spec-recommendations.md §7).
+	 * - 204 → returns `null` (a bucket with no candidates today — the normal
+	 *   empty state, not an error; NOT plan-gating per Stryd support 2026-06-06,
+	 *   see retextor spec-recommendations.md §7). The `long` bucket was the
+	 *   canonical empty example on ze's account but began populating 2026-07-14.
 	 * - 401 → re-runs `login()` once and retries the request.
 	 * - 5xx / other → throws with the status code and a body excerpt.
 	 *
